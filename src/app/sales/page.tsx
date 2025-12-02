@@ -148,7 +148,7 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.grossProfit.growthPercentage || 0)}
               trendUp={kpis.grossProfit.trend === 'up'}
               icon={TrendingUp}
-              subtitle={`Margin: ${kpis.grossMarginPct.toFixed(1)}%`}
+              subtitle={`Margin: ${(kpis.grossMarginPct ?? 0).toFixed(1)}%`}
             />
             <KPICard
               title="จำนวนออเดอร์"

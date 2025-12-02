@@ -92,8 +92,8 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
       }),
     ]);
 
-    const currentData = (await currentResult.json())[0] || {};
-    const prevData = (await prevResult.json())[0] || {};
+    const currentData = (await currentResult.json())[0] as Record<string, unknown> || {};
+    const prevData = (await prevResult.json())[0] as Record<string, unknown> || {};
 
     const currentSales = Number(currentData.currentSales) || 0;
     const prevSales = Number(prevData.prevSales) || 1;
@@ -280,9 +280,9 @@ export async function getDashboardAlerts(): Promise<Alert[]> {
       clickhouse.query({ query: overdueQuery, format: 'JSONEachRow' }),
     ]);
 
-    const lowStockData = (await lowStockRes.json())[0];
-    const overstockData = (await overstockRes.json())[0];
-    const overdueData = (await overdueRes.json())[0];
+    const lowStockData = (await lowStockRes.json())[0] as Record<string, unknown> | undefined;
+    const overstockData = (await overstockRes.json())[0] as Record<string, unknown> | undefined;
+    const overdueData = (await overdueRes.json())[0] as Record<string, unknown> | undefined;
 
     const lowStockCount = Number(lowStockData?.count) || 0;
     const overstockCount = Number(overstockData?.count) || 0;

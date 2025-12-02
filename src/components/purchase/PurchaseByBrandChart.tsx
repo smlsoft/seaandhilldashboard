@@ -17,11 +17,11 @@ export function PurchaseByBrandChart({ data, height = '400px' }: PurchaseByBrand
 
     const chart = echarts.init(chartRef.current);
 
-    // Sort by totalAmount descending and take top 10
-    const sortedData = [...data].sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 10);
+    // Sort by totalPurchaseValue descending and take top 10
+    const sortedData = [...data].sort((a, b) => b.totalPurchaseValue - a.totalPurchaseValue).slice(0, 10);
 
     const brands = sortedData.map(item => item.brandName);
-    const amounts = sortedData.map(item => item.totalAmount);
+    const amounts = sortedData.map(item => item.totalPurchaseValue);
 
     const option: echarts.EChartsOption = {
       tooltip: {

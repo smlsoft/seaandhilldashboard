@@ -17,11 +17,11 @@ export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCa
 
     const chart = echarts.init(chartRef.current);
 
-    // Sort by totalAmount descending and take top 10
-    const sortedData = [...data].sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 10);
+    // Sort by totalPurchaseValue descending and take top 10
+    const sortedData = [...data].sort((a, b) => b.totalPurchaseValue - a.totalPurchaseValue).slice(0, 10);
 
     const categories = sortedData.map(item => item.categoryName);
-    const amounts = sortedData.map(item => item.totalAmount);
+    const amounts = sortedData.map(item => item.totalPurchaseValue);
 
     const option: echarts.EChartsOption = {
       tooltip: {
@@ -67,7 +67,7 @@ export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCa
             },
           },
           data: sortedData.map((item, index) => ({
-            value: item.totalAmount,
+            value: item.totalPurchaseValue,
             name: item.categoryName,
             itemStyle: {
               color: [

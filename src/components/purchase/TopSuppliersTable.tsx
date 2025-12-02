@@ -8,7 +8,7 @@ interface TopSuppliersTableProps {
   data: TopSupplier[];
 }
 
-type SortField = 'supplierName' | 'totalPurchases' | 'orderCount' | 'avgOrderValue' | 'daysSinceLastOrder';
+type SortField = 'supplierName' | 'totalPurchases' | 'poCount' | 'avgPOValue' | 'lastPurchaseDate';
 type SortOrder = 'asc' | 'desc';
 
 export function TopSuppliersTable({ data }: TopSuppliersTableProps) {
@@ -37,17 +37,17 @@ export function TopSuppliersTable({ data }: TopSuppliersTableProps) {
         aVal = a.totalPurchases;
         bVal = b.totalPurchases;
         break;
-      case 'orderCount':
-        aVal = a.orderCount;
-        bVal = b.orderCount;
+      case 'poCount':
+        aVal = a.poCount;
+        bVal = b.poCount;
         break;
-      case 'avgOrderValue':
-        aVal = a.avgOrderValue;
-        bVal = b.avgOrderValue;
+      case 'avgPOValue':
+        aVal = a.avgPOValue;
+        bVal = b.avgPOValue;
         break;
-      case 'daysSinceLastOrder':
-        aVal = a.daysSinceLastOrder;
-        bVal = b.daysSinceLastOrder;
+      case 'lastPurchaseDate':
+        aVal = new Date(a.lastPurchaseDate).getTime();
+        bVal = new Date(b.lastPurchaseDate).getTime();
         break;
     }
 
@@ -74,13 +74,6 @@ export function TopSuppliersTable({ data }: TopSuppliersTableProps) {
       month: 'short',
       year: '2-digit',
     });
-  };
-
-  const getRecencyColor = (days: number) => {
-    if (days <= 7) return 'text-green-600';
-    if (days <= 30) return 'text-yellow-600';
-    if (days <= 60) return 'text-orange-600';
-    return 'text-red-600';
   };
 
   if (data.length === 0) {
@@ -117,25 +110,25 @@ export function TopSuppliersTable({ data }: TopSuppliersTableProps) {
             </th>
             <th
               className="text-right py-3 px-2 font-medium cursor-pointer hover:text-primary"
-              onClick={() => handleSort('orderCount')}
+              onClick={() => handleSort('poCount')}
             >
               <div className="flex items-center justify-end gap-1">
-                จำนวนออเดอร์
+                จำนวน PO
                 <ArrowUpDown className="h-3 w-3" />
               </div>
             </th>
             <th
               className="text-right py-3 px-2 font-medium cursor-pointer hover:text-primary"
-              onClick={() => handleSort('avgOrderValue')}
+              onClick={() => handleSort('avgPOValue')}
             >
               <div className="flex items-center justify-end gap-1">
-                ค่าเฉลี่ย/ออเดอร์
+                ค่าเฉลี่ย/PO
                 <ArrowUpDown className="h-3 w-3" />
               </div>
             </th>
             <th
               className="text-right py-3 px-2 font-medium cursor-pointer hover:text-primary"
-              onClick={() => handleSort('daysSinceLastOrder')}
+              onClick={() => handleSort('lastPurchaseDate')}
             >
               <div className="flex items-center justify-end gap-1">
                 ซื้อล่าสุด
@@ -156,16 +149,13 @@ export function TopSuppliersTable({ data }: TopSuppliersTableProps) {
                 ฿{formatCurrency(item.totalPurchases)}
               </td>
               <td className="py-2 px-2 text-right">
-                {item.orderCount}
+                {item.poCount}
               </td>
               <td className="py-2 px-2 text-right">
-                ฿{formatCurrency(item.avgOrderValue)}
+                ฿{formatCurrency(item.avgPOValue)}
               </td>
               <td className="py-2 px-2 text-right">
-                <div className="text-xs">{formatDate(item.lastOrderDate)}</div>
-                <div className={`text-xs ${getRecencyColor(item.daysSinceLastOrder)}`}>
-                  {item.daysSinceLastOrder} วันที่แล้ว
-                </div>
+                <div className="text-xs">{formatDate(item.lastPurchaseDate)}</div>
               </td>
             </tr>
           ))}

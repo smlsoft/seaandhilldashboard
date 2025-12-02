@@ -17,13 +17,10 @@ export function PurchaseTrendChart({ data, height = '400px' }: PurchaseTrendChar
 
     const chart = echarts.init(chartRef.current);
 
-    const dates = data.map(item => {
-      const date = new Date(item.date);
-      return date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short' });
-    });
+    const dates = data.map(item => item.month);
 
-    const purchaseData = data.map(item => item.purchases);
-    const orderData = data.map(item => item.orderCount);
+    const purchaseData = data.map(item => item.totalPurchases);
+    const orderData = data.map(item => item.poCount);
 
     const option: echarts.EChartsOption = {
       tooltip: {

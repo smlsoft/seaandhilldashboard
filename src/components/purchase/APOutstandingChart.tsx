@@ -17,9 +17,9 @@ export function APOutstandingChart({ data, height = '350px' }: APOutstandingChar
 
     const chart = echarts.init(chartRef.current);
 
-    const statusLabels = data.map(item => item.statusPayment);
+    const supplierLabels = data.map(item => item.supplierName);
     const outstandingData = data.map(item => item.totalOutstanding);
-    const paidData = data.map(item => item.totalPaid);
+    const overdueData = data.map(item => item.overdueAmount);
 
     const option: echarts.EChartsOption = {
       tooltip: {
@@ -28,8 +28,8 @@ export function APOutstandingChart({ data, height = '350px' }: APOutstandingChar
           type: 'shadow',
         },
         formatter: (params: any) => {
-          const status = params[0].axisValue;
-          let result = `<div style="font-weight: bold; margin-bottom: 8px;">${status}</div>`;
+          const supplier = params[0].axisValue;
+          let result = `<div style="font-weight: bold; margin-bottom: 8px;">${supplier}</div>`;
 
           params.forEach((param: any) => {
             const value = `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`;
@@ -42,7 +42,7 @@ export function APOutstandingChart({ data, height = '350px' }: APOutstandingChar
         },
       },
       legend: {
-        data: ['ยอดค้างชำระ', 'ยอดชำระแล้ว'],
+        data: ['ยอดค้างชำระ', 'ยอดเกินกำหนด'],
         top: 0,
       },
       grid: {
@@ -53,10 +53,10 @@ export function APOutstandingChart({ data, height = '350px' }: APOutstandingChar
       },
       xAxis: {
         type: 'category',
-        data: statusLabels,
+        data: supplierLabels,
         axisLabel: {
           interval: 0,
-          rotate: statusLabels.length > 3 ? 30 : 0,
+          rotate: supplierLabels.length > 3 ? 30 : 0,
         },
       },
       yAxis: {
@@ -91,12 +91,12 @@ export function APOutstandingChart({ data, height = '350px' }: APOutstandingChar
           },
         },
         {
-          name: 'ยอดชำระแล้ว',
+          name: 'ยอดเกินกำหนด',
           type: 'bar',
           stack: 'total',
-          data: paidData,
+          data: overdueData,
           itemStyle: {
-            color: '#10b981',
+            color: '#ef4444',
           },
           label: {
             show: true,

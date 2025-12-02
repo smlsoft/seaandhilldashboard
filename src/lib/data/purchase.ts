@@ -111,8 +111,11 @@ export async function getPurchaseKPIs(dateRange: DateRange): Promise<PurchaseKPI
     return {
       totalPurchases: createKPI(purchaseData),
       totalItemsPurchased: createKPI(itemsData),
+      totalPOCount: createKPI(ordersData),
       totalOrders: createKPI(ordersData),
+      avgPOValue: createKPI(avgOrderData),
       avgOrderValue: createKPI(avgOrderData),
+      apOutstanding: createKPI([{ current_value: 0, previous_value: 0 }]),
     };
   } catch (error) {
     console.error('Error fetching purchase KPIs:', error);
@@ -127,14 +130,14 @@ export async function getPurchaseTrendData(dateRange: DateRange): Promise<Purcha
   try {
     const query = `
       SELECT
-        toStartOfDay(doc_datetime) as date,
-        sum(total_amount) as purchases,
-        count(DISTINCT doc_no) as orderCount
+        formatDateTime(toStartOfMonth(doc_datetime), '%Y-%m') as month,
+        sum(total_amount) as totalPurchases,
+        count(DISTINCT doc_no) as poCount
       FROM purchase_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
-      GROUP BY date
-      ORDER BY date ASC
+      GROUP BY month
+      ORDER BY month ASC
     `;
 
     const result = await clickhouse.query({
@@ -145,9 +148,9 @@ export async function getPurchaseTrendData(dateRange: DateRange): Promise<Purcha
 
     const data = await result.json();
     return data.map((row: any) => ({
-      date: row.date,
-      purchases: Number(row.purchases) || 0,
-      orderCount: Number(row.orderCount) || 0,
+      month: row.month,
+      totalPurchases: Number(row.totalPurchases) || 0,
+      poCount: Number(row.poCount) || 0,
     }));
   } catch (error) {
     console.error('Error fetching purchase trend:', error);
@@ -164,11 +167,10 @@ export async function getTopSuppliers(dateRange: DateRange): Promise<TopSupplier
       SELECT
         supplier_code as supplierCode,
         supplier_name as supplierName,
-        count(DISTINCT doc_no) as orderCount,
+        count(DISTINCT doc_no) as poCount,
         sum(total_amount) as totalPurchases,
-        avg(total_amount) as avgOrderValue,
-        max(doc_datetime) as lastOrderDate,
-        dateDiff('day', lastOrderDate, now()) as daysSinceLastOrder
+        avg(total_amount) as avgPOValue,
+        max(doc_datetime) as lastPurchaseDate
       FROM purchase_transaction
       WHERE status_cancel != 'Cancel'
         AND supplier_code != ''
@@ -188,11 +190,10 @@ export async function getTopSuppliers(dateRange: DateRange): Promise<TopSupplier
     return data.map((row: any) => ({
       supplierCode: row.supplierCode,
       supplierName: row.supplierName,
-      orderCount: Number(row.orderCount) || 0,
+      poCount: Number(row.poCount) || 0,
       totalPurchases: Number(row.totalPurchases) || 0,
-      avgOrderValue: Number(row.avgOrderValue) || 0,
-      lastOrderDate: row.lastOrderDate,
-      daysSinceLastOrder: Number(row.daysSinceLastOrder) || 0,
+      avgPOValue: Number(row.avgPOValue) || 0,
+      lastPurchaseDate: row.lastPurchaseDate,
     }));
   } catch (error) {
     console.error('Error fetching top suppliers:', error);
@@ -207,17 +208,18 @@ export async function getPurchaseByCategory(dateRange: DateRange): Promise<Purch
   try {
     const query = `
       SELECT
+        ptd.item_category_code as categoryCode,
         ptd.item_category_name as categoryName,
         sum(ptd.qty) as totalQty,
-        sum(ptd.sum_amount) as totalAmount,
-        count(DISTINCT ptd.doc_no) as orderCount
+        sum(ptd.sum_amount) as totalPurchaseValue,
+        count(DISTINCT ptd.item_code) as uniqueItems
       FROM purchase_transaction_detail ptd
       JOIN purchase_transaction pt ON ptd.doc_no = pt.doc_no AND ptd.branch_sync = pt.branch_sync
       WHERE pt.status_cancel != 'Cancel'
         AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
         AND ptd.item_category_name != ''
-      GROUP BY ptd.item_category_name
-      ORDER BY totalAmount DESC
+      GROUP BY ptd.item_category_code, ptd.item_category_name
+      ORDER BY totalPurchaseValue DESC
       LIMIT 15
     `;
 
@@ -229,10 +231,11 @@ export async function getPurchaseByCategory(dateRange: DateRange): Promise<Purch
 
     const data = await result.json();
     return data.map((row: any) => ({
+      categoryCode: row.categoryCode || '',
       categoryName: row.categoryName || 'ไม่ระบุ',
       totalQty: Number(row.totalQty) || 0,
-      totalAmount: Number(row.totalAmount) || 0,
-      orderCount: Number(row.orderCount) || 0,
+      totalPurchaseValue: Number(row.totalPurchaseValue) || 0,
+      uniqueItems: Number(row.uniqueItems) || 0,
     }));
   } catch (error) {
     console.error('Error fetching purchase by category:', error);
@@ -247,18 +250,17 @@ export async function getPurchaseByBrand(dateRange: DateRange): Promise<Purchase
   try {
     const query = `
       SELECT
+        ptd.item_brand_code as brandCode,
         ptd.item_brand_name as brandName,
-        sum(ptd.qty) as totalQty,
-        sum(ptd.sum_amount) as totalAmount,
-        count(DISTINCT ptd.doc_no) as orderCount,
-        uniq(ptd.item_code) as productCount
+        sum(ptd.sum_amount) as totalPurchaseValue,
+        uniq(ptd.item_code) as uniqueItems
       FROM purchase_transaction_detail ptd
       JOIN purchase_transaction pt ON ptd.doc_no = pt.doc_no AND ptd.branch_sync = pt.branch_sync
       WHERE pt.status_cancel != 'Cancel'
         AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
         AND ptd.item_brand_name != ''
-      GROUP BY ptd.item_brand_name
-      ORDER BY totalAmount DESC
+      GROUP BY ptd.item_brand_code, ptd.item_brand_name
+      ORDER BY totalPurchaseValue DESC
       LIMIT 15
     `;
 
@@ -270,11 +272,10 @@ export async function getPurchaseByBrand(dateRange: DateRange): Promise<Purchase
 
     const data = await result.json();
     return data.map((row: any) => ({
+      brandCode: row.brandCode || '',
       brandName: row.brandName || 'ไม่ระบุ',
-      totalQty: Number(row.totalQty) || 0,
-      totalAmount: Number(row.totalAmount) || 0,
-      orderCount: Number(row.orderCount) || 0,
-      productCount: Number(row.productCount) || 0,
+      totalPurchaseValue: Number(row.totalPurchaseValue) || 0,
+      uniqueItems: Number(row.uniqueItems) || 0,
     }));
   } catch (error) {
     console.error('Error fetching purchase by brand:', error);
@@ -289,17 +290,19 @@ export async function getAPOutstanding(dateRange: DateRange): Promise<APOutstand
   try {
     const query = `
       SELECT
-        status_payment as statusPayment,
-        count(DISTINCT doc_no) as invoiceCount,
-        sum(total_amount) as totalInvoiceAmount,
-        sum(sum_pay_money) as totalPaid,
-        sum(total_amount - sum_pay_money) as totalOutstanding
+        supplier_code as supplierCode,
+        supplier_name as supplierName,
+        sum(total_amount - sum_pay_money) as totalOutstanding,
+        sum(CASE WHEN due_date < today() AND total_amount > sum_pay_money THEN total_amount - sum_pay_money ELSE 0 END) as overdueAmount,
+        count(DISTINCT doc_no) as docCount
       FROM purchase_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_type = 'CREDIT'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
-      GROUP BY statusPayment
+        AND total_amount > sum_pay_money
+      GROUP BY supplier_code, supplier_name
       ORDER BY totalOutstanding DESC
+      LIMIT 20
     `;
 
     const result = await clickhouse.query({
@@ -310,11 +313,11 @@ export async function getAPOutstanding(dateRange: DateRange): Promise<APOutstand
 
     const data = await result.json();
     return data.map((row: any) => ({
-      statusPayment: row.statusPayment,
-      invoiceCount: Number(row.invoiceCount) || 0,
-      totalInvoiceAmount: Number(row.totalInvoiceAmount) || 0,
-      totalPaid: Number(row.totalPaid) || 0,
+      supplierCode: row.supplierCode || '',
+      supplierName: row.supplierName || 'ไม่ระบุ',
       totalOutstanding: Number(row.totalOutstanding) || 0,
+      overdueAmount: Number(row.overdueAmount) || 0,
+      docCount: Number(row.docCount) || 0,
     }));
   } catch (error) {
     console.error('Error fetching AP outstanding:', error);

@@ -90,8 +90,9 @@ export function PermissionProvider({ children, initialUser }: PermissionProvider
 
     if (componentLevel === undefined) {
       // ถ้าไม่ได้กำหนด Component-level ใช้ Module-level แทน
+      // ณ จุดนี้ modulePermission.level จะไม่ใช่ 'none' เพราะได้ตรวจสอบไปแล้วก่อนหน้า
       return {
-        allowed: modulePermission.level !== 'none',
+        allowed: true,
         level: modulePermission.level,
       };
     }

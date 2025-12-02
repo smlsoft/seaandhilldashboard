@@ -110,7 +110,7 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
       };
     };
 
-    const profitRow = profitData[0] || { current_value: 0, revenue: 0 };
+    const profitRow = (profitData[0] || { current_value: 0, revenue: 0 }) as Record<string, unknown>;
     const grossProfit = Number(profitRow.current_value) || 0;
     const revenue = Number(profitRow.revenue) || 0;
     const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
