@@ -37,53 +37,53 @@ export async function getAccountingKPIs(dateRange: DateRange): Promise<Accountin
     // Liabilities (Account 2xxxxx)
     const liabilitiesQuery = `
       SELECT
-        sum(credit - debit) as current_value,
-        (SELECT sum(credit - debit)
+        SUM(credit - debit) as current_value,
+        (SELECT SUM(credit - debit)
          FROM journal_transaction_detail
-         WHERE account_code LIKE '2%'
-           AND doc_datetime <= {previous_end:String}) as previous_value
+         WHERE account_type = 'LIABILITIES'
+           AND date(doc_datetime) BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
       FROM journal_transaction_detail
-      WHERE account_code LIKE '2%'
-        AND doc_datetime <= {end_date:String}
+      WHERE account_type = 'LIABILITIES'
+        AND date(doc_datetime) BETWEEN {start_date:String} AND {end_date:String}
     `;
 
     // Equity (Account 3xxxxx)
     const equityQuery = `
       SELECT
-        sum(credit - debit) as current_value,
-        (SELECT sum(credit - debit)
+        SUM(credit - debit) as current_value,
+        (SELECT SUM(credit - debit)
          FROM journal_transaction_detail
-         WHERE account_code LIKE '3%'
-           AND doc_datetime <= {previous_end:String}) as previous_value
+         WHERE account_type = 'EQUITY'
+           AND date(doc_datetime) BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
       FROM journal_transaction_detail
-      WHERE account_code LIKE '3%'
-        AND doc_datetime <= {end_date:String}
+      WHERE account_type = 'EQUITY'
+        AND date(doc_datetime) BETWEEN {start_date:String} AND {end_date:String}
     `;
 
     // Revenue (Account 4xxxxx)
     const revenueQuery = `
       SELECT
-        sum(credit - debit) as current_value,
-        (SELECT sum(credit - debit)
+        SUM(credit - debit) as current_value,
+        (SELECT SUM(credit - debit)
          FROM journal_transaction_detail
-         WHERE account_code LIKE '4%'
-           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
+         WHERE account_type = 'INCOME'
+           AND date(doc_datetime) BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
       FROM journal_transaction_detail
-      WHERE account_code LIKE '4%'
-        AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+      WHERE account_type = 'INCOME'
+        AND date(doc_datetime) BETWEEN {start_date:String} AND {end_date:String}
     `;
 
     // Expenses (Account 5xxxxx)
     const expensesQuery = `
       SELECT
-        sum(debit - credit) as current_value,
-        (SELECT sum(debit - credit)
+        SUM(debit - credit) as current_value,
+        (SELECT SUM(debit - credit)
          FROM journal_transaction_detail
-         WHERE account_code LIKE '5%'
-           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
+         WHERE account_type = 'EXPENSES'
+           AND date(doc_datetime) BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
       FROM journal_transaction_detail
-      WHERE account_code LIKE '5%'
-        AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+      WHERE account_type = 'EXPENSES'
+        AND date(doc_datetime) BETWEEN {start_date:String} AND {end_date:String}
     `;
 
     const params = {
@@ -108,7 +108,7 @@ export async function getAccountingKPIs(dateRange: DateRange): Promise<Accountin
     console.log('\n[Assets Query]:', replaceParams(assetsQuery));
     console.log('\n[Liabilities Query]:', replaceParams(liabilitiesQuery));
     console.log('\n[Equity Query]:', replaceParams(equityQuery));
-    console.log('\n[Revenue Query]:', replaceParams(revenueQuery));
+    console.log('\n[Income Query]:', replaceParams(revenueQuery));
     console.log('\n[Expenses Query]:', replaceParams(expensesQuery));
 
     // Execute queries in parallel
@@ -172,8 +172,8 @@ export async function getProfitLossData(dateRange: DateRange): Promise<ProfitLos
     const query = `
       SELECT
         toStartOfMonth(doc_datetime) as month,
-        sum(if(account_code LIKE '4%', credit - debit, 0)) as revenue,
-        sum(if(account_code LIKE '5%', debit - credit, 0)) as expenses,
+        sum(if(account_type = 'INCOME', credit - debit, 0)) as revenue,
+        sum(if(account_type = 'EXPENSES', debit - credit, 0)) as expenses,
         revenue - expenses as netProfit
       FROM journal_transaction_detail
       WHERE doc_datetime BETWEEN {start_date:String} AND {end_date:String}
@@ -209,15 +209,15 @@ export async function getBalanceSheetData(asOfDate: string): Promise<BalanceShee
       SELECT
         substring(account_code, 1, 1) as accountType,
         CASE
-          WHEN account_code LIKE '1%' THEN 'สินทรัพย์'
-          WHEN account_code LIKE '2%' THEN 'หนี้สิน'
-          WHEN account_code LIKE '3%' THEN 'ส่วนของผู้ถือหุ้น'
+          WHEN account_type = 'ASSETS' THEN 'สินทรัพย์'
+          WHEN account_type = 'LIABILITIES' THEN 'หนี้สิน'
+          WHEN account_type = 'EQUITY' THEN 'ส่วนของผู้ถือหุ้น'
         END as typeName,
         account_code,
         account_name,
-        if(account_code LIKE '1%', sum(debit - credit), sum(credit - debit)) as balance
+        if(account_type = 'ASSETS', sum(debit - credit), sum(credit - debit)) as balance
       FROM journal_transaction_detail
-      WHERE (account_code LIKE '1%' OR account_code LIKE '2%' OR account_code LIKE '3%')
+      WHERE (account_type = 'ASSETS' OR account_type = 'LIABILITIES' OR account_type = 'EQUITY')
         AND doc_datetime <= {as_of_date:String}
       GROUP BY accountType, typeName, account_code, account_name
       HAVING balance != 0
@@ -252,8 +252,8 @@ export async function getCashFlowData(dateRange: DateRange): Promise<CashFlowDat
     const query = `
       SELECT
         'Operating' as activityType,
-        sum(if(account_code LIKE '4%', credit - debit, 0)) as revenue,
-        sum(if(account_code LIKE '5%', debit - credit, 0)) as expenses,
+        sum(if(account_type = 'INCOME', credit - debit, 0)) as revenue,
+        sum(if(account_type = 'EXPENSES', debit - credit, 0)) as expenses,
         revenue - expenses as netCashFlow
       FROM journal_transaction_detail
       WHERE doc_datetime BETWEEN {start_date:String} AND {end_date:String}
@@ -277,7 +277,7 @@ export async function getCashFlowData(dateRange: DateRange): Promise<CashFlowDat
         0,
         sum(credit - debit)
       FROM journal_transaction_detail
-      WHERE (account_code LIKE '21%' OR account_code LIKE '3%')
+      WHERE (account_code LIKE '21%' OR account_type = 'EQUITY')
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
     `;
 
@@ -416,10 +416,10 @@ export async function getRevenueBreakdown(dateRange: DateRange): Promise<Categor
         sum(credit - debit) as amount,
         (amount / (SELECT sum(credit - debit)
                     FROM journal_transaction_detail
-                    WHERE account_code LIKE '4%'
+                    WHERE account_type = 'INCOME'
                       AND doc_datetime BETWEEN {start_date:String} AND {end_date:String})) * 100 as percentage
       FROM journal_transaction_detail
-      WHERE account_code LIKE '4%'
+      WHERE account_type = 'INCOME'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
       GROUP BY accountGroup
       HAVING amount > 0
@@ -457,10 +457,10 @@ export async function getExpenseBreakdown(dateRange: DateRange): Promise<Categor
         sum(debit - credit) as amount,
         (amount / (SELECT sum(debit - credit)
                     FROM journal_transaction_detail
-                    WHERE account_code LIKE '5%'
+                    WHERE account_type = 'EXPENSES'
                       AND doc_datetime BETWEEN {start_date:String} AND {end_date:String})) * 100 as percentage
       FROM journal_transaction_detail
-      WHERE account_code LIKE '5%'
+      WHERE account_type = 'EXPENSES'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
       GROUP BY accountGroup
       HAVING amount > 0
