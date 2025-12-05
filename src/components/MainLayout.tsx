@@ -16,7 +16,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
         isCollapsed ? "ml-20" : "ml-72"
       )}>
         <Header />
-        <main className="flex-1 p-4 lg:p-4 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-4 lg:p-8 max-w-7.5xl mx-auto w-full">
           {children}
         </main>
       </div>

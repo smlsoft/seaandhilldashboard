@@ -17,7 +17,18 @@ import { ShoppingCart, DollarSign, TrendingUp, Package } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { formatGrowthPercentage } from '@/lib/comparison';
 import type { DateRange, SalesKPIs, SalesTrendData, TopProduct, SalesByBranch, SalesBySalesperson, TopCustomer, ARStatus } from '@/lib/data/types';
-
+import {
+  getTotalSalesQuery,
+  getGrossProfitQuery,
+  getTotalOrdersQuery,
+  getAvgOrderValueQuery,
+  getSalesTrendQuery,
+  getTopProductsQuery,
+  getSalesByBranchQuery,
+  getSalesBySalespersonQuery,
+  getTopCustomersQuery,
+  getARStatusQuery,
+} from '@/lib/data/sales';
 export default function SalesPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
   const [loading, setLoading] = useState(true);
@@ -141,6 +152,10 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.totalSales.growthPercentage || 0)}
               trendUp={kpis.totalSales.trend === 'up'}
               icon={DollarSign}
+              queryInfo={{
+                query: getTotalSalesQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow',
+              }}
             />
             <KPICard
               title="กำไรขั้นต้น"
@@ -149,6 +164,10 @@ export default function SalesPage() {
               trendUp={kpis.grossProfit.trend === 'up'}
               icon={TrendingUp}
               subtitle={`Margin: ${(kpis.grossMarginPct ?? 0).toFixed(1)}%`}
+              queryInfo={{
+                query: getGrossProfitQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow',
+              }}
             />
             <KPICard
               title="จำนวนออเดอร์"
@@ -156,6 +175,10 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.totalOrders.growthPercentage || 0)}
               trendUp={kpis.totalOrders.trend === 'up'}
               icon={ShoppingCart}
+              queryInfo={{
+                query: getTotalOrdersQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow',
+              }}
             />
             <KPICard
               title="ค่าเฉลี่ยต่อออเดอร์"
@@ -163,6 +186,10 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.avgOrderValue.growthPercentage || 0)}
               trendUp={kpis.avgOrderValue.trend === 'up'}
               icon={Package}
+              queryInfo={{
+                query: getAvgOrderValueQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow',
+              }}
             />
           </div>
         ) : null}
@@ -174,6 +201,11 @@ export default function SalesPage() {
           <DataCard
             title="แนวโน้มยอดขาย"
             description="ยอดขายและจำนวนออเดอร์รายวัน"
+            linkTo="/reports/sales#sales-trend"
+            queryInfo={{
+              query: getSalesTrendQuery(dateRange.start, dateRange.end),
+              format: 'JSONEachRow'
+            }}
           >
             {loading ? (
               <ChartSkeleton />
@@ -188,7 +220,15 @@ export default function SalesPage() {
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <PermissionGuard componentKey="sales.top_products">
           <ErrorBoundary>
-            <DataCard title="สินค้าขายดี Top 10" description="รายการสินค้าที่มียอดขายสูงสุด">
+            <DataCard
+              title="สินค้าขายดี Top 10"
+              description="รายการสินค้าที่มียอดขายสูงสุด"
+              linkTo="/reports/sales#top-products"
+              queryInfo={{
+                query: getTopProductsQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow'
+              }}
+            >
               {loading ? (
                 <TableSkeleton rows={10} />
               ) : (
@@ -200,7 +240,15 @@ export default function SalesPage() {
 
         <PermissionGuard componentKey="sales.by_branch">
           <ErrorBoundary>
-            <DataCard title="ยอดขายแยกตามสาขา" description="เปรียบเทียบยอดขายของแต่ละสาขา">
+            <DataCard
+              title="ยอดขายแยกตามสาขา"
+              description="เปรียบเทียบยอดขายของแต่ละสาขา"
+              linkTo="/reports/sales#sales-by-branch"
+              queryInfo={{
+                query: getSalesByBranchQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow'
+              }}
+            >
               {loading ? (
                 <ChartSkeleton />
               ) : (
@@ -214,7 +262,15 @@ export default function SalesPage() {
       {/* Sales by Salesperson */}
       <PermissionGuard componentKey="sales.by_salesperson">
         <ErrorBoundary>
-          <DataCard title="ยอดขายตามพนักงานขาย" description="ผลงานพนักงานขายแต่ละคน">
+          <DataCard
+            title="ยอดขายตามพนักงานขาย"
+            description="ผลงานพนักงานขายแต่ละคน"
+            linkTo="/reports/sales#sales-by-salesperson"
+            queryInfo={{
+              query: getSalesBySalespersonQuery(dateRange.start, dateRange.end),
+              format: 'JSONEachRow'
+            }}
+          >
             {loading ? (
               <TableSkeleton rows={10} />
             ) : (
@@ -228,7 +284,15 @@ export default function SalesPage() {
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <PermissionGuard componentKey="sales.top_customers">
           <ErrorBoundary>
-            <DataCard title="ลูกค้า VIP Top 20" description="ลูกค้าที่มียอดซื้อสูงสุด">
+            <DataCard
+              title="ลูกค้า VIP Top 20"
+              description="ลูกค้าที่มียอดซื้อสูงสุด"
+              linkTo="/reports/sales#top-customers"
+              queryInfo={{
+                query: getTopCustomersQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow'
+              }}
+            >
               {loading ? (
                 <TableSkeleton rows={10} />
               ) : (
@@ -240,7 +304,15 @@ export default function SalesPage() {
 
         <PermissionGuard componentKey="sales.ar_status">
           <ErrorBoundary>
-            <DataCard title="สถานะลูกหนี้การค้า" description="สรุปยอดลูกหนี้ตามสถานะการชำระเงิน">
+            <DataCard
+              title="สถานะลูกหนี้การค้า"
+              description="สรุปยอดลูกหนี้ตามสถานะการชำระเงิน"
+              linkTo="/reports/sales#ar-status"
+              queryInfo={{
+                query: getARStatusQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow'
+              }}
+            >
               {loading ? (
                 <ChartSkeleton height="350px" />
               ) : (

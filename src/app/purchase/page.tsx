@@ -7,7 +7,7 @@ import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { KPICardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/LoadingSkeleton';
 import { PurchaseTrendChart } from '@/components/purchase/PurchaseTrendChart';
-import { TopSuppliersTable } from '@/components/purchase/TopSuppliersTable';
+import { HorizontalBarChart, type HorizontalBarItem } from '@/components/charts/HorizontalBarChart';
 import { PurchaseByCategoryChart } from '@/components/purchase/PurchaseByCategoryChart';
 import { PurchaseByBrandChart } from '@/components/purchase/PurchaseByBrandChart';
 import { APOutstandingChart } from '@/components/purchase/APOutstandingChart';
@@ -165,30 +165,64 @@ export default function PurchasePage() {
       ) : null}
 
       {/* Purchase Trend Chart */}
-      <ErrorBoundary>
-        <DataCard
-          title="แนวโน้มการจัดซื้อ"
-          description="ยอดซื้อและจำนวนออเดอร์รายวัน"
-        >
-          {loading ? (
-            <ChartSkeleton />
-          ) : (
-            <PurchaseTrendChart data={trendData} />
-          )}
-        </DataCard>
-      </ErrorBoundary>
+      <div className="grid gap-5 ">
+        <ErrorBoundary>
+          <DataCard
+            title="แนวโน้มการจัดซื้อ"
+            description="ยอดซื้อและจำนวนออเดอร์รายวัน"
+          
+        
+          >
+            {loading ? (
+              <ChartSkeleton />
+            ) : (
+              <PurchaseTrendChart data={trendData} />
+            )}
+          </DataCard>
+        </ErrorBoundary>
 
-      {/* Top Suppliers */}
-      <ErrorBoundary>
-        <DataCard title="ซัพพลายเออร์ยอดนิยม Top 20" description="รายการซัพพลายเออร์ที่มียอดซื้อสูงสุด">
-          {loading ? (
-            <TableSkeleton rows={10} />
-          ) : (
-            <TopSuppliersTable data={topSuppliers} />
-          )}
-        </DataCard>
-      </ErrorBoundary>
-
+        {/* Top Suppliers */}
+        <ErrorBoundary>
+          <DataCard title="ซัพพลายเออร์ยอดนิยม Top 20" description="รายการซัพพลายเออร์ที่มียอดซื้อสูงสุด">
+            {loading ? (
+              <ChartSkeleton height="600px" />
+            ) : (
+              <HorizontalBarChart
+                data={topSuppliers.map((supplier, index) => ({
+                  rank: index + 1,
+                  name: supplier.supplierName,
+                  value: supplier.totalPurchases,
+                  subLabel: supplier.supplierCode,
+                  extraData: {
+                    poCount: supplier.poCount,
+                    avgPOValue: supplier.avgPOValue,
+                    lastPurchaseDate: supplier.lastPurchaseDate,
+                  },
+                }))}
+                height="600px"
+                tooltipFormatter={(item, percentage) => {
+                  const poCount = item.extraData?.poCount || 0;
+                  const avgPOValue = item.extraData?.avgPOValue || 0;
+                  const lastDate = item.extraData?.lastPurchaseDate
+                    ? new Date(item.extraData.lastPurchaseDate).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
+                    : '-';
+                  return `
+                  <div style="padding: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 6px;">อันดับ ${item.rank}: ${item.name}</div>
+                    <div style="color: #666; font-size: 12px; margin-bottom: 8px;">${item.subLabel}</div>
+                    <div>ยอดซื้อ: <b style="color: #3b82f6;">฿${item.value.toLocaleString('th-TH')}</b></div>
+                    <div>จำนวน PO: <b>${poCount} รายการ</b></div>
+                    <div>เฉลี่ยต่อ PO: <b>฿${avgPOValue.toLocaleString('th-TH')}</b></div>
+                    <div>ซื้อล่าสุด: <b>${lastDate}</b></div>
+                    <div>สัดส่วน: <b>${percentage}%</b></div>
+                  </div>
+                `;
+                }}
+              />
+            )}
+          </DataCard>
+        </ErrorBoundary>
+      </div>
       {/* Purchase by Category & Brand */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>

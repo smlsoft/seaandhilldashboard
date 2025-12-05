@@ -236,7 +236,7 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
   const totalItems = data.length;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       {/* Status buttons */}
       <div className="flex gap-2 mb-4 flex-wrap">
         {STATUS_CONFIG.map(status => {
@@ -310,7 +310,7 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
 
       {/* Detail Table - Show when status is selected */}
       {selectedStatus && filteredData.length > 0 && (
-        <div className="-mt-28 border-t pt-1">
+        <div className="-mt-20 border-t pt-1">
           <div className="flex items-center gap-2 mb-1">
             <AlertCircle className={`h-5 w-5 ${selectedStatus === 'all' ? 'text-gray-600' : getSeverityColor(selectedStatus)}`} />
             <h4 className="font-semibold">

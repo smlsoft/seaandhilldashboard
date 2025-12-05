@@ -212,6 +212,7 @@ export default function AccountingPage() {
         <DataCard
           title="กำไร(ขาดทุน) สุทธิ"
           description="เปรียบเทียบรายได้ ค่าใช้จ่าย และกำไรสุทธิรายเดือน"
+          linkTo="/reports/accounting#profit-loss"
           queryInfo={{
             query: getProfitLossQuery(dateRange),
             format: 'JSONEachRow'
@@ -231,6 +232,7 @@ export default function AccountingPage() {
           <DataCard 
             title="งบดุล" 
             description="สินทรัพย์ หนี้สิน และส่วนของผู้ถือหุ้น"
+            linkTo="/reports/accounting#balance-sheet"
             queryInfo={{
               query: getBalanceSheetQuery(dateRange.end),
               format: 'JSONEachRow'
@@ -248,6 +250,7 @@ export default function AccountingPage() {
           <DataCard 
             title="กระแสเงินสด" 
             description="จากกิจกรรมดำเนินงาน ลงทุน และจัดหาเงิน"
+            linkTo="/reports/accounting#cash-flow"
             queryInfo={{
               query: getCashFlowQuery(dateRange),
               format: 'JSONEachRow'
@@ -268,6 +271,7 @@ export default function AccountingPage() {
           <DataCard 
             title="อายุลูกหนี้ (AR Aging)" 
             description="รายการลูกหนี้ค้างชำระ"
+            linkTo="/reports/accounting#ar-aging"
             queryInfo={{
               query: getARAgingQuery(),
               format: 'JSONEachRow'
@@ -285,6 +289,7 @@ export default function AccountingPage() {
           <DataCard 
             title="อายุเจ้าหนี้ (AP Aging)" 
             description="รายการเจ้าหนี้ค้างชำระ"
+            linkTo="/reports/accounting#ap-aging"
             queryInfo={{
               query: getAPAgingQuery(),
               format: 'JSONEachRow'
@@ -304,6 +309,7 @@ export default function AccountingPage() {
         <DataCard 
           title="รายได้และค่าใช้จ่ายตามหมวด" 
           description="สัดส่วนรายได้และค่าใช้จ่ายแยกตามประเภท"
+          linkTo="/reports/accounting#revenue-expense"
           queryInfo={{
             query: `-- Revenue Breakdown\n${getRevenueBreakdownQuery(dateRange)}\n\n-- Expense Breakdown\n${getExpenseBreakdownQuery(dateRange)}`,
             format: 'JSONEachRow'

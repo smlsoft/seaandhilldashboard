@@ -1,8 +1,10 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
+import { ExternalLink, MoreVertical, Database, X } from 'lucide-react';
 
 interface QueryInfo {
     query: string;
@@ -16,6 +18,9 @@ interface DataCardProps {
     action?: React.ReactNode;
     description?: string;
     queryInfo?: QueryInfo;
+    linkTo?: string; // URL to navigate when clicking on the card
+    id?: string; // ID for scroll target
+    headerExtra?: React.ReactNode; // Extra content in header (e.g., filters)
 }
 
 // Query Modal component
@@ -156,12 +161,33 @@ function QueryModal({
     );
 }
 
-export function DataCard({ title, children, className, action, description, queryInfo }: DataCardProps) {
+export function DataCard({ title, children, className, action, description, queryInfo, linkTo, id, headerExtra }: DataCardProps) {
     const [showQueryPopup, setShowQueryPopup] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setShowMenu(false);
+            }
+        };
+
+        if (showMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showMenu]);
 
     const openPopup = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        setShowMenu(false);
         if (queryInfo) {
             setShowQueryPopup(true);
         }
@@ -171,45 +197,93 @@ export function DataCard({ title, children, className, action, description, quer
         setShowQueryPopup(false);
     };
 
+    const handleCardClick = () => {
+        if (linkTo) {
+            router.push(linkTo);
+        }
+    };
+
+    const handleNavigate = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowMenu(false);
+        if (linkTo) {
+            router.push(linkTo);
+        }
+    };
+
+    const toggleMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowMenu(!showMenu);
+    };
+
+    // Check if we have any menu items to show
+    const hasMenuItems = linkTo || queryInfo;
+
     return (
         <>
-            <div className={cn(
-                "group flex flex-col rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm transition-all duration-200 hover:shadow-md",
-                className
-            )}>
+            <div 
+                id={id}
+                className={cn(
+                    "group flex flex-col rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm transition-all duration-200 hover:shadow-md scroll-mt-24",
+                    className
+                )}
+            >
                 <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-6 py-4">
-                    <div>
-                        <h3 className="font-semibold text-[hsl(var(--foreground))] tracking-tight">
-                            {title}
-                        </h3>
+                    <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-[hsl(var(--foreground))] tracking-tight">
+                                {title}
+                            </h3>
+                            {headerExtra && (
+                                <div className="ml-4">
+                                    {headerExtra}
+                                </div>
+                            )}
+                        </div>
                         {description && (
                             <p className="text-sm text-muted-foreground mt-0.5">
                                 {description}
                             </p>
                         )}
                     </div>
-                    <div className="flex items-center gap-2">
-                        {/* SQL Query Button - Show on hover */}
-                        {queryInfo && (
-                            <button
-                                className="p-2 rounded-lg bg-[hsl(var(--muted))]/50 hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
-                                title="View SQL Query"
-                                onClick={openPopup}
-                            >
-                                <svg 
-                                    className="w-6 h-6 text-muted-foreground hover:text-blue-500 transition-colors" 
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
+                    <div className="flex items-center gap-2 ml-4">
+                        {/* More menu button */}
+                        {hasMenuItems && (
+                            <div className="relative" ref={menuRef}>
+                                <button
+                                    className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
+                                    title="เมนู"
+                                    onClick={toggleMenu}
                                 >
-                                    <path 
-                                        strokeLinecap="round" 
-                                        strokeLinejoin="round" 
-                                        strokeWidth={2} 
-                                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" 
-                                    />
-                                </svg>
-                            </button>
+                                    <MoreVertical className="w-5 h-5 text-muted-foreground" />
+                                </button>
+
+                                {/* Dropdown Menu */}
+                                {showMenu && (
+                                    <div className="absolute right-0 top-full mt-1 w-48 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-lg z-50 py-1">
+                                        {linkTo && (
+                                            <button
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors"
+                                                onClick={handleNavigate}
+                                            >
+                                                <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                                                <span>ดูรายงาน</span>
+                                            </button>
+                                        )}
+                                        {queryInfo && (
+                                            <button
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors"
+                                                onClick={openPopup}
+                                            >
+                                                <Database className="w-4 h-4 text-muted-foreground" />
+                                                <span>ดู SQL Query</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         )}
                         {action}
                     </div>

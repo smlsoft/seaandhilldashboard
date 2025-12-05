@@ -214,6 +214,7 @@ export default function InventoryPage() {
         <DataCard
           title="การเคลื่อนไหวสต็อก"
           description="จำนวนสินค้ารับเข้าและจ่ายออกรายวัน"
+          linkTo="/reports/inventory#stock-movement"
           queryInfo={{
              query: getStockMovementQuery(dateRange.start, dateRange.end),
              format: 'JSONEachRow',
@@ -233,6 +234,7 @@ export default function InventoryPage() {
           <DataCard 
               title="สินค้าใกล้หมด"
               description="รายการสินค้าที่ต่ำกว่าจุด Reorder Point"
+              linkTo="/reports/inventory/#low-stock"
               queryInfo={{
                 query: getLowStockItemsQuery(asOfDate),
                 format: 'JSONEachRow',
@@ -250,6 +252,7 @@ export default function InventoryPage() {
           <DataCard 
           title="สินค้าเกินคลัง" 
           description="รายการสินค้าที่เกินระดับสูงสุด"
+          linkTo="/reports/inventory/#overstock"
           queryInfo={{
             query: getOverstockItemsQuery(asOfDate),
             format: 'JSONEachRow',
@@ -269,6 +272,7 @@ export default function InventoryPage() {
         <DataCard 
         title="สินค้าหมุนเวียนช้า" 
         description="รายการสินค้าที่มีสต็อกคงค้างนานกว่า 90 วัน"
+        linkTo="/reports/inventory/#slow-moving"
         queryInfo={{
           query: getSlowMovingItemsQuery(dateRange.start, dateRange.end, asOfDate),
           format: 'JSONEachRow',
@@ -288,6 +292,7 @@ export default function InventoryPage() {
           <DataCard 
           title="อัตราหมุนเวียนสินค้า" 
           description="การหมุนเวียนและวันขายหมดตามหมวดสินค้า"
+          linkTo="/reports/inventory/#inventory-turnover"
           queryInfo={{
             query: getInventoryTurnoverQuery(dateRange.start, dateRange.end, asOfDate),
             format: 'JSONEachRow',
@@ -305,6 +310,7 @@ export default function InventoryPage() {
           <DataCard 
           title="สต็อกแยกตามสาขา" 
           description="มูลค่าและจำนวนรายการสินค้าในแต่ละสาขา"
+          linkTo="/reports/inventory/#stock-by-branch"
           queryInfo={{
             query: getStockByBranchQuery(asOfDate),
             format: 'JSONEachRow',
