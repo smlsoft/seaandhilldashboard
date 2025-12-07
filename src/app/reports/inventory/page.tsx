@@ -8,6 +8,7 @@ import { TableSkeleton } from '@/components/LoadingSkeleton';
 import { PaginatedTable, type ColumnDef } from '@/components/PaginatedTable';
 import { AlertCircle, AlertTriangle, TrendingDown, Package } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
+import { exportToExcelWithHeaders } from '@/lib/exportExcel';
 import type { 
   DateRange, 
   StockMovement,
@@ -512,6 +513,12 @@ export default function InventoryReportPage() {
             query: getStockMovementQuery(dateRange.start, dateRange.end),
             format: 'JSONEachRow'
           }}
+          onExportExcel={() => exportToExcelWithHeaders(
+            stockMovement,
+            { date: 'วันที่', qtyIn: 'รับเข้า', qtyOut: 'จ่ายออก', netMovement: 'สุทธิ' },
+            'การเคลื่อนไหวสต็อก',
+            'Stock Movement'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -540,6 +547,12 @@ export default function InventoryReportPage() {
               query: getLowStockItemsQuery(asOfDate),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              lowStockItems,
+              { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', qtyOnHand: 'คงเหลือ', reorderPoint: 'จุดสั่งซื้อ', shortfall: 'ขาด', stockValue: 'มูลค่า' },
+              'สินค้าใกล้หมด',
+              'Low Stock'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -566,6 +579,12 @@ export default function InventoryReportPage() {
               query: getOverstockItemsQuery(asOfDate),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              overstockItems,
+              { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', qtyOnHand: 'คงเหลือ', maxStock: 'ระดับสูงสุด', excess: 'เกิน', valueExcess: 'มูลค่าส่วนเกิน' },
+              'สินค้าเกินคลัง',
+              'Overstock'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -594,6 +613,12 @@ export default function InventoryReportPage() {
             query: getSlowMovingItemsQuery(dateRange.start, dateRange.end, asOfDate),
             format: 'JSONEachRow'
           }}
+          onExportExcel={() => exportToExcelWithHeaders(
+            slowMovingItems,
+            { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', qtyOnHand: 'คงเหลือ', qtySold: 'ขายได้', daysOfStock: 'วันสต็อก', stockValue: 'มูลค่า' },
+            'สินค้าขายช้า',
+            'Slow Moving'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -622,6 +647,12 @@ export default function InventoryReportPage() {
               query: getInventoryTurnoverQuery(dateRange.start, dateRange.end, asOfDate),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              inventoryTurnover,
+              { itemName: 'หมวดหมู่', avgInventoryValue: 'มูลค่าสต็อกเฉลี่ย', totalCOGS: 'ต้นทุนขาย', turnoverRatio: 'อัตราหมุนเวียน', daysToSell: 'วันขายหมด' },
+              'อัตราหมุนเวียนสินค้า',
+              'Inventory Turnover'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -648,6 +679,12 @@ export default function InventoryReportPage() {
               query: getStockByBranchQuery(asOfDate),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              stockByBranch,
+              { branchCode: 'รหัสสาขา', branchName: 'ชื่อสาขา', itemCount: 'จำนวนรายการ', qtyOnHand: 'จำนวนสินค้า', inventoryValue: 'มูลค่าสินค้า' },
+              'สต็อกตามสาขา',
+              'Stock by Branch'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />

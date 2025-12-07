@@ -7,6 +7,7 @@ import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { TableSkeleton } from '@/components/LoadingSkeleton';
 import { PaginatedTable, type ColumnDef } from '@/components/PaginatedTable';
 import { getDateRange } from '@/lib/dateRanges';
+import { exportToExcelWithHeaders } from '@/lib/exportExcel';
 import type {
   DateRange,
   PurchaseTrendData,
@@ -404,6 +405,12 @@ export default function PurchaseReportPage() {
           id="purchase-trend"
           title="แนวโน้มการจัดซื้อ"
           description="ยอดซื้อและจำนวน PO รายเดือน"
+          onExportExcel={() => exportToExcelWithHeaders(
+            trendData,
+            { month: 'เดือน', totalPurchases: 'ยอดซื้อ', poCount: 'จำนวน PO' },
+            'แนวโน้มการจัดซื้อ',
+            'Purchase Trend'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={6} />
@@ -427,6 +434,12 @@ export default function PurchaseReportPage() {
           id="top-suppliers"
           title="ซัพพลายเออร์ยอดนิยม Top 20"
           description="ซัพพลายเออร์ที่มียอดซื้อสูงสุด"
+          onExportExcel={() => exportToExcelWithHeaders(
+            topSuppliers,
+            { supplierCode: 'รหัสซัพพลายเออร์', supplierName: 'ชื่อซัพพลายเออร์', poCount: 'จำนวน PO', totalPurchases: 'ยอดซื้อ' },
+            'ซัพพลายเออร์ยอดนิยม',
+            'Top Suppliers'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -451,6 +464,12 @@ export default function PurchaseReportPage() {
             id="by-category"
             title="การซื้อตามหมวดหมู่"
             description="ยอดซื้อแยกตามหมวดหมู่สินค้า"
+            onExportExcel={() => exportToExcelWithHeaders(
+              purchaseByCategory,
+              { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', uniqueItems: 'รายการสินค้า', totalPurchaseValue: 'มูลค่าซื้อ' },
+              'การซื้อตามหมวดหมู่',
+              'Purchase by Category'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -473,6 +492,12 @@ export default function PurchaseReportPage() {
             id="by-brand"
             title="การซื้อตามแบรนด์"
             description="ยอดซื้อแยกตามแบรนด์สินค้า"
+            onExportExcel={() => exportToExcelWithHeaders(
+              purchaseByBrand,
+              { brandCode: 'รหัสแบรนด์', brandName: 'ชื่อแบรนด์', uniqueItems: 'รายการสินค้า', totalPurchaseValue: 'มูลค่าซื้อ' },
+              'การซื้อตามแบรนด์',
+              'Purchase by Brand'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -497,6 +522,12 @@ export default function PurchaseReportPage() {
           id="ap-outstanding"
           title="สถานะเจ้าหนี้การค้า (AP)"
           description="ยอดค้างชำระแยกตามซัพพลายเออร์"
+          onExportExcel={() => exportToExcelWithHeaders(
+            apOutstanding,
+            { supplierCode: 'รหัสซัพพลายเออร์', supplierName: 'ชื่อซัพพลายเออร์', docCount: 'จำนวนเอกสาร', totalOutstanding: 'ยอดค้างชำระ', overdueAmount: 'ยอดเกินกำหนด' },
+            'สถานะเจ้าหนี้การค้า',
+            'AP Outstanding'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />

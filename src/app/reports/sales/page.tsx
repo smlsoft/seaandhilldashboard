@@ -15,6 +15,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
+import { exportToExcelWithHeaders } from '@/lib/exportExcel';
 import type {
   DateRange,
   SalesTrendData,
@@ -563,6 +564,12 @@ export default function SalesReportPage() {
           id="sales-trend"
           title="แนวโน้มยอดขาย"
           description="ยอดขายและจำนวนออเดอร์รายวัน"
+          onExportExcel={() => exportToExcelWithHeaders(
+            trendData,
+            { date: 'วันที่', sales: 'ยอดขาย', orderCount: 'จำนวนออเดอร์' },
+            'แนวโน้มยอดขาย',
+            'Sales Trend'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -586,6 +593,12 @@ export default function SalesReportPage() {
           id="top-products"
           title="สินค้าขายดี"
           description="สินค้าที่มียอดขายสูงสุด"
+          onExportExcel={() => exportToExcelWithHeaders(
+            topProducts,
+            { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', categoryName: 'หมวดหมู่', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย' },
+            'สินค้าขายดี',
+            'Top Products'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -610,6 +623,12 @@ export default function SalesReportPage() {
             id="by-branch"
             title="ยอดขายตามสาขา"
             description="ยอดขายแยกตามสาขา/คลัง"
+            onExportExcel={() => exportToExcelWithHeaders(
+              salesByBranch,
+              { branchCode: 'รหัสสาขา', branchName: 'ชื่อสาขา', orderCount: 'จำนวนออเดอร์', totalSales: 'ยอดขาย' },
+              'ยอดขายตามสาขา',
+              'Sales by Branch'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -632,6 +651,12 @@ export default function SalesReportPage() {
             id="by-salesperson"
             title="ยอดขายตามพนักงาน"
             description="ยอดขายแยกตามพนักงานขาย"
+            onExportExcel={() => exportToExcelWithHeaders(
+              salesBySalesperson,
+              { saleCode: 'รหัสพนักงาน', saleName: 'ชื่อพนักงาน', orderCount: 'จำนวนออเดอร์', totalSales: 'ยอดขาย' },
+              'ยอดขายตามพนักงาน',
+              'Sales by Salesperson'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -656,6 +681,12 @@ export default function SalesReportPage() {
           id="top-customers"
           title="ลูกค้ารายสำคัญ"
           description="ลูกค้าที่มียอดซื้อสูงสุด"
+          onExportExcel={() => exportToExcelWithHeaders(
+            topCustomers,
+            { customerCode: 'รหัสลูกค้า', customerName: 'ชื่อลูกค้า', orderCount: 'จำนวนออเดอร์', totalSpent: 'ยอดซื้อรวม', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์', lastOrderDate: 'ซื้อล่าสุด', daysSinceLastOrder: 'วันที่ผ่านมา' },
+            'ลูกค้ารายสำคัญ',
+            'Top Customers'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -679,6 +710,12 @@ export default function SalesReportPage() {
           id="ar-status"
           title="สถานะลูกหนี้การค้า"
           description="สรุปสถานะการชำระเงินของลูกค้า"
+          onExportExcel={() => exportToExcelWithHeaders(
+            arStatus,
+            { statusPayment: 'สถานะชำระ', invoiceCount: 'จำนวนใบแจ้งหนี้', totalInvoiceAmount: 'ยอดรวม', totalPaid: 'ชำระแล้ว', totalOutstanding: 'ค้างชำระ' },
+            'สถานะลูกหนี้การค้า',
+            'AR Status'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={5} />

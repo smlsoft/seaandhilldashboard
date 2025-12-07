@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, MoreVertical, Database, X } from 'lucide-react';
+import { ExternalLink, MoreVertical, Database, X, Download } from 'lucide-react';
 
 interface QueryInfo {
     query: string;
@@ -21,6 +21,7 @@ interface DataCardProps {
     linkTo?: string; // URL to navigate when clicking on the card
     id?: string; // ID for scroll target
     headerExtra?: React.ReactNode; // Extra content in header (e.g., filters)
+    onExportExcel?: () => void; // Export to Excel callback
 }
 
 // Query Modal component
@@ -161,7 +162,7 @@ function QueryModal({
     );
 }
 
-export function DataCard({ title, children, className, action, description, queryInfo, linkTo, id, headerExtra }: DataCardProps) {
+export function DataCard({ title, children, className, action, description, queryInfo, linkTo, id, headerExtra, onExportExcel }: DataCardProps) {
     const [showQueryPopup, setShowQueryPopup] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -249,6 +250,20 @@ export function DataCard({ title, children, className, action, description, quer
                         )}
                     </div>
                     <div className="flex items-center gap-2 ml-4">
+                        {/* Export Excel button */}
+                        {onExportExcel && (
+                            <button
+                                className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
+                                title="ดาวน์โหลด Excel"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onExportExcel();
+                                }}
+                            >
+                                <Download className="w-5 h-5 text-green-600" />
+                            </button>
+                        )}
                         {/* More menu button */}
                         {hasMenuItems && (
                             <div className="relative" ref={menuRef}>

@@ -8,6 +8,7 @@ import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { TableSkeleton } from '@/components/LoadingSkeleton';
 import { PaginatedTable, type ColumnDef } from '@/components/PaginatedTable';
 import { getDateRange } from '@/lib/dateRanges';
+import { exportToExcelWithHeaders } from '@/lib/exportExcel';
 import type { 
   DateRange, 
   ProfitLossData, 
@@ -501,6 +502,12 @@ export default function AccountingReportPage() {
             query: getProfitLossQuery(dateRange),
             format: 'JSONEachRow'
           }}
+          onExportExcel={() => exportToExcelWithHeaders(
+            profitLossData,
+            { month: 'เดือน', revenue: 'รายได้', expenses: 'ค่าใช้จ่าย', netProfit: 'กำไรสุทธิ' },
+            'งบกำไรขาดทุน',
+            'Profit & Loss'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={6} />
@@ -528,6 +535,14 @@ export default function AccountingReportPage() {
             query: getBalanceSheetQuery(dateRange.end),
             format: 'JSONEachRow'
           }} 
+          onExportExcel={() => exportToExcelWithHeaders(
+            balanceSheetTypeFilter === 'all' 
+              ? balanceSheetData 
+              : balanceSheetData.filter(item => item.typeName === balanceSheetTypeFilter),
+            { accountCode: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', typeName: 'ประเภท', balance: 'ยอดคงเหลือ' },
+            'งบดุล',
+            'Balance Sheet'
+          )}
           headerExtra={
             <div className="flex items-center gap-2 -mb-5">
               <label className="text-sm text-muted-foreground">ประเภท:</label>
@@ -573,6 +588,12 @@ export default function AccountingReportPage() {
             query: getCashFlowQuery(dateRange),
             format: 'JSONEachRow'
           }}
+          onExportExcel={() => exportToExcelWithHeaders(
+            cashFlowData,
+            { activityType: 'ประเภทกิจกรรม', revenue: 'เงินสดรับ', expenses: 'เงินสดจ่าย', netCashFlow: 'กระแสเงินสดสุทธิ' },
+            'งบกระแสเงินสด',
+            'Cash Flow'
+          )}
         >
           {loading ? (
             <TableSkeleton rows={3} />
@@ -599,6 +620,12 @@ export default function AccountingReportPage() {
               query: getARAgingQuery(),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              arAgingData,
+              { docNo: 'เลขที่เอกสาร', code: 'รหัส', name: 'ลูกค้า', dueDate: 'วันครบกำหนด', outstanding: 'ยอดค้างชำระ', agingBucket: 'อายุหนี้' },
+              'อายุลูกหนี้',
+              'AR Aging'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -625,6 +652,12 @@ export default function AccountingReportPage() {
               query: getAPAgingQuery(),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              apAgingData,
+              { docNo: 'เลขที่เอกสาร', code: 'รหัส', name: 'ซัพพลายเออร์', dueDate: 'วันครบกำหนด', outstanding: 'ยอดค้างชำระ', agingBucket: 'อายุหนี้' },
+              'อายุเจ้าหนี้',
+              'AP Aging'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={8} />
@@ -653,6 +686,12 @@ export default function AccountingReportPage() {
               query: getRevenueBreakdownQuery(dateRange),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              revenueBreakdown,
+              { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
+              'รายได้ตามหมวด',
+              'Revenue Breakdown'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={5} />
@@ -678,6 +717,12 @@ export default function AccountingReportPage() {
               query: getExpenseBreakdownQuery(dateRange),
               format: 'JSONEachRow'
             }}
+            onExportExcel={() => exportToExcelWithHeaders(
+              expenseBreakdown,
+              { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
+              'ค่าใช้จ่ายตามหมวด',
+              'Expense Breakdown'
+            )}
           >
             {loading ? (
               <TableSkeleton rows={5} />

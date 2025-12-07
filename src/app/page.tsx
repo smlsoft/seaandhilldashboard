@@ -6,7 +6,8 @@ import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { AlertsCard } from '@/components/AlertsCard';
 import { RecentSales } from '@/components/RecentSales';
-import { DollarSign, ShoppingCart, Users, Package, TrendingUp, Calendar } from 'lucide-react';
+import { DownloadReportButton } from '@/components/DownloadReportButton';
+import { DollarSign, ShoppingCart, Users, Package, Calendar } from 'lucide-react';
 
 // Custom ECharts Theme
 const theme = {
@@ -176,10 +177,7 @@ export default function Dashboard() {
             <Calendar className="mr-2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
             วันนี้: {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
           </button>
-          <button className="inline-flex items-center justify-center rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[hsl(var(--primary))/90] transition-colors">
-            <TrendingUp className="mr-2 h-4 w-4" />
-            ดาวน์โหลดรายงาน
-          </button>
+          <DownloadReportButton />
         </div>
       </div>
 
