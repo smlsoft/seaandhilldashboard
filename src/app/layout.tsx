@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { MainLayout } from "@/components/MainLayout";
 import { PermissionProvider } from "@/lib/permissions";
+import ChatWidget from "@/components/ChatWidget";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -29,6 +30,7 @@ export default function RootLayout({
             {children}
           </MainLayout>
         </PermissionProvider>
+        <ChatWidget />
       </body>
     </html>
   );
