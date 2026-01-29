@@ -1,6 +1,6 @@
 'use client';
 
-import { Send, Loader2, Database, Trash2, RotateCcw } from 'lucide-react';
+import { Send, Loader2, Database, RotateCcw, RefreshCw } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 
@@ -15,8 +15,42 @@ export default function ChatBotPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshingSchema, setIsRefreshingSchema] = useState(false);
+  const [schemaStatus, setSchemaStatus] = useState<{ tableCount: number; lastUpdated: string | null } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fetch schema status on mount
+  useEffect(() => {
+    fetchSchemaStatus();
+  }, []);
+
+  const fetchSchemaStatus = async () => {
+    try {
+      const res = await fetch('/api/refresh-schema');
+      const data = await res.json();
+      setSchemaStatus({ tableCount: data.tableCount, lastUpdated: data.lastUpdated });
+    } catch (err) {
+      console.error('Failed to fetch schema status:', err);
+    }
+  };
+
+  const refreshSchema = async () => {
+    setIsRefreshingSchema(true);
+    try {
+      const res = await fetch('/api/refresh-schema', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSchemaStatus({ tableCount: data.tableCount, lastUpdated: data.lastUpdated });
+      } else {
+        setError(`Failed to refresh schema: ${data.error}`);
+      }
+    } catch (err) {
+      setError('Failed to refresh schema');
+    } finally {
+      setIsRefreshingSchema(false);
+    }
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -131,16 +165,32 @@ export default function ChatBotPage() {
           <div className="flex items-center gap-2">
             <Database className="w-6 h-6 text-blue-600" />
             <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">AI Data Assistant</h1>
+            {schemaStatus && (
+              <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">
+                ({schemaStatus.tableCount} tables)
+              </span>
+            )}
           </div>
-          {messages.length > 0 && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={clearMessages}
-              className="flex items-center gap-2 px-3 py-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-sm"
+              onClick={refreshSchema}
+              disabled={isRefreshingSchema}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-sm disabled:opacity-50"
+              title="Refresh database schema"
             >
-              <RotateCcw className="w-4 h-4" />
-              New Chat
+              <RefreshCw className={`w-4 h-4 ${isRefreshingSchema ? 'animate-spin' : ''}`} />
+              Schema
             </button>
-          )}
+            {messages.length > 0 && (
+              <button
+                onClick={clearMessages}
+                className="flex items-center gap-2 px-3 py-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+                New Chat
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
