@@ -153,7 +153,7 @@ export default function SalesPage() {
               trendUp={kpis.totalSales.trend === 'up'}
               icon={DollarSign}
               queryInfo={{
-                query: getTotalSalesQuery(dateRange.start, dateRange.end),
+                query: getTotalSalesQuery(dateRange),
                 format: 'JSONEachRow',
               }}
             />
@@ -165,7 +165,7 @@ export default function SalesPage() {
               icon={TrendingUp}
               subtitle={`Margin: ${(kpis.grossMarginPct ?? 0).toFixed(1)}%`}
               queryInfo={{
-                query: getGrossProfitQuery(dateRange.start, dateRange.end),
+                query: getGrossProfitQuery(dateRange),
                 format: 'JSONEachRow',
               }}
             />
@@ -176,7 +176,7 @@ export default function SalesPage() {
               trendUp={kpis.totalOrders.trend === 'up'}
               icon={ShoppingCart}
               queryInfo={{
-                query: getTotalOrdersQuery(dateRange.start, dateRange.end),
+                query: getTotalOrdersQuery(dateRange),
                 format: 'JSONEachRow',
               }}
             />
@@ -187,7 +187,7 @@ export default function SalesPage() {
               trendUp={kpis.avgOrderValue.trend === 'up'}
               icon={Package}
               queryInfo={{
-                query: getAvgOrderValueQuery(dateRange.start, dateRange.end),
+                query: getAvgOrderValueQuery(dateRange),
                 format: 'JSONEachRow',
               }}
             />
