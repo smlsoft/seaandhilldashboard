@@ -209,6 +209,11 @@ export async function POST(req: Request) {
         const MAX_ITERATIONS = 20;
         let iterations = 0;
 
+        // Token usage tracking
+        let totalPromptTokens = 0;
+        let totalCandidatesTokens = 0;
+        let totalTokens = 0;
+
         console.log('[DEBUG] Starting chat with history:', geminiMessages.length - 1, 'messages');
 
         const chat = model.startChat({
@@ -229,6 +234,20 @@ export async function POST(req: Request) {
           const response = result.response;
           const functionCalls = response.functionCalls();
 
+          // Log token usage for this response
+          const usageMetadata = response.usageMetadata;
+          if (usageMetadata) {
+            const promptTokens = usageMetadata.promptTokenCount || 0;
+            const candidatesTokens = usageMetadata.candidatesTokenCount || 0;
+            const iterationTotal = usageMetadata.totalTokenCount || 0;
+
+            totalPromptTokens += promptTokens;
+            totalCandidatesTokens += candidatesTokens;
+            totalTokens += iterationTotal;
+
+            console.log(`[TOKEN] Iteration ${iterations}: prompt=${promptTokens}, response=${candidatesTokens}, total=${iterationTotal}`);
+          }
+
           console.log('[DEBUG] Function calls:', functionCalls ? functionCalls.length : 0);
 
           // If no function calls, stream the text response
@@ -240,7 +259,6 @@ export async function POST(req: Request) {
               controller.enqueue(encoder.encode(text));
             } else {
               console.log('[DEBUG] WARNING: Empty response from model');
-              // Try to get more info about the response
               console.log('[DEBUG] Response candidates:', JSON.stringify(response.candidates, null, 2));
             }
             break;
@@ -274,6 +292,15 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(text));
           }
         }
+
+        // Log total token usage summary
+        console.log('========================================');
+        console.log('[TOKEN SUMMARY]');
+        console.log(`  Iterations: ${iterations}`);
+        console.log(`  Total Prompt Tokens: ${totalPromptTokens}`);
+        console.log(`  Total Response Tokens: ${totalCandidatesTokens}`);
+        console.log(`  Total Tokens: ${totalTokens}`);
+        console.log('========================================');
 
         console.log('[DEBUG] Stream completed');
         controller.close();
