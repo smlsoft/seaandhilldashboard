@@ -2,6 +2,7 @@
 
 import { MessageCircle, X, Send, Loader2, Database } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface Message {
   id: string;
@@ -99,13 +100,22 @@ export default function ChatWidget() {
     <>
       {/* Floating Action Button */}
       {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 z-50"
-          aria-label="Open AI Assistant"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </button>
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => setIsOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 relative"
+            aria-label="Open AI Assistant"
+          >
+            <MessageCircle className="w-6 h-6" />
+            
+            {/* Message count badge */}
+            {messages.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-white">
+                {messages.length}
+              </span>
+            )}
+          </button>
+        </div>
       )}
 
       {/* Chat Window */}
@@ -117,13 +127,15 @@ export default function ChatWidget() {
               <Database className="w-5 h-5" />
               <h3 className="font-semibold">AI Data Assistant</h3>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="hover:bg-blue-700 rounded-full p-1 transition-colors"
-              aria-label="Close chat"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsOpen(false)}
+                className="hover:bg-blue-700 rounded-full p-1 transition-colors"
+                aria-label="Close chat"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Messages Area */}
@@ -146,15 +158,19 @@ export default function ChatWidget() {
                 }`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                  className={`max-w-[85%] rounded-lg px-4 py-2 ${
                     message.role === 'user'
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  
-                  {/* Tool invocations removed - handled by backend */}
+                  {message.role === 'user' ? (
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  ) : (
+                    <div className="text-sm">
+                      <MarkdownRenderer content={message.content} />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
