@@ -379,8 +379,11 @@ data: 197.34,130.21,283.54,97.25,193.01,207.62
 ...
 \`\`\``;
 
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    console.log('[DEBUG] Using model:', modelName);
+
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+      model: modelName,
       systemInstruction,
       tools,
     });
@@ -390,25 +393,40 @@ data: 197.34,130.21,283.54,97.25,193.01,207.62
       async start(controller) {
         const MAX_ITERATIONS = 120;
         let iterations = 0;
+
+        console.log('[DEBUG] Starting chat with history:', geminiMessages.length - 1, 'messages');
+
         const chat = model.startChat({
           history: geminiMessages.slice(0, -1), // All except last message
         });
 
         // Send last message
         const lastMessage = geminiMessages[geminiMessages.length - 1];
+        console.log('[DEBUG] Sending message:', lastMessage.parts[0].text.substring(0, 100) + '...');
+
         let result = await chat.sendMessage(lastMessage.parts[0].text);
+        console.log('[DEBUG] Initial response received');
 
         while (iterations < MAX_ITERATIONS) {
           iterations++;
+          console.log('[DEBUG] Iteration:', iterations);
 
           const response = result.response;
           const functionCalls = response.functionCalls();
 
+          console.log('[DEBUG] Function calls:', functionCalls ? functionCalls.length : 0);
+
           // If no function calls, stream the text response
           if (!functionCalls || functionCalls.length === 0) {
             const text = response.text();
+            console.log('[DEBUG] Final text response length:', text ? text.length : 0);
+            console.log('[DEBUG] Final text preview:', text ? text.substring(0, 200) + '...' : 'EMPTY');
             if (text) {
               controller.enqueue(encoder.encode(text));
+            } else {
+              console.log('[DEBUG] WARNING: Empty response from model');
+              // Try to get more info about the response
+              console.log('[DEBUG] Response candidates:', JSON.stringify(response.candidates, null, 2));
             }
             break;
           }
@@ -418,6 +436,7 @@ data: 197.34,130.21,283.54,97.25,193.01,207.62
           for (const call of functionCalls) {
             console.log('[Tool Call]:', call.name, call.args);
             const toolResult = await executeTool(call.name, call.args as Record<string, unknown>);
+            console.log('[DEBUG] Tool result for', call.name, ':', JSON.stringify(toolResult).substring(0, 200) + '...');
             functionResponses.push({
               functionResponse: {
                 name: call.name,
@@ -427,17 +446,21 @@ data: 197.34,130.21,283.54,97.25,193.01,207.62
           }
 
           // Send function results back
+          console.log('[DEBUG] Sending function responses back to model...');
           result = await chat.sendMessage(functionResponses);
+          console.log('[DEBUG] Received response after function call');
         }
 
         // Send final response if loop ended due to max iterations
         if (iterations >= MAX_ITERATIONS) {
+          console.log('[DEBUG] WARNING: Max iterations reached!');
           const text = result.response.text();
           if (text) {
             controller.enqueue(encoder.encode(text));
           }
         }
 
+        console.log('[DEBUG] Stream completed');
         controller.close();
       },
     });
