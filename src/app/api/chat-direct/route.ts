@@ -379,7 +379,7 @@ data: 197.34,130.21,283.54,97.25,193.01,207.62
 ...
 \`\`\``;
 
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
     console.log('[DEBUG] Using model:', modelName);
 
     const model = genAI.getGenerativeModel({
