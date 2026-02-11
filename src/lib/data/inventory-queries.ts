@@ -1,0 +1,200 @@
+// Inventory data queries - Pure functions safe for client-side usage
+
+import type { DateRange } from './types';
+import { getPreviousPeriod } from '@/lib/comparison';
+
+// ============================================================================
+// Query Export Functions (for View SQL Query feature)
+// ============================================================================
+
+export function getInventoryValueQuery(asOfDate: string): string {
+    return `SELECT
+  sum(total_value) as current_value
+FROM (
+  SELECT
+    item_code,
+    sum(qty) as total_qty,
+    sum(qty * cost) as total_value
+  FROM stock_transaction
+  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+  GROUP BY item_code
+  HAVING total_qty > 0
+)`;
+}
+
+export function getTotalItemsQuery(asOfDate: string): string {
+    return `SELECT
+  count(*) as current_value
+FROM (
+  SELECT
+    item_code,
+    sum(qty) as total_qty
+  FROM stock_transaction
+  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+  GROUP BY item_code
+  HAVING total_qty > 0
+)`;
+}
+
+export function getLowStockCountQuery(asOfDate: string): string {
+    return `SELECT
+  count(*) as current_value
+FROM (
+  SELECT
+    item_code,
+    sum(qty) as total_qty
+  FROM stock_transaction
+  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+  GROUP BY item_code
+  HAVING total_qty > 0 AND total_qty <= 10
+)`;
+}
+
+export function getOverstockCountQuery(asOfDate: string): string {
+    return `SELECT
+  count(*) as current_value
+FROM (
+  SELECT
+    item_code,
+    sum(qty) as total_qty
+  FROM stock_transaction
+  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+  GROUP BY item_code
+  HAVING total_qty > 1000
+)`;
+}
+
+export function getStockMovementQuery(startDate: string, endDate: string): string {
+    return `SELECT
+  toStartOfDay(doc_datetime) as date,
+  sumIf(qty, qty > 0) as qtyIn,
+  sumIf(abs(qty), qty < 0) as qtyOut
+FROM stock_transaction
+WHERE doc_datetime BETWEEN '${startDate}' AND '${endDate}'
+GROUP BY date
+ORDER BY date ASC`;
+}
+
+export function getLowStockItemsQuery(asOfDate: string): string {
+    return `SELECT
+  item_code as itemCode,
+  any(item_name) as itemName,
+  any(item_category_name) as categoryName,
+  any(item_brand_name) as brandName,
+  any(wh_name) as whName,
+  any(wh_name) as branchName,
+  sum(qty) as currentStock,
+  10 as reorderPoint,
+  if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
+FROM stock_transaction
+WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+GROUP BY item_code
+HAVING currentStock > 0 AND currentStock <= 10
+ORDER BY currentStock ASC
+LIMIT 50`;
+}
+
+export function getOverstockItemsQuery(asOfDate: string): string {
+    return `SELECT
+  item_code as itemCode,
+  any(item_name) as itemName,
+  any(item_category_name) as categoryName,
+  any(item_brand_name) as brandName,
+  any(wh_name) as branchName,
+  sum(qty) as currentStock,
+  1000 as maxStockLevel,
+  if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
+FROM stock_transaction
+WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+GROUP BY item_code
+HAVING currentStock > 1000
+ORDER BY currentStock DESC
+LIMIT 50`;
+}
+
+export function getSlowMovingItemsQuery(startDate: string, endDate: string, asOfDate: string): string {
+    return `SELECT
+  stock.item_code as itemCode,
+  stock.item_name as itemName,
+  stock.categoryName as categoryName,
+  stock.brandName as brandName,
+  stock.currentStock as currentStock,
+  stock.costAvg as costAvg,
+  stock.stockValue as stockValue,
+  coalesce(sales.qty_sold, 0) as qtySold,
+  dateDiff('day', toDate('${startDate}'), toDate('${endDate}')) as daysPeriod,
+  if(sales.qty_sold > 0, stock.currentStock / (sales.qty_sold / daysPeriod), 999) as daysOfStock
+FROM (
+  SELECT
+    item_code,
+    any(item_name) as item_name,
+    any(item_category_name) as categoryName,
+    any(item_brand_name) as brandName,
+    sum(qty) as currentStock,
+    if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg,
+    sum(qty * cost) as stockValue
+  FROM stock_transaction
+  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+  GROUP BY item_code
+  HAVING currentStock > 0
+) stock
+LEFT JOIN (
+  SELECT
+    sid.item_code,
+    sum(sid.qty) as qty_sold
+  FROM saleinvoice_transaction_detail sid
+  JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
+  WHERE si.status_cancel != 'Cancel'
+    AND toDate(si.doc_datetime) BETWEEN toDate('${startDate}') AND toDate('${endDate}')
+  GROUP BY sid.item_code
+) sales ON stock.item_code = sales.item_code
+WHERE daysOfStock > 90
+ORDER BY stockValue DESC
+LIMIT 50`;
+}
+
+export function getInventoryTurnoverQuery(startDate: string, endDate: string, asOfDate: string): string {
+    return `SELECT
+  stock.categoryName as categoryName,
+  stock.avgInventoryValue as avgInventoryValue,
+  coalesce(sales.totalCOGS, 0) as totalCOGS,
+  if(stock.avgInventoryValue > 0, coalesce(sales.totalCOGS, 0) / stock.avgInventoryValue, 0) as turnoverRatio,
+  if(turnoverRatio > 0, 365 / turnoverRatio, 0) as daysToSell
+FROM (
+  SELECT
+    item_category_name as categoryName,
+    sum(qty * cost) as avgInventoryValue
+  FROM stock_transaction
+  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+    AND item_category_name != ''
+  GROUP BY item_category_name
+  HAVING avgInventoryValue > 0
+) stock
+LEFT JOIN (
+  SELECT
+    sid.item_category_name as categoryName,
+    sum(sid.sum_of_cost) as totalCOGS
+  FROM saleinvoice_transaction_detail sid
+  JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
+  WHERE si.status_cancel != 'Cancel'
+    AND si.doc_datetime BETWEEN '${startDate}' AND '${endDate}'
+  GROUP BY sid.item_category_name
+) sales ON stock.categoryName = sales.categoryName
+ORDER BY turnoverRatio DESC
+LIMIT 15`;
+}
+
+export function getStockByBranchQuery(asOfDate: string): string {
+    return `SELECT
+  wh_code as branchCode,
+  any(wh_name) as branchName,
+  count(DISTINCT item_code) as itemCount,
+  sum(qty) as qtyOnHand,
+  sum(qty * cost) as inventoryValue
+FROM stock_transaction
+WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+  AND wh_code != ''
+GROUP BY wh_code
+HAVING qtyOnHand > 0
+ORDER BY inventoryValue DESC`;
+}
