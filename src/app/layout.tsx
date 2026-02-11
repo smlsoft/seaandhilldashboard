@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { MainLayout } from "@/components/MainLayout";
+import { PermissionProvider } from "@/lib/permissions";
+import { ComparisonProvider } from "@/lib/ComparisonContext";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -22,7 +25,13 @@ export default function RootLayout({
       <body
         className={`${inter.variable} antialiased bg-[hsl(var(--background))] text-[hsl(var(--foreground))]`}
       >
-        {children}
+        <PermissionProvider>
+          <ComparisonProvider>
+            <MainLayout>
+              {children}
+            </MainLayout>
+          </ComparisonProvider>
+        </PermissionProvider>
       </body>
     </html>
   );
