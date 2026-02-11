@@ -1,4 +1,5 @@
 // Inventory data queries for ClickHouse
+import 'server-only';
 
 import { clickhouse } from '@/lib/clickhouse';
 import type {
@@ -12,7 +13,36 @@ import type {
   StockByBranch,
   KPIData,
 } from './types';
-import { calculateGrowth, getPreviousPeriod } from '@/lib/comparison';
+import { calculateGrowth } from '@/lib/comparison';
+
+// Re-export query functions for convenience (server-side usage only)
+export * from './inventory-queries';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Build branch filter SQL clause and parameters
+ * Handles single branch, multiple branches, or ALL branches
+ */
+function buildBranchFilter(branches?: string[]): { sql: string; params: Record<string, any> } {
+  if (!branches || branches.length === 0 || branches.includes('ALL')) {
+    return { sql: '', params: {} };
+  }
+
+  if (branches.length === 1) {
+    return {
+      sql: 'AND branch_sync = {branchSync:String}',
+      params: { branchSync: branches[0] }
+    };
+  }
+
+  return {
+    sql: 'AND branch_sync IN {branchList:Array(String)}',
+    params: { branchList: branches }
+  };
+}
 
 // ============================================================================
 // Data Fetching Functions
@@ -23,11 +53,13 @@ import { calculateGrowth, getPreviousPeriod } from '@/lib/comparison';
  * Note: stock_transaction table has qty (>0=in, <0=out), cost, amount
  * We calculate current stock by summing qty per item
  */
-export async function getInventoryKPIs(asOfDate: string): Promise<InventoryKPIs> {
+export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]): Promise<InventoryKPIs> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     // Calculate current stock per item by summing qty (in/out movements)
     // Total Inventory Value (sum of qty * cost for items with positive stock)
-    const valueQuery = `
+    let valueQuery = `
       SELECT
         sum(total_value) as current_value
       FROM (
@@ -37,13 +69,17 @@ export async function getInventoryKPIs(asOfDate: string): Promise<InventoryKPIs>
           sum(qty * cost) as total_value
         FROM stock_transaction
         WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        ${branchFilter.sql}
+    `;
+
+    valueQuery += `
         GROUP BY item_code
         HAVING total_qty > 0
       )
     `;
 
     // Total Items in Stock (items with positive stock balance)
-    const itemsQuery = `
+    let itemsQuery = `
       SELECT
         count(*) as current_value
       FROM (
@@ -52,28 +88,17 @@ export async function getInventoryKPIs(asOfDate: string): Promise<InventoryKPIs>
           sum(qty) as total_qty
         FROM stock_transaction
         WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        ${branchFilter.sql}
+    `;
+
+    itemsQuery += `
         GROUP BY item_code
         HAVING total_qty > 0
       )
     `;
 
-    // Low Stock Items - items with stock <= 10 units (arbitrary threshold since no reorder_point column)
-    const lowStockQuery = `
-      SELECT
-        count(*) as current_value
-      FROM (
-        SELECT
-          item_code,
-          sum(qty) as total_qty
-        FROM stock_transaction
-        WHERE toDate(doc_datetime) <=toDate('${asOfDate}')
-        GROUP BY item_code
-        HAVING total_qty > 0 AND total_qty <= 10
-      )
-    `;
-
-    // Overstock Items - items with stock > 1000 units (arbitrary threshold since no max_stock_level column)
-    const overstockQuery = `
+    // Low Stock Items - items with stock <= 10 units
+    let lowStockQuery = `
       SELECT
         count(*) as current_value
       FROM (
@@ -82,12 +107,38 @@ export async function getInventoryKPIs(asOfDate: string): Promise<InventoryKPIs>
           sum(qty) as total_qty
         FROM stock_transaction
         WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        ${branchFilter.sql}
+    `;
+
+    lowStockQuery += `
+        GROUP BY item_code
+        HAVING total_qty > 0 AND total_qty <= 10
+      )
+    `;
+
+    // Overstock Items - items with stock > 1000 units
+    let overstockQuery = `
+      SELECT
+        count(*) as current_value
+      FROM (
+        SELECT
+          item_code,
+          sum(qty) as total_qty
+        FROM stock_transaction
+        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        ${branchFilter.sql}
+    `;
+
+    overstockQuery += `
         GROUP BY item_code
         HAVING total_qty > 1000
       )
     `;
 
-    const params = { as_of_date: asOfDate };
+    const params = {
+      as_of_date: asOfDate,
+      ...branchFilter.params
+    };
 
     const [valueResult, itemsResult, lowStockResult, overstockResult] = await Promise.all([
       clickhouse.query({ query: valueQuery, query_params: params, format: 'JSONEachRow' }),
@@ -132,23 +183,32 @@ export async function getInventoryKPIs(asOfDate: string): Promise<InventoryKPIs>
 /**
  * Get Stock Movement (IN/OUT) over time
  */
-export async function getStockMovement(dateRange: DateRange): Promise<StockMovement[]> {
-  const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
+export async function getStockMovement(dateRange: DateRange, branchSync?: string[]): Promise<StockMovement[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+
+    let query = `
       SELECT
         toStartOfDay(doc_datetime) as date,
         sumIf(qty, qty > 0) as qtyIn,
         sumIf(abs(qty), qty < 0) as qtyOut
       FROM stock_transaction
       WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      ${branchFilter.sql}
+    `;
+
+    query += `
       GROUP BY date
       ORDER BY date ASC
     `;
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -167,9 +227,11 @@ export async function getStockMovement(dateRange: DateRange): Promise<StockMovem
 /**
  * Get Low Stock Items (items with stock balance <= 10 units)
  */
-export async function getLowStockItems(asOfDate: string): Promise<LowStockItem[]> {
+export async function getLowStockItems(asOfDate: string, branchSync?: string[]): Promise<LowStockItem[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+
+    let query = `
       SELECT
         item_code as itemCode,
         any(item_name) as itemName,
@@ -182,6 +244,10 @@ export async function getLowStockItems(asOfDate: string): Promise<LowStockItem[]
         if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
       FROM stock_transaction
       WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+      ${branchFilter.sql}
+    `;
+
+    query += `
       GROUP BY item_code
       HAVING currentStock > 0 AND currentStock <= 10
       ORDER BY currentStock ASC
@@ -190,7 +256,10 @@ export async function getLowStockItems(asOfDate: string): Promise<LowStockItem[]
 
     const result = await clickhouse.query({
       query,
-      query_params: { as_of_date: asOfDate },
+      query_params: {
+        as_of_date: asOfDate,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -216,9 +285,11 @@ export async function getLowStockItems(asOfDate: string): Promise<LowStockItem[]
 /**
  * Get Overstock Items (items with stock > 1000 units)
  */
-export async function getOverstockItems(asOfDate: string): Promise<OverstockItem[]> {
+export async function getOverstockItems(asOfDate: string, branchSync?: string[]): Promise<OverstockItem[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+
+    let query = `
       SELECT
         item_code as itemCode,
         any(item_name) as itemName,
@@ -230,6 +301,10 @@ export async function getOverstockItems(asOfDate: string): Promise<OverstockItem
         if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
       FROM stock_transaction
       WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+      ${branchFilter.sql}
+    `;
+
+    query += `
       GROUP BY item_code
       HAVING currentStock > 1000
       ORDER BY currentStock DESC
@@ -238,7 +313,10 @@ export async function getOverstockItems(asOfDate: string): Promise<OverstockItem
 
     const result = await clickhouse.query({
       query,
-      query_params: { as_of_date: asOfDate },
+      query_params: {
+        as_of_date: asOfDate,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -270,8 +348,10 @@ export async function getOverstockItems(asOfDate: string): Promise<OverstockItem
  * Get Slow Moving Items (items with low turnover)
  * Calculate current stock by summing qty movements
  */
-export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string): Promise<SlowMovingItem[]> {
+export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string, branchSync?: string[]): Promise<SlowMovingItem[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         stock.item_code as itemCode,
@@ -295,6 +375,7 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string)
           sum(qty * cost) as stockValue
         FROM stock_transaction
         WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        ${branchFilter.sql}
         GROUP BY item_code
         HAVING currentStock > 0
       ) stock
@@ -306,6 +387,7 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string)
         JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
         WHERE si.status_cancel != 'Cancel'
           AND toDate(si.doc_datetime) BETWEEN toDate('${dateRange.start}') AND toDate('${dateRange.end}')
+          ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
         GROUP BY sid.item_code
       ) sales ON stock.item_code = sales.item_code
       WHERE daysOfStock > 90
@@ -319,6 +401,7 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string)
         start_date: dateRange.start,
         end_date: dateRange.end,
         as_of_date: asOfDate,
+        ...branchFilter.params
       },
       format: 'JSONEachRow',
     });
@@ -351,8 +434,10 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string)
  * Get Inventory Turnover by Category
  * Calculate using stock movements (qty) instead of non-existent columns
  */
-export async function getInventoryTurnover(dateRange: DateRange, asOfDate: string): Promise<InventoryTurnover[]> {
+export async function getInventoryTurnover(dateRange: DateRange, asOfDate: string, branchSync?: string[]): Promise<InventoryTurnover[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         stock.categoryName as categoryName,
@@ -367,6 +452,7 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
         FROM stock_transaction
         WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
           AND item_category_name != ''
+          ${branchFilter.sql}
         GROUP BY item_category_name
         HAVING avgInventoryValue > 0
       ) stock
@@ -378,6 +464,7 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
         JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
         WHERE si.status_cancel != 'Cancel'
           AND si.doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+          ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
         GROUP BY sid.item_category_name
       ) sales ON stock.categoryName = sales.categoryName
       ORDER BY turnoverRatio DESC
@@ -390,6 +477,7 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
         start_date: dateRange.start,
         end_date: dateRange.end,
         as_of_date: asOfDate,
+        ...branchFilter.params
       },
       format: 'JSONEachRow',
     });
@@ -419,9 +507,11 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
  * Get Stock by Branch
  * Note: stock_transaction doesn't have branch_code/branch_name, using wh_code/wh_name (warehouse) instead
  */
-export async function getStockByBranch(asOfDate: string): Promise<StockByBranch[]> {
+export async function getStockByBranch(asOfDate: string, branchSync?: string[]): Promise<StockByBranch[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+
+    let query = `
       SELECT
         wh_code as branchCode,
         any(wh_name) as branchName,
@@ -431,6 +521,10 @@ export async function getStockByBranch(asOfDate: string): Promise<StockByBranch[
       FROM stock_transaction
       WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
         AND wh_code != ''
+        ${branchFilter.sql}
+    `;
+
+    query += `
       GROUP BY wh_code
       HAVING qtyOnHand > 0
       ORDER BY inventoryValue DESC
@@ -438,7 +532,10 @@ export async function getStockByBranch(asOfDate: string): Promise<StockByBranch[
 
     const result = await clickhouse.query({
       query,
-      query_params: { as_of_date: asOfDate },
+      query_params: {
+        as_of_date: asOfDate,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -454,200 +551,4 @@ export async function getStockByBranch(asOfDate: string): Promise<StockByBranch[
     console.error('Error fetching stock by branch:', error);
     throw error;
   }
-}
-
-// ============================================================================
-// Query Export Functions (for View SQL Query feature)
-// ============================================================================
-
-export function getInventoryValueQuery(asOfDate: string): string {
-  return `SELECT
-  sum(total_value) as current_value
-FROM (
-  SELECT
-    item_code,
-    sum(qty) as total_qty,
-    sum(qty * cost) as total_value
-  FROM stock_transaction
-  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-  GROUP BY item_code
-  HAVING total_qty > 0
-)`;
-}
-
-export function getTotalItemsQuery(asOfDate: string): string {
-  return `SELECT
-  count(*) as current_value
-FROM (
-  SELECT
-    item_code,
-    sum(qty) as total_qty
-  FROM stock_transaction
-  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-  GROUP BY item_code
-  HAVING total_qty > 0
-)`;
-}
-
-export function getLowStockCountQuery(asOfDate: string): string {
-  return `SELECT
-  count(*) as current_value
-FROM (
-  SELECT
-    item_code,
-    sum(qty) as total_qty
-  FROM stock_transaction
-  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-  GROUP BY item_code
-  HAVING total_qty > 0 AND total_qty <= 10
-)`;
-}
-
-export function getOverstockCountQuery(asOfDate: string): string {
-  return `SELECT
-  count(*) as current_value
-FROM (
-  SELECT
-    item_code,
-    sum(qty) as total_qty
-  FROM stock_transaction
-  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-  GROUP BY item_code
-  HAVING total_qty > 1000
-)`;
-}
-
-export function getStockMovementQuery(startDate: string, endDate: string): string {
-  return `SELECT
-  toStartOfDay(doc_datetime) as date,
-  sumIf(qty, qty > 0) as qtyIn,
-  sumIf(abs(qty), qty < 0) as qtyOut
-FROM stock_transaction
-WHERE doc_datetime BETWEEN '${startDate}' AND '${endDate}'
-GROUP BY date
-ORDER BY date ASC`;
-}
-
-export function getLowStockItemsQuery(asOfDate: string): string {
-  return `SELECT
-  item_code as itemCode,
-  any(item_name) as itemName,
-  any(item_category_name) as categoryName,
-  any(item_brand_name) as brandName,
-  any(wh_name) as whName,
-  any(wh_name) as branchName,
-  sum(qty) as currentStock,
-  10 as reorderPoint,
-  if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
-FROM stock_transaction
-WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-GROUP BY item_code
-HAVING currentStock > 0 AND currentStock <= 10
-ORDER BY currentStock ASC
-LIMIT 50`;
-}
-
-export function getOverstockItemsQuery(asOfDate: string): string {
-  return `SELECT
-  item_code as itemCode,
-  any(item_name) as itemName,
-  any(item_category_name) as categoryName,
-  any(item_brand_name) as brandName,
-  any(wh_name) as branchName,
-  sum(qty) as currentStock,
-  1000 as maxStockLevel,
-  if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
-FROM stock_transaction
-WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-GROUP BY item_code
-HAVING currentStock > 1000
-ORDER BY currentStock DESC
-LIMIT 50`;
-}
-
-export function getSlowMovingItemsQuery(startDate: string, endDate: string, asOfDate: string): string {
-  return `SELECT
-  stock.item_code as itemCode,
-  stock.item_name as itemName,
-  stock.categoryName as categoryName,
-  stock.brandName as brandName,
-  stock.currentStock as currentStock,
-  stock.costAvg as costAvg,
-  stock.stockValue as stockValue,
-  coalesce(sales.qty_sold, 0) as qtySold,
-  dateDiff('day', toDate('${startDate}'), toDate('${endDate}')) as daysPeriod,
-  if(sales.qty_sold > 0, stock.currentStock / (sales.qty_sold / daysPeriod), 999) as daysOfStock
-FROM (
-  SELECT
-    item_code,
-    any(item_name) as item_name,
-    any(item_category_name) as categoryName,
-    any(item_brand_name) as brandName,
-    sum(qty) as currentStock,
-    if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg,
-    sum(qty * cost) as stockValue
-  FROM stock_transaction
-  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-  GROUP BY item_code
-  HAVING currentStock > 0
-) stock
-LEFT JOIN (
-  SELECT
-    sid.item_code,
-    sum(sid.qty) as qty_sold
-  FROM saleinvoice_transaction_detail sid
-  JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
-  WHERE si.status_cancel != 'Cancel'
-    AND toDate(si.doc_datetime) BETWEEN toDate('${startDate}') AND toDate('${endDate}')
-  GROUP BY sid.item_code
-) sales ON stock.item_code = sales.item_code
-WHERE daysOfStock > 90
-ORDER BY stockValue DESC
-LIMIT 50`;
-}
-
-export function getInventoryTurnoverQuery(startDate: string, endDate: string, asOfDate: string): string {
-  return `SELECT
-  stock.categoryName as categoryName,
-  stock.avgInventoryValue as avgInventoryValue,
-  coalesce(sales.totalCOGS, 0) as totalCOGS,
-  if(stock.avgInventoryValue > 0, coalesce(sales.totalCOGS, 0) / stock.avgInventoryValue, 0) as turnoverRatio,
-  if(turnoverRatio > 0, 365 / turnoverRatio, 0) as daysToSell
-FROM (
-  SELECT
-    item_category_name as categoryName,
-    sum(qty * cost) as avgInventoryValue
-  FROM stock_transaction
-  WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-    AND item_category_name != ''
-  GROUP BY item_category_name
-  HAVING avgInventoryValue > 0
-) stock
-LEFT JOIN (
-  SELECT
-    sid.item_category_name as categoryName,
-    sum(sid.sum_of_cost) as totalCOGS
-  FROM saleinvoice_transaction_detail sid
-  JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
-  WHERE si.status_cancel != 'Cancel'
-    AND si.doc_datetime BETWEEN '${startDate}' AND '${endDate}'
-  GROUP BY sid.item_category_name
-) sales ON stock.categoryName = sales.categoryName
-ORDER BY turnoverRatio DESC
-LIMIT 15`;
-}
-
-export function getStockByBranchQuery(asOfDate: string): string {
-  return `SELECT
-  wh_code as branchCode,
-  any(wh_name) as branchName,
-  count(DISTINCT item_code) as itemCount,
-  sum(qty) as qtyOnHand,
-  sum(qty * cost) as inventoryValue
-FROM stock_transaction
-WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
-  AND wh_code != ''
-GROUP BY wh_code
-HAVING qtyOnHand > 0
-ORDER BY inventoryValue DESC`;
 }

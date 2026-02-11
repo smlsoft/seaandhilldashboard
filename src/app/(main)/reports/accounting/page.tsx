@@ -35,7 +35,7 @@ import {
   getAPAgingQuery,
   getRevenueBreakdownQuery,
   getExpenseBreakdownQuery,
-} from '@/lib/data/accounting';
+} from '@/lib/data/accounting-queries';
 
 // Report types
 type ReportType =

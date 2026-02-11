@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -29,7 +31,7 @@ import {
   getAPAgingQuery,
   getRevenueBreakdownQuery,
   getExpenseBreakdownQuery,
-} from '@/lib/data/accounting';
+} from '@/lib/data/accounting-queries';
 
 export default function AccountingPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
@@ -46,6 +48,7 @@ export default function AccountingPage() {
   const [revenueBreakdown, setRevenueBreakdown] = useState<CategoryBreakdown[]>([]);
   const [expenseBreakdown, setExpenseBreakdown] = useState<CategoryBreakdown[]>([]);
 
+
   useEffect(() => {
     fetchAllData();
   }, [dateRange]);
@@ -55,10 +58,25 @@ export default function AccountingPage() {
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
+
+      const asOfParams = new URLSearchParams({
+        as_of_date: dateRange.end,
+      });
+
+      const agingParams = new URLSearchParams();
+
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => {
+          params.append('branch', b);
+          asOfParams.append('branch', b);
+          agingParams.append('branch', b);
+        });
+      }
 
       // Fetch all data in parallel
       const [
@@ -72,10 +90,10 @@ export default function AccountingPage() {
       ] = await Promise.all([
         fetch(`/api/accounting/kpis?${params}`),
         fetch(`/api/accounting/profit-loss?${params}`),
-        fetch(`/api/accounting/balance-sheet?as_of_date=${dateRange.end}`),
+        fetch(`/api/accounting/balance-sheet?${asOfParams}`),
         fetch(`/api/accounting/cash-flow?${params}`),
-        fetch('/api/accounting/ar-aging'),
-        fetch('/api/accounting/ap-aging'),
+        fetch(`/api/accounting/ar-aging?${agingParams}`),
+        fetch(`/api/accounting/ap-aging?${agingParams}`),
         fetch(`/api/accounting/revenue-expense-breakdown?${params}`),
       ]);
 
@@ -112,6 +130,9 @@ export default function AccountingPage() {
       setLoading(false);
     }
   };
+
+  // Listen for branch changes
+  useBranchChange(fetchAllData);
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {

@@ -3,10 +3,14 @@
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { SidebarProvider, useSidebar } from '@/lib/SidebarContext';
+import { useBranchAutoSwitch } from '@/hooks/useBranchAutoSwitch';
 import { cn } from '@/lib/utils';
 
 function MainLayoutContent({ children }: { children: React.ReactNode }) {
   const { isCollapsed } = useSidebar();
+
+  // Auto-switch from "ALL" to "B1" when leaving comparison page
+  useBranchAutoSwitch();
 
   return (
     <div className="min-h-screen flex">

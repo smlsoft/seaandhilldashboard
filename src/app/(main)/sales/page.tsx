@@ -1,6 +1,9 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -15,6 +18,7 @@ import { TopCustomersTable } from '@/components/sales/TopCustomersTable';
 import { ARStatusChart } from '@/components/sales/ARStatusChart';
 import { ShoppingCart, DollarSign, TrendingUp, Package } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
+import Link from 'next/link';
 import { formatGrowthPercentage } from '@/lib/comparison';
 import type { DateRange, SalesKPIs, SalesTrendData, TopProduct, SalesByBranch, SalesBySalesperson, TopCustomer, ARStatus } from '@/lib/data/types';
 import {
@@ -28,7 +32,7 @@ import {
   getSalesBySalespersonQuery,
   getTopCustomersQuery,
   getARStatusQuery,
-} from '@/lib/data/sales';
+} from '@/lib/data/sales-queries';
 export default function SalesPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
   const [loading, setLoading] = useState(true);
@@ -43,6 +47,7 @@ export default function SalesPage() {
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
   const [arStatus, setArStatus] = useState<ARStatus[]>([]);
 
+
   useEffect(() => {
     fetchAllData();
   }, [dateRange]);
@@ -52,10 +57,14 @@ export default function SalesPage() {
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => params.append('branch', b));
+      }
 
       // Fetch all data in parallel
       const [
@@ -108,6 +117,9 @@ export default function SalesPage() {
       setLoading(false);
     }
   };
+
+  // Listen for branch changes
+  useBranchChange(fetchAllData);
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {

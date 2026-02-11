@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -16,14 +18,6 @@ import { Package, AlertTriangle, AlertCircle, TrendingDown } from 'lucide-react'
 import { getDateRange } from '@/lib/dateRanges';
 import type { DateRange, InventoryKPIs, StockMovement, LowStockItem, OverstockItem, SlowMovingItem, InventoryTurnover, StockByBranch } from '@/lib/data/types';
 import {
-  getInventoryKPIs,
-  getStockMovement,
-  getLowStockItems,
-  getOverstockItems,
-  getSlowMovingItems,
-  getInventoryTurnover,
-  getStockByBranch,
-  // Query Functions for SQL popup
   getInventoryValueQuery,
   getTotalItemsQuery,
   getLowStockCountQuery,
@@ -34,7 +28,7 @@ import {
   getSlowMovingItemsQuery,
   getInventoryTurnoverQuery,
   getStockByBranchQuery,
-} from '@/lib/data/inventory';
+} from '@/lib/data/inventory-queries';
 
 export default function InventoryPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
@@ -62,14 +56,27 @@ export default function InventoryPage() {
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
         as_of_date: asOfDate,
       });
 
-      const kpisParams = new URLSearchParams({ as_of_date: asOfDate });
-      const asOfParams = new URLSearchParams({ as_of_date: asOfDate });
+      const kpisParams = new URLSearchParams({
+        as_of_date: asOfDate,
+      });
+      const asOfParams = new URLSearchParams({
+        as_of_date: asOfDate,
+      });
+
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => {
+          params.append('branch', b);
+          kpisParams.append('branch', b);
+          asOfParams.append('branch', b);
+        });
+      }
 
       // Fetch all data in parallel
       const [
@@ -82,7 +89,7 @@ export default function InventoryPage() {
         branchRes,
       ] = await Promise.all([
         fetch(`/api/inventory/kpis?${kpisParams}`),
-        fetch(`/api/inventory/stock-movement?${new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end })}`),
+        fetch(`/api/inventory/stock-movement?${params}`),
         fetch(`/api/inventory/low-stock?${asOfParams}`),
         fetch(`/api/inventory/overstock?${asOfParams}`),
         fetch(`/api/inventory/slow-moving?${params}`),
@@ -122,6 +129,9 @@ export default function InventoryPage() {
       setLoading(false);
     }
   };
+
+  // Listen for branch changes
+  useBranchChange(fetchAllData);
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {

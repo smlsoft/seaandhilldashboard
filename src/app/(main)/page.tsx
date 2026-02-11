@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
@@ -8,6 +8,8 @@ import { AlertsCard } from '@/components/AlertsCard';
 import { RecentSales } from '@/components/RecentSales';
 import { DownloadReportButton } from '@/components/DownloadReportButton';
 import { DollarSign, ShoppingCart, Users, Package, Calendar } from 'lucide-react';
+import { useBranchChange } from '@/lib/branch-events';
+import Link from 'next/link';
 
 // Custom ECharts Theme
 const theme = {
@@ -38,37 +40,50 @@ const theme = {
   },
 };
 
+import { getSelectedBranch } from '@/app/actions/branch-actions';
+
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [dashboardRes, salesChartRes, revenueRes] = await Promise.all([
-          fetch('/api/dashboard'),
-          fetch('/api/sales-chart'),
-          fetch('/api/revenue-expense')
-        ]);
-
-        const dashboardData = await dashboardRes.json();
-        const salesChartData = await salesChartRes.json();
-        const revenueData = await revenueRes.json();
-
-        setData({
-          ...dashboardData,
-          salesChart: Array.isArray(salesChartData) ? salesChartData : [],
-          revenueChart: Array.isArray(revenueData) ? revenueData : []
-        });
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const branches = await getSelectedBranch();
+      const params = new URLSearchParams();
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => params.append('branch', b));
       }
-    }
+      const queryParams = params.toString() ? `?${params.toString()}` : '';
 
-    fetchData();
+      const [dashboardRes, salesChartRes, revenueRes] = await Promise.all([
+        fetch(`/api/dashboard${queryParams}`),
+        fetch(`/api/sales-chart${queryParams}`),
+        fetch(`/api/revenue-expense${queryParams}`)
+      ]);
+
+      const dashboardData = await dashboardRes.json();
+      const salesChartData = await salesChartRes.json();
+      const revenueData = await revenueRes.json();
+
+      setData({
+        ...dashboardData,
+        salesChart: Array.isArray(salesChartData) ? salesChartData : [],
+        revenueChart: Array.isArray(revenueData) ? revenueData : []
+      });
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Listen for branch changes
+  useBranchChange(fetchData);
 
   if (loading) {
     return (
@@ -226,7 +241,10 @@ export default function Dashboard() {
         <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 min-h-[400px]">
           <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '100%', width: '100%' }} />
         </DataCard>
-        <DataCard title="รายได้ vs ค่าใช้จ่าย" className="lg:col-span-3 min-h-[400px]">
+        <DataCard
+          title="รายได้ vs ค่าใช้จ่าย"
+          className="lg:col-span-3 min-h-[400px]"
+        >
           <ReactECharts option={revenueOption} theme={theme} style={{ height: '100%', width: '100%' }} />
         </DataCard>
       </div>

@@ -35,7 +35,7 @@ import {
   getSlowMovingItemsQuery,
   getInventoryTurnoverQuery,
   getStockByBranchQuery,
-} from '@/lib/data/inventory';
+} from '@/lib/data/inventory-queries';
 
 // Report types
 type ReportType =

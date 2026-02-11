@@ -4,6 +4,7 @@ interface Sale {
     customerName: string;
     totalAmount: number;
     statusPayment: string;
+    branchName?: string;
 }
 
 interface RecentSalesProps {
@@ -21,11 +22,12 @@ export function RecentSales({ sales }: RecentSalesProps) {
 
     return (
         <div className="space-y-6">
-            {sales.map((sale) => {
+            {sales.map((sale, index) => {
                 const initials = sale.customerName ? sale.customerName.substring(0, 2).toUpperCase() : 'XX';
+                const uniqueKey = `${sale.docNo}-${sale.branchName || index}`;
 
                 return (
-                    <div key={sale.docNo} className="flex items-center justify-between group">
+                    <div key={uniqueKey} className="flex items-center justify-between group">
                         <div className="flex items-center gap-4">
                             <div className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full bg-[hsl(var(--primary))/10] items-center justify-center text-sm font-bold text-[hsl(var(--primary))]">
                                 {initials}
@@ -36,6 +38,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
                                 </p>
                                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
                                     {sale.docNo} • {new Date(sale.docDate).toLocaleDateString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                    {sale.branchName && <span className="ml-1 text-[10px] bg-slate-100 px-1 py-0.5 rounded text-slate-500">{sale.branchName}</span>}
                                 </p>
                             </div>
                         </div>

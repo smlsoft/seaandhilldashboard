@@ -17,9 +17,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getSlowMovingItems({ start: startDate, end: endDate }, asOfDate),
-      ['inventory', 'slow-moving', startDate, endDate, asOfDate],
+      () => getSlowMovingItems({ start: startDate, end: endDate }, asOfDate, branches),
+      ['inventory', 'slow-moving', startDate, endDate, asOfDate, ...branches],
       CacheDuration.MEDIUM
     );
 

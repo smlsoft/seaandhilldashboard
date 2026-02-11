@@ -6,10 +6,11 @@ export const dynamic = 'force-dynamic';
 export default async function CustomersPage({
     searchParams,
 }: {
-    searchParams: { page?: string };
+    searchParams: Promise<{ page?: string }>;
 }) {
-    const page = Number(searchParams.page) || 1;
-    const { data, totalPages } = await getCustomersData(page);
+    const params = await searchParams;
+    const page = Number(params.page) || 1;
+    const { data, totalPages, total } = await getCustomersData(page);
 
     return (
         <div className="space-y-6">
@@ -20,7 +21,7 @@ export default async function CustomersPage({
                 </div>
             </div>
 
-            <CustomersTable data={data} currentPage={page} totalPages={totalPages} />
+            <CustomersTable data={data} currentPage={page} totalPages={totalPages} totalItems={total} />
         </div>
     );
 }

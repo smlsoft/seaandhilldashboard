@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -25,7 +27,7 @@ import {
   getPurchaseByCategoryQuery,
   getPurchaseByBrandQuery,
   getAPOutstandingQuery,
-} from '@/lib/data/purchase';
+} from '@/lib/data/purchase-queries';
 
 export default function PurchasePage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
@@ -40,6 +42,7 @@ export default function PurchasePage() {
   const [purchaseByBrand, setPurchaseByBrand] = useState<PurchaseByBrand[]>([]);
   const [apOutstanding, setApOutstanding] = useState<APOutstanding[]>([]);
 
+
   useEffect(() => {
     fetchAllData();
   }, [dateRange]);
@@ -49,10 +52,14 @@ export default function PurchasePage() {
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => params.append('branch', b));
+      }
 
       // Fetch all data in parallel
       const [
@@ -100,6 +107,9 @@ export default function PurchasePage() {
       setLoading(false);
     }
   };
+
+  // Listen for branch changes
+  useBranchChange(fetchAllData);
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {

@@ -17,9 +17,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getInventoryTurnover({ start: startDate, end: endDate }, asOfDate),
-      ['inventory', 'turnover', startDate, endDate, asOfDate],
+      () => getInventoryTurnover({ start: startDate, end: endDate }, asOfDate, branches),
+      ['inventory', 'turnover', startDate, endDate, asOfDate, ...branches],
       CacheDuration.MEDIUM
     );
 
