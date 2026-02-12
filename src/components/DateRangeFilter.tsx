@@ -5,6 +5,21 @@ import { Calendar } from 'lucide-react';
 import { DATE_RANGES, type DateRangeKey } from '@/lib/dateRanges';
 import type { DateRange } from '@/lib/data/types';
 
+// Helper functions to convert between YYYY-MM-DD and DD/MM/YYYY
+function formatDateToDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function parseDateFromDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return '';
+  const [day, month, year] = parts;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
 interface DateRangeFilterProps {
   value: DateRange;
   onChange: (range: DateRange) => void;
@@ -15,6 +30,8 @@ interface DateRangeFilterProps {
 export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', className = '' }: DateRangeFilterProps) {
   const [selectedKey, setSelectedKey] = useState<DateRangeKey>(defaultKey);
   const [showCustom, setShowCustom] = useState(false);
+  const [customStartDisplay, setCustomStartDisplay] = useState('');
+  const [customEndDisplay, setCustomEndDisplay] = useState('');
   
   // Sync selectedKey กับ value จากภายนอก
   useEffect(() => {
@@ -37,6 +54,8 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
       // ถ้าไม่ตรงกับ preset ไหนเลย แสดงว่าเป็น custom
       setSelectedKey('CUSTOM');
       setShowCustom(true);
+      setCustomStartDisplay(formatDateToDDMMYYYY(value.start));
+      setCustomEndDisplay(formatDateToDDMMYYYY(value.end));
     }
   }, [value]);
 
@@ -46,6 +65,9 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
 
     if (key === 'CUSTOM') {
       setShowCustom(true);
+      // Initialize with current values
+      setCustomStartDisplay(formatDateToDDMMYYYY(value.start));
+      setCustomEndDisplay(formatDateToDDMMYYYY(value.end));
     } else {
       setShowCustom(false);
       const range = DATE_RANGES[key].getValue();
@@ -55,19 +77,33 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
   };
 
   const handleCustomStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('📅 DateRangeFilter: Custom start changed to', e.target.value);
-    onChange({
-      start: e.target.value,
-      end: value.end,
-    });
+    const displayValue = e.target.value;
+    setCustomStartDisplay(displayValue);
+    
+    // Try to parse and update if valid
+    const parsed = parseDateFromDDMMYYYY(displayValue);
+    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+      console.log('📅 DateRangeFilter: Custom start changed to', parsed);
+      onChange({
+        start: parsed,
+        end: value.end,
+      });
+    }
   };
 
   const handleCustomEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('📅 DateRangeFilter: Custom end changed to', e.target.value);
-    onChange({
-      start: value.start,
-      end: e.target.value,
-    });
+    const displayValue = e.target.value;
+    setCustomEndDisplay(displayValue);
+    
+    // Try to parse and update if valid
+    const parsed = parseDateFromDDMMYYYY(displayValue);
+    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+      console.log('📅 DateRangeFilter: Custom end changed to', parsed);
+      onChange({
+        start: value.start,
+        end: parsed,
+      });
+    }
   };
 
   return (
@@ -90,17 +126,19 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
       {showCustom && (
         <div className="flex items-center gap-2">
           <input
-            type="date"
-            value={value.start}
+            type="text"
+            value={customStartDisplay}
             onChange={handleCustomStartChange}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            placeholder="DD/MM/YYYY"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-32"
           />
           <span className="text-sm text-muted-foreground">ถึง</span>
           <input
-            type="date"
-            value={value.end}
+            type="text"
+            value={customEndDisplay}
             onChange={handleCustomEndChange}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            placeholder="DD/MM/YYYY"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-32"
           />
         </div>
       )}
