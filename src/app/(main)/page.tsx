@@ -7,9 +7,12 @@ import { DataCard } from '@/components/DataCard';
 import { AlertsCard } from '@/components/AlertsCard';
 import { RecentSales } from '@/components/RecentSales';
 import { DownloadReportButton } from '@/components/DownloadReportButton';
-import { DollarSign, ShoppingCart, Users, Package, Calendar, BarChart3 } from 'lucide-react';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { DollarSign, ShoppingCart, Users, Package } from 'lucide-react';
 import { useBranchChange } from '@/lib/branch-events';
-import Link from 'next/link';
+import { getDateRange } from '@/lib/dateRanges';
+import type { DateRange } from '@/lib/data/types';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 
 // Custom ECharts Theme
 const theme = {
@@ -40,13 +43,17 @@ const theme = {
   },
 };
 
-import { getSelectedBranch } from '@/app/actions/branch-actions';
-
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('TODAY'));
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.start, dateRange.end]);
+
+  const fetchData = async () => {
     setLoading(true);
     try {
       const branches = await getSelectedBranch();
@@ -54,6 +61,11 @@ export default function Dashboard() {
       if (branches.length > 0 && !branches.includes('ALL')) {
         branches.forEach(b => params.append('branch', b));
       }
+      
+      // Add date range to params
+      params.append('startDate', dateRange.start);
+      params.append('endDate', dateRange.end);
+      
       const queryParams = params.toString() ? `?${params.toString()}` : '';
 
       const [dashboardRes, salesChartRes, revenueRes] = await Promise.all([
@@ -76,14 +88,15 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  useEffect(() => {
+  // Listen for branch changes - wrap in useCallback to prevent unnecessary listener updates
+  const handleBranchChange = useCallback(() => {
     fetchData();
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.start, dateRange.end]);
 
-  // Listen for branch changes
-  useBranchChange(fetchData);
+  useBranchChange(handleBranchChange);
 
   if (loading) {
     return (
@@ -188,10 +201,11 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-2 text-sm font-medium shadow-sm hover:bg-[hsl(var(--accent))] transition-colors">
-            <Calendar className="mr-2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-            วันนี้: {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </button>
+          <DateRangeFilter 
+            value={dateRange} 
+            onChange={setDateRange}
+            defaultKey="TODAY"
+          />
           <DownloadReportButton />
         </div>
       </div>

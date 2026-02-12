@@ -40,6 +40,6 @@ export async function setSelectedBranch(branches: string[]) {
         sameSite: 'lax',
     });
 
-    // Revalidate all paths to ensure fresh data using new branch filter
-    revalidatePath('/', 'layout');
+    // Note: revalidatePath removed to prevent multiple re-renders
+    // Let the client-side handle refresh via emitBranchChange event
 }
