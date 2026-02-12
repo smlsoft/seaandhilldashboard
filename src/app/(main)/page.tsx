@@ -249,14 +249,14 @@ export default function Dashboard() {
 
       {/* Charts Section */}
       <div className="grid gap-6 lg:grid-cols-7">
-        <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 min-h-[400px]">
-          <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '100%', width: '100%' }} />
+        <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 h-[400px]">
+          <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '350px', width: '100%' }} />
         </DataCard>
         <DataCard
           title="รายได้ vs ค่าใช้จ่าย"
-          className="lg:col-span-3 min-h-[400px]"
+          className="lg:col-span-3 h-[400px]"
         >
-          <ReactECharts option={revenueOption} theme={theme} style={{ height: '100%', width: '100%' }} />
+          <ReactECharts option={revenueOption} theme={theme} style={{ height: '350px', width: '100%' }} />
         </DataCard>
       </div>
 
