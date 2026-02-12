@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const comparisonPages = [
-  { href: '/dashboard/comparison', label: 'ภาพรวม', icon: LayoutDashboard },
+  { href: '/comparison', label: 'ภาพรวม', icon: LayoutDashboard },
   { href: '/accounting/comparison', label: 'บัญชี', icon: Calculator },
   { href: '/sales/comparison', label: 'การขาย', icon: ShoppingCart },
   { href: '/inventory/comparison', label: 'สินค้าคงคลัง', icon: Package },
@@ -24,7 +24,7 @@ const comparisonPages = [
 ];
 
 const parentPageMap: Record<string, string> = {
-  '/dashboard/comparison': '/',
+  '/comparison': '/',
   '/accounting/comparison': '/accounting',
   '/sales/comparison': '/sales',
   '/inventory/comparison': '/inventory',

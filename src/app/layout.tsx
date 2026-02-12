@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { MainLayout } from "@/components/MainLayout";
+import ConditionalLayout from "@/components/ConditionalLayout";
 import { PermissionProvider } from "@/lib/permissions";
 import { ComparisonProvider } from "@/lib/ComparisonContext";
 
@@ -27,9 +27,9 @@ export default function RootLayout({
       >
         <PermissionProvider>
           <ComparisonProvider>
-            <MainLayout>
+            <ConditionalLayout>
               {children}
-            </MainLayout>
+            </ConditionalLayout>
           </ComparisonProvider>
         </PermissionProvider>
       </body>

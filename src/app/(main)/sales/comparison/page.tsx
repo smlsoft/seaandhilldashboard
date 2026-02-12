@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
+import { SimpleKPICard, KPIGrid } from '@/components/comparison/SimpleKPICard';
 import {
   DollarSign, TrendingUp, TrendingDown, ShoppingCart, Package, BarChart3,
   Users, Award, Trophy, Medal, Building2, Percent, Layers, UserCheck,
@@ -424,26 +425,17 @@ export default function SalesComparisonPage() {
           {/* ════════════════════════════════════════
              1) KPI Summary Cards
              ════════════════════════════════════════ */}
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {[
-              { icon: <DollarSign className="h-5 w-5 text-indigo-600" />, label: 'ยอดขายรวม', value: totals.sales, format: fmtShort, color: 'bg-indigo-500', sub: `จาก ${data.length} กิจการ` },
-              { icon: <TrendingUp className="h-5 w-5 text-emerald-600" />, label: 'กำไรขั้นต้นรวม', value: totals.profit, format: fmtShort, color: 'bg-emerald-500', sub: `${totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : 0}% margin` },
-              { icon: <ShoppingCart className="h-5 w-5 text-amber-600" />, label: 'ออเดอร์รวม', value: totals.orders, format: fmtNum, color: 'bg-amber-500' },
-              { icon: <Receipt className="h-5 w-5 text-sky-600" />, label: 'เฉลี่ยต่อบิล', value: totals.avgOrder, format: fmt, color: 'bg-sky-500' },
-              { icon: <Users className="h-5 w-5 text-violet-600" />, label: 'ลูกค้า Top', value: totals.customers, format: fmtNum, color: 'bg-violet-500' },
-              { icon: <CreditCard className="h-5 w-5 text-rose-600" />, label: 'AR ค้างชำระ', value: totals.arOutstanding, format: fmtShort, color: 'bg-rose-500' },
-            ].map((card, i) => (
-              <div key={i} className="rounded-2xl border bg-card p-5 relative overflow-hidden hover:shadow-lg transition-all">
-                <div className={cn('absolute top-0 right-0 w-24 h-24 rounded-bl-[80px] opacity-[0.07]', card.color)} />
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2.5 rounded-xl bg-muted/50">{card.icon}</div>
-                  <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
-                </div>
-                <p className="text-2xl font-bold tracking-tight text-foreground">{card.format(card.value)}</p>
-                {card.sub && <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>}
-              </div>
-            ))}
-          </div>
+          <KPIGrid
+            columns={6}
+            cards={[
+              { icon: DollarSign, iconColor: 'text-indigo-600', label: 'ยอดขายรวม', value: totals.sales, barColor: 'bg-indigo-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
+              { icon: TrendingUp, iconColor: 'text-emerald-600', label: 'กำไรขั้นต้นรวม', value: totals.profit, barColor: 'bg-emerald-500', subText: `${totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : 0}% margin`, format: 'money' },
+              { icon: ShoppingCart, iconColor: 'text-amber-600', label: 'ออเดอร์รวม', value: totals.orders, barColor: 'bg-amber-500', format: 'number' },
+              { icon: Receipt, iconColor: 'text-sky-600', label: 'เฉลี่ยต่อบิล', value: totals.avgOrder, barColor: 'bg-sky-500', format: 'money' },
+              { icon: Users, iconColor: 'text-violet-600', label: 'ลูกค้า Top', value: totals.customers, barColor: 'bg-violet-500', format: 'number' },
+              { icon: CreditCard, iconColor: 'text-rose-600', label: 'AR ค้างชำระ', value: totals.arOutstanding, barColor: 'bg-rose-500', format: 'money' },
+            ]}
+          />
 
           {/* ════════════════════════════════════════
              2) Hero - Top Performer

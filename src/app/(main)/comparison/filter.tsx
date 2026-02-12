@@ -28,7 +28,7 @@ export function ComparisonFilter() {
             params.delete('to');
         }
 
-        router.push(`/dashboard/comparison?${params.toString()}`);
+        router.push(`/comparison?${params.toString()}`);
     }, [router, searchParams]);
 
     const value: DateRange = {

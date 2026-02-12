@@ -33,9 +33,16 @@ export function ComparisonProvider({ children }: { children: React.ReactNode }) 
   const [availableBranches, setAvailableBranches] = useState<BranchInfo[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isComparisonMode, setIsComparisonModeState] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Load comparison mode from localStorage
+  // Check if mounted (client-side only)
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Load comparison mode from localStorage (only after mount)
+  useEffect(() => {
+    if (!isMounted) return;
     try {
       const stored = localStorage.getItem(COMPARISON_MODE_KEY);
       if (stored === 'true') {
@@ -44,7 +51,7 @@ export function ComparisonProvider({ children }: { children: React.ReactNode }) 
     } catch {
       // ignore
     }
-  }, []);
+  }, [isMounted]);
 
   // Load initial branch selection from cookie + fetch available branches
   useEffect(() => {

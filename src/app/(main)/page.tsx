@@ -7,7 +7,7 @@ import { DataCard } from '@/components/DataCard';
 import { AlertsCard } from '@/components/AlertsCard';
 import { RecentSales } from '@/components/RecentSales';
 import { DownloadReportButton } from '@/components/DownloadReportButton';
-import { DollarSign, ShoppingCart, Users, Package, Calendar } from 'lucide-react';
+import { DollarSign, ShoppingCart, Users, Package, Calendar, BarChart3 } from 'lucide-react';
 import { useBranchChange } from '@/lib/branch-events';
 import Link from 'next/link';
 

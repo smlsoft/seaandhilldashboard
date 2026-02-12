@@ -20,7 +20,7 @@ const pageNames: Record<string, string> = {
 
 // Map from main page to comparison page
 const comparisonRouteMap: Record<string, string> = {
-    '/': '/dashboard/comparison',
+    '/': '/comparison',
     '/accounting': '/accounting/comparison',
     '/sales': '/sales/comparison',
     '/inventory': '/inventory/comparison',
@@ -30,7 +30,7 @@ const comparisonRouteMap: Record<string, string> = {
 
 // Reverse: comparison page back to main page
 const mainRouteFromComparison: Record<string, string> = {
-    '/dashboard/comparison': '/',
+    '/comparison': '/',
     '/accounting/comparison': '/accounting',
     '/sales/comparison': '/sales',
     '/inventory/comparison': '/inventory',
@@ -67,7 +67,7 @@ export function Header() {
         } else {
             // เปิดโหมดเปรียบเทียบ → ไปหน้าเปรียบเทียบ
             setComparisonMode(true);
-            const comparisonRoute = comparisonRouteMap[pathname] || '/dashboard/comparison';
+            const comparisonRoute = comparisonRouteMap[pathname] || '/comparison';
             router.push(comparisonRoute);
         }
     };

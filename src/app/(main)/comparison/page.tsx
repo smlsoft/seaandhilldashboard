@@ -15,6 +15,8 @@ import type { DateRange } from '@/lib/data/types';
 import type { BranchComparisonData } from '@/lib/data/comparison';
 import { ComparisonTable } from './ComparisonTable';
 
+export const dynamic = 'force-dynamic';
+
 /* ─── Branch color palette ─── */
 const BRANCH_PALETTE = [
   { hex: '#6366f1', name: 'indigo' },
@@ -291,8 +293,8 @@ export default function ComparisonPage() {
         <ComparisonDateFilter value={dateRange} onChange={setDateRange} />
       </div>
 
-      {/* Loading */}
-      {loading ? (
+      {/* Loading or not loaded */}
+      {!isLoaded || loading ? (
         <div className="space-y-6">
           <div className="h-64 rounded-3xl bg-muted/20 animate-pulse" />
           <div className="grid gap-6 md:grid-cols-4">

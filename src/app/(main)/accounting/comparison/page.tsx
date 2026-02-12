@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
+import { SimpleKPICard, KPIGrid } from '@/components/comparison/SimpleKPICard';
 import {
   Wallet, CreditCard, PiggyBank, TrendingUp, TrendingDown,
   BarChart3, Minus, Trophy, Award, Medal, Building2,
@@ -292,25 +293,16 @@ export default function AccountingComparisonPage() {
           {/* ════════════════════════════════════════
              1) KPI Summary Cards (รวม)
              ════════════════════════════════════════ */}
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-            {[
-              { icon: <TrendingUp className="h-5 w-5 text-emerald-600" />, label: 'รายได้รวม', value: totals.revenue, color: 'bg-emerald-500', sub: `จาก ${data.length} กิจการ` },
-              { icon: <TrendingDown className="h-5 w-5 text-rose-600" />, label: 'ค่าใช้จ่ายรวม', value: totals.expenses, color: 'bg-rose-500', sub: `${totals.revenue > 0 ? ((totals.expenses / totals.revenue) * 100).toFixed(1) : 0}% ของรายได้` },
-              { icon: <Wallet className="h-5 w-5 text-sky-600" />, label: 'สินทรัพย์รวม', value: totals.assets, color: 'bg-sky-500' },
-              { icon: <CreditCard className="h-5 w-5 text-amber-600" />, label: 'หนี้สินรวม', value: totals.liabilities, color: 'bg-amber-500', sub: `D/E ${totals.equity > 0 ? (totals.liabilities / totals.equity).toFixed(2) : '-'}` },
-              { icon: <PiggyBank className="h-5 w-5 text-violet-600" />, label: 'ส่วนของทุนรวม', value: totals.equity, color: 'bg-violet-500' },
-            ].map((card, i) => (
-              <div key={i} className="rounded-2xl border bg-card p-5 relative overflow-hidden hover:shadow-lg transition-all">
-                <div className={cn('absolute top-0 right-0 w-24 h-24 rounded-bl-[80px] opacity-[0.07]', card.color)} />
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2.5 rounded-xl bg-muted/50">{card.icon}</div>
-                  <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
-                </div>
-                <p className="text-2xl font-bold tracking-tight text-foreground">{fmtShort(card.value)}</p>
-                {card.sub && <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>}
-              </div>
-            ))}
-          </div>
+          <KPIGrid
+            columns={5}
+            cards={[
+              { icon: TrendingUp, iconColor: 'text-emerald-600', label: 'รายได้รวม', value: totals.revenue, barColor: 'bg-emerald-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
+              { icon: TrendingDown, iconColor: 'text-rose-600', label: 'ค่าใช้จ่ายรวม', value: totals.expenses, barColor: 'bg-rose-500', subText: `${totals.revenue > 0 ? ((totals.expenses / totals.revenue) * 100).toFixed(1) : 0}% ของรายได้`, format: 'money' },
+              { icon: Wallet, iconColor: 'text-sky-600', label: 'สินทรัพย์รวม', value: totals.assets, barColor: 'bg-sky-500', format: 'money' },
+              { icon: CreditCard, iconColor: 'text-amber-600', label: 'หนี้สินรวม', value: totals.liabilities, barColor: 'bg-amber-500', subText: `D/E ${totals.equity > 0 ? (totals.liabilities / totals.equity).toFixed(2) : '-'}`, format: 'money' },
+              { icon: PiggyBank, iconColor: 'text-violet-600', label: 'ส่วนของทุนรวม', value: totals.equity, barColor: 'bg-violet-500', format: 'money' },
+            ]}
+          />
  {/* ════════════════════════════════════════
              3) อันดับผลประกอบการ (Profitability Ranking)
              ════════════════════════════════════════ */}

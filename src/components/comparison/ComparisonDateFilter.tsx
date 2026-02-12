@@ -90,7 +90,7 @@ export function ComparisonDateFilter({
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
+      <div className="flex items-center gap-2 rounded-lg bg-background px-3 py-2">
         <Calendar className="h-4 w-4 text-muted-foreground" />
         <select
           value={selectedKey}
@@ -111,14 +111,14 @@ export function ComparisonDateFilter({
             type="date"
             value={value.start}
             onChange={handleCustomStartChange}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            className="rounded-lg bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
           />
           <span className="text-sm text-muted-foreground">ถึง</span>
           <input
             type="date"
             value={value.end}
             onChange={handleCustomEndChange}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            className="rounded-lg bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
       )}

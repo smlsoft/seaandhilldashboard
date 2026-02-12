@@ -36,7 +36,7 @@ const menuItems = [
 
 // Map main hrefs to comparison hrefs
 const comparisonHrefMap: Record<string, string> = {
-    '/': '/dashboard/comparison',
+    '/': '/comparison',
     '/accounting': '/accounting/comparison',
     '/sales': '/sales/comparison',
     '/inventory': '/inventory/comparison',
