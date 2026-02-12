@@ -32,18 +32,41 @@ export function BranchSwitcher() {
         // Fetch initial data
         const init = async () => {
             try {
-                // 1. Get current selection (now returns array)
-                const keys = await getSelectedBranch();
-                console.log('🏢 Initial branch selection from cookie:', keys);
-                setSelectedBranches(keys);
-                setTempSelectedBranches(keys);
-
-                // 2. Fetch available branches
+                // 1. Fetch available branches first
                 const res = await fetch('/api/branches');
                 if (res.ok) {
                     const data = await res.json();
                     console.log('🏢 Available branches:', data);
                     setBranches(data);
+
+                    // 2. Get current selection and validate against available branches
+                    const keys = await getSelectedBranch();
+                    console.log('🏢 Initial branch selection from cookie:', keys);
+                    
+                    // Get list of valid branch keys
+                    const validKeys = data.map((b: BranchInfo) => b.key);
+                    console.log('🏢 Valid branch keys:', validKeys);
+                    
+                    // Filter out invalid branch keys
+                    const validSelectedBranches = keys.filter((key: string) => 
+                        validKeys.includes(key)
+                    );
+                    console.log('🏢 Filtered valid selection:', validSelectedBranches);
+                    
+                    // If no valid branches, default to ALL
+                    const finalSelection = validSelectedBranches.length > 0 
+                        ? validSelectedBranches 
+                        : ['ALL'];
+                    console.log('🏢 Final selection:', finalSelection);
+                    
+                    // Update cookie if selection was invalid
+                    if (JSON.stringify(keys) !== JSON.stringify(finalSelection)) {
+                        console.log('🏢 Updating cookie with valid selection');
+                        await setSelectedBranch(finalSelection);
+                    }
+                    
+                    setSelectedBranches(finalSelection);
+                    setTempSelectedBranches(finalSelection);
                 }
             } catch (error) {
                 console.error('Failed to load branches:', error);
