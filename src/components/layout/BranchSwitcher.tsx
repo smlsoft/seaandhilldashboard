@@ -107,8 +107,8 @@ export function BranchSwitcher() {
             // Emit event to notify all dashboard pages
             emitBranchChange(tempSelectedBranches);
 
-            // Refresh the page to load new data
-            router.refresh();
+            // Note: router.refresh() is removed to prevent duplicate fetch
+            // revalidatePath() in setSelectedBranch already handles the refresh
         } catch (error) {
             console.error('Failed to switch branch:', error);
         } finally {

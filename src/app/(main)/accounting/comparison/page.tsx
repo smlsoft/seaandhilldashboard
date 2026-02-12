@@ -303,7 +303,7 @@ export default function AccountingComparisonPage() {
               { icon: PiggyBank, iconColor: 'text-violet-600', label: 'ส่วนของทุนรวม', value: totals.equity, barColor: 'bg-violet-500', format: 'money' },
             ]}
           />
- {/* ════════════════════════════════════════
+          {/* ════════════════════════════════════════
              3) อันดับผลประกอบการ (Profitability Ranking)
              ════════════════════════════════════════ */}
           <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
@@ -358,100 +358,100 @@ export default function AccountingComparisonPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ════════════════════════════════════════
+            {/* ════════════════════════════════════════
              2) รายได้ vs ค่าใช้จ่าย (Grouped Bar)
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
-            <SectionHeader
-              icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
-              title="รายได้ vs ค่าใช้จ่าย"
-              desc="เปรียบเทียบรายได้และค่าใช้จ่ายของแต่ละกิจการ (แท่งซ้อน)"
-            />
-            <div className="px-6 pb-5">
-              {(() => {
-                const SERIES_COLORS = ['#10b981', '#f43f5e', '#6366f1'];
-                const seriesItems = [
-                  { name: 'รายได้', color: SERIES_COLORS[0], getData: (d: BranchAccountingData) => d.kpis?.revenue?.value || 0 },
-                  { name: 'ค่าใช้จ่าย', color: SERIES_COLORS[1], getData: (d: BranchAccountingData) => d.kpis?.expenses?.value || 0 },
-                  { name: 'กำไรสุทธิ', color: SERIES_COLORS[2], getData: (d: BranchAccountingData) => Math.abs((d.kpis?.revenue?.value || 0) - (d.kpis?.expenses?.value || 0)) },
-                ];
-                const series = seriesItems.map((s, sIdx) => ({
-                  name: s.name,
-                  type: 'bar' as const,
-                  stack: 'total',
-                  barMaxWidth: 36,
-                  itemStyle: { color: s.color, borderRadius: sIdx === seriesItems.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0] },
-                  data: rankedData.map(d => s.getData(d)),
-                }));
-                const option = {
-                  tooltip: {
-                    trigger: 'axis' as const,
-                    axisPointer: { type: 'shadow' as const },
-                    backgroundColor: '#fff',
-                    borderColor: '#e2e8f0',
-                    textStyle: { color: '#1e293b', fontSize: 12 },
-                    extraCssText: 'box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); border-radius: 8px;',
-                    valueFormatter: (v: number) => fmtShort(v),
-                  },
-                  legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 }, itemWidth: 12, itemHeight: 8, itemGap: 16 },
-                  grid: { top: 16, right: 16, bottom: 40, left: 16, containLabel: true },
-                  yAxis: { type: 'category' as const, data: rankedData.map(d => d.branchName), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#475569', fontSize: 12, fontWeight: 600 } },
-                  xAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9' } }, axisLabel: { color: '#94a3b8', fontSize: 11, formatter: (v: number) => fmtShort(v) } },
-                  series,
-                };
-                return <ReactECharts option={option} style={{ height: Math.max(rankedData.length * 50, 200) }} opts={{ renderer: 'svg' }} />;
-              })()}
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+              <SectionHeader
+                icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
+                title="รายได้ vs ค่าใช้จ่าย"
+                desc="เปรียบเทียบรายได้และค่าใช้จ่ายของแต่ละกิจการ (แท่งซ้อน)"
+              />
+              <div className="px-6 pb-5">
+                {(() => {
+                  const SERIES_COLORS = ['#10b981', '#f43f5e', '#6366f1'];
+                  const seriesItems = [
+                    { name: 'รายได้', color: SERIES_COLORS[0], getData: (d: BranchAccountingData) => d.kpis?.revenue?.value || 0 },
+                    { name: 'ค่าใช้จ่าย', color: SERIES_COLORS[1], getData: (d: BranchAccountingData) => d.kpis?.expenses?.value || 0 },
+                    { name: 'กำไรสุทธิ', color: SERIES_COLORS[2], getData: (d: BranchAccountingData) => Math.abs((d.kpis?.revenue?.value || 0) - (d.kpis?.expenses?.value || 0)) },
+                  ];
+                  const series = seriesItems.map((s, sIdx) => ({
+                    name: s.name,
+                    type: 'bar' as const,
+                    stack: 'total',
+                    barMaxWidth: 36,
+                    itemStyle: { color: s.color, borderRadius: sIdx === seriesItems.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0] },
+                    data: rankedData.map(d => s.getData(d)),
+                  }));
+                  const option = {
+                    tooltip: {
+                      trigger: 'axis' as const,
+                      axisPointer: { type: 'shadow' as const },
+                      backgroundColor: '#fff',
+                      borderColor: '#e2e8f0',
+                      textStyle: { color: '#1e293b', fontSize: 12 },
+                      extraCssText: 'box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); border-radius: 8px;',
+                      valueFormatter: (v: number) => fmtShort(v),
+                    },
+                    legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 }, itemWidth: 12, itemHeight: 8, itemGap: 16 },
+                    grid: { top: 16, right: 16, bottom: 40, left: 16, containLabel: true },
+                    yAxis: { type: 'category' as const, data: rankedData.map(d => d.branchName), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#475569', fontSize: 12, fontWeight: 600 } },
+                    xAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9' } }, axisLabel: { color: '#94a3b8', fontSize: 11, formatter: (v: number) => fmtShort(v) } },
+                    series,
+                  };
+                  return <ReactECharts option={option} style={{ height: Math.max(rankedData.length * 50, 200) }} opts={{ renderer: 'svg' }} />;
+                })()}
+              </div>
             </div>
-          </div>
 
-          {/* ════════════════════════════════════════
+            {/* ════════════════════════════════════════
              5) งบดุล — Stacked Bar Chart
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
-            <SectionHeader
-              icon={<Scale className="h-4 w-4 text-sky-500" />}
-              title="งบดุล"
-              desc="เปรียบเทียบสินทรัพย์ หนี้สิน และส่วนของผู้ถือหุ้น (แท่งซ้อน)"
-            />
-            <div className="px-6 pb-5">
-              {(() => {
-                const allTypes = [...new Set(data.flatMap(d => d.balanceSheet.map(b => b.typeName)))];
-                if (allTypes.length === 0) return <p className="text-xs text-muted-foreground py-8 text-center">ไม่มีข้อมูล</p>;
-                const TYPE_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444', '#06b6d4'];
-                const series = allTypes.map((typeName, tIdx) => ({
-                  name: typeName,
-                  type: 'bar' as const,
-                  stack: 'total',
-                  barMaxWidth: 36,
-                  itemStyle: { color: TYPE_COLORS[tIdx % TYPE_COLORS.length], borderRadius: tIdx === allTypes.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0] },
-                  data: data.map(d => {
-                    const grouped = groupBalanceSheet(d.balanceSheet);
-                    return Math.abs(grouped[typeName] || 0);
-                  }),
-                }));
-                const option = {
-                  tooltip: {
-                    trigger: 'axis' as const,
-                    axisPointer: { type: 'shadow' as const },
-                    backgroundColor: '#fff',
-                    borderColor: '#e2e8f0',
-                    textStyle: { color: '#1e293b', fontSize: 12 },
-                    extraCssText: 'box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); border-radius: 8px;',
-                    valueFormatter: (v: number) => fmt(v),
-                  },
-                  legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 }, itemWidth: 12, itemHeight: 8, itemGap: 16 },
-                  grid: { top: 16, right: 16, bottom: 40, left: 16, containLabel: true },
-                  yAxis: { type: 'category' as const, data: data.map(d => d.branchName), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#475569', fontSize: 12, fontWeight: 600 } },
-                  xAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9' } }, axisLabel: { color: '#94a3b8', fontSize: 11, formatter: (v: number) => fmtShort(v) } },
-                  series,
-                };
-                return <ReactECharts option={option} style={{ height: Math.max(data.length * 50, 200) }} opts={{ renderer: 'svg' }} />;
-              })()}
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+              <SectionHeader
+                icon={<Scale className="h-4 w-4 text-sky-500" />}
+                title="งบดุล"
+                desc="เปรียบเทียบสินทรัพย์ หนี้สิน และส่วนของผู้ถือหุ้น (แท่งซ้อน)"
+              />
+              <div className="px-6 pb-5">
+                {(() => {
+                  const allTypes = [...new Set(data.flatMap(d => d.balanceSheet.map(b => b.typeName)))];
+                  if (allTypes.length === 0) return <p className="text-xs text-muted-foreground py-8 text-center">ไม่มีข้อมูล</p>;
+                  const TYPE_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444', '#06b6d4'];
+                  const series = allTypes.map((typeName, tIdx) => ({
+                    name: typeName,
+                    type: 'bar' as const,
+                    stack: 'total',
+                    barMaxWidth: 36,
+                    itemStyle: { color: TYPE_COLORS[tIdx % TYPE_COLORS.length], borderRadius: tIdx === allTypes.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0] },
+                    data: data.map(d => {
+                      const grouped = groupBalanceSheet(d.balanceSheet);
+                      return Math.abs(grouped[typeName] || 0);
+                    }),
+                  }));
+                  const option = {
+                    tooltip: {
+                      trigger: 'axis' as const,
+                      axisPointer: { type: 'shadow' as const },
+                      backgroundColor: '#fff',
+                      borderColor: '#e2e8f0',
+                      textStyle: { color: '#1e293b', fontSize: 12 },
+                      extraCssText: 'box-shadow: 0 4px 12px rgb(0 0 0 / 0.08); border-radius: 8px;',
+                      valueFormatter: (v: number) => fmt(v),
+                    },
+                    legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 }, itemWidth: 12, itemHeight: 8, itemGap: 16 },
+                    grid: { top: 16, right: 16, bottom: 40, left: 16, containLabel: true },
+                    yAxis: { type: 'category' as const, data: data.map(d => d.branchName), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#475569', fontSize: 12, fontWeight: 600 } },
+                    xAxis: { type: 'value' as const, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9' } }, axisLabel: { color: '#94a3b8', fontSize: 11, formatter: (v: number) => fmtShort(v) } },
+                    series,
+                  };
+                  return <ReactECharts option={option} style={{ height: Math.max(data.length * 50, 200) }} opts={{ renderer: 'svg' }} />;
+                })()}
+              </div>
             </div>
           </div>
-          </div>
 
-         
+
           {/* ════════════════════════════════════════
              4) กำไร-ขาดทุนสุทธิ รายเดือน — Stacked Area Chart
              ════════════════════════════════════════ */}

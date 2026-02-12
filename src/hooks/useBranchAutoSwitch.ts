@@ -17,9 +17,15 @@ export function useBranchAutoSwitch() {
             const branch = await getSelectedBranch();
             setCurrentBranch(branch);
 
-            // If user is NOT on comparison page AND branch includes "ALL"
-            // Auto-switch to B1
-            if (!pathname.includes('/comparison') && branch.includes('ALL')) {
+            // Only auto-switch if:
+            // 1. User is NOT on comparison page
+            // 2. Branch is EXACTLY ['ALL'] (not a specific branch selection)
+            // 3. Prevent switching if user has manually selected specific branches
+            if (
+                !pathname.includes('/comparison') &&
+                branch.length === 1 &&
+                branch[0] === 'ALL'
+            ) {
                 await setSelectedBranch(['B1']);
                 setCurrentBranch(['B1']);
                 // Refresh to show new branch data

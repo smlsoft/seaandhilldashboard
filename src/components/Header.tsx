@@ -9,13 +9,24 @@ import { cn } from '@/lib/utils';
 import { useComparison } from '@/lib/ComparisonContext';
 
 const pageNames: Record<string, string> = {
-    '/': 'หน้าแรก',
+    '/': 'ภาพรวมธุรกิจ',
     '/accounting': 'การเงิน',
     '/purchase': 'จัดซื้อ',
     '/sales': 'การขาย',
     '/inventory': 'คลังสินค้า',
     '/customers': 'ลูกค้า',
     '/settings': 'ตั้งค่า',
+    '/comparison': 'เปรียบเทียบกิจการ',
+    '/accounting/comparison': 'เปรียบเทียบการเงิน',
+    '/sales/comparison': 'เปรียบเทียบการขาย',
+    '/purchase/comparison': 'เปรียบเทียบจัดซื้อ',
+    '/inventory/comparison': 'เปรียบเทียบคลังสินค้า',
+    '/customers/comparison': 'เปรียบเทียบลูกค้า',
+    '/reports/sales': 'รายงานการขาย',
+    '/reports/purchase': 'รายงานการจัดซื้อ',
+    '/reports/inventory': 'รายงานคลังสินค้า',
+    '/reports/accounting': 'รายงานการเงิน',
+    '/test-chat': 'ทดสอบ Chat',
 };
 
 // Map from main page to comparison page
@@ -79,7 +90,7 @@ export function Header() {
                 <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))]">
                     <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
                     <span className="mx-2">/</span>
-                    <span className="font-medium text-[hsl(var(--foreground))]">Overview</span>
+                    <span className="font-medium text-[hsl(var(--foreground))]">{pageName}</span>
                 </div>
             </div>
 
