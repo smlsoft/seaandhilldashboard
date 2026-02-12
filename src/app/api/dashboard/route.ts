@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const branches = searchParams.getAll('branch');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    
     let normalizedBranches = branches;
     if (branches.length === 0) {
       normalizedBranches = ['ALL'];
@@ -19,11 +22,13 @@ export async function GET(request: NextRequest) {
       normalizedBranches = branches[0].split(',');
     }
 
+    const dateRange = startDate && endDate ? { start: startDate, end: endDate } : undefined;
+
     const cachedQuery = createCachedQuery(
       async () => {
         const [kpis, recentSales, alerts] = await Promise.all([
-          getDashboardKPIs(normalizedBranches),
-          getRecentSales(normalizedBranches),
+          getDashboardKPIs(normalizedBranches, dateRange),
+          getRecentSales(normalizedBranches, dateRange),
           getDashboardAlerts(normalizedBranches),
         ]);
 
@@ -33,7 +38,7 @@ export async function GET(request: NextRequest) {
           alerts,
         };
       },
-      ['dashboard', 'overview', ...normalizedBranches],
+      ['dashboard', 'overview', ...normalizedBranches, startDate || '', endDate || ''],
       CacheDuration.SHORT // 1 minute cache
     );
 

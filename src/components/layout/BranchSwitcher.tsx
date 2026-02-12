@@ -34,6 +34,7 @@ export function BranchSwitcher() {
             try {
                 // 1. Get current selection (now returns array)
                 const keys = await getSelectedBranch();
+                console.log('🏢 Initial branch selection from cookie:', keys);
                 setSelectedBranches(keys);
                 setTempSelectedBranches(keys);
 
@@ -41,6 +42,7 @@ export function BranchSwitcher() {
                 const res = await fetch('/api/branches');
                 if (res.ok) {
                     const data = await res.json();
+                    console.log('🏢 Available branches:', data);
                     setBranches(data);
                 }
             } catch (error) {
@@ -76,22 +78,29 @@ export function BranchSwitcher() {
     }, [isModalOpen, selectedBranches]);
 
     const handleToggle = (key: string) => {
+        console.log('🏢 Toggling branch:', key);
         if (key === 'ALL') {
             // Selecting "All" clears other selections
+            console.log('🏢 Setting to ALL');
             setTempSelectedBranches(['ALL']);
         } else {
             setTempSelectedBranches(prev => {
+                console.log('🏢 Previous selection:', prev);
                 // Remove 'ALL' if selecting specific branch
                 const withoutAll = prev.filter(k => k !== 'ALL');
+                console.log('🏢 After removing ALL:', withoutAll);
 
                 if (prev.includes(key)) {
                     // Deselecting - remove from array
                     const newSelection = withoutAll.filter(k => k !== key);
+                    console.log('🏢 Deselecting, new selection:', newSelection);
                     // If nothing selected, default to ALL
                     return newSelection.length === 0 ? ['ALL'] : newSelection;
                 } else {
                     // Selecting - add to array
-                    return [...withoutAll, key];
+                    const newSelection = [...withoutAll, key];
+                    console.log('🏢 Selecting, new selection:', newSelection);
+                    return newSelection;
                 }
             });
         }
@@ -99,9 +108,12 @@ export function BranchSwitcher() {
 
     const handleApply = async () => {
         setIsPending(true);
+        console.log('🏢 Applying branch selection:', tempSelectedBranches);
         try {
             await setSelectedBranch(tempSelectedBranches);
+            console.log('🏢 Branch saved to cookie');
             setSelectedBranches(tempSelectedBranches);
+            console.log('🏢 Updated selectedBranches state:', tempSelectedBranches);
             setIsModalOpen(false);
 
             // Emit event to notify all dashboard pages
@@ -117,14 +129,19 @@ export function BranchSwitcher() {
     };
 
     const getDisplayText = () => {
+        console.log('🏢 getDisplayText - selectedBranches:', selectedBranches, 'branches:', branches.length);
         if (selectedBranches.includes('ALL')) {
             return 'ทุกกิจการ';
         }
         if (selectedBranches.length === 1) {
             const branch = branches.find(b => b.key === selectedBranches[0]);
-            return branch?.name || 'เลือกกิจการ';
+            const text = branch?.name || 'เลือกกิจการ';
+            console.log('🏢 Display text (1 branch):', text, 'for key:', selectedBranches[0]);
+            return text;
         }
-        return `${selectedBranches.length} กิจการ`;
+        const text = `${selectedBranches.length} กิจการ`;
+        console.log('🏢 Display text (multiple):', text);
+        return text;
     };
 
     if (loading) {
