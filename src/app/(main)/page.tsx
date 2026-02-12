@@ -48,13 +48,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('TODAY'));
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange.start, dateRange.end]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
+    console.log('📅 Fetching data with dateRange:', dateRange);
     try {
       const branches = await getSelectedBranch();
       const params = new URLSearchParams();
@@ -67,6 +63,7 @@ export default function Dashboard() {
       params.append('endDate', dateRange.end);
       
       const queryParams = params.toString() ? `?${params.toString()}` : '';
+      console.log('🔗 API URL:', `/api/dashboard${queryParams}`);
 
       const [dashboardRes, salesChartRes, revenueRes] = await Promise.all([
         fetch(`/api/dashboard${queryParams}`),
@@ -88,15 +85,15 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange]);
 
-  // Listen for branch changes - wrap in useCallback to prevent unnecessary listener updates
-  const handleBranchChange = useCallback(() => {
+  useEffect(() => {
+    console.log('🔄 DateRange changed:', dateRange);
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange, fetchData]);
 
-  useBranchChange(handleBranchChange);
+  // Listen for branch changes
+  useBranchChange(fetchData);
 
   if (loading) {
     return (

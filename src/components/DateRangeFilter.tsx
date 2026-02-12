@@ -16,16 +16,32 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
   const [selectedKey, setSelectedKey] = useState<DateRangeKey>(defaultKey);
   const [showCustom, setShowCustom] = useState(false);
   
-  // เมื่อ component mount ให้ trigger onChange ด้วย preset ที่เลือก เพื่อให้ค่าตรงกัน
+  // Sync selectedKey กับ value จากภายนอก
   useEffect(() => {
-    if (selectedKey !== 'CUSTOM') {
-      const range = DATE_RANGES[selectedKey].getValue();
-      onChange(range);
+    // หาว่า value ปัจจุบันตรงกับ preset ไหน
+    let matchedKey: DateRangeKey | null = null;
+    
+    for (const [key, preset] of Object.entries(DATE_RANGES)) {
+      if (key === 'CUSTOM') continue;
+      const range = preset.getValue();
+      if (range.start === value.start && range.end === value.end) {
+        matchedKey = key as DateRangeKey;
+        break;
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ทำงานครั้งเดียวตอน mount
+    
+    if (matchedKey) {
+      setSelectedKey(matchedKey);
+      setShowCustom(false);
+    } else {
+      // ถ้าไม่ตรงกับ preset ไหนเลย แสดงว่าเป็น custom
+      setSelectedKey('CUSTOM');
+      setShowCustom(true);
+    }
+  }, [value]);
 
   const handlePresetChange = (key: DateRangeKey) => {
+    console.log('📅 DateRangeFilter: Changing to', key);
     setSelectedKey(key);
 
     if (key === 'CUSTOM') {
@@ -33,11 +49,13 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
     } else {
       setShowCustom(false);
       const range = DATE_RANGES[key].getValue();
+      console.log('📅 DateRangeFilter: New range', range);
       onChange(range);
     }
   };
 
   const handleCustomStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('📅 DateRangeFilter: Custom start changed to', e.target.value);
     onChange({
       start: e.target.value,
       end: value.end,
@@ -45,6 +63,7 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
   };
 
   const handleCustomEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('📅 DateRangeFilter: Custom end changed to', e.target.value);
     onChange({
       start: value.start,
       end: e.target.value,

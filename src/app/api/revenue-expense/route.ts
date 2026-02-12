@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const branches = searchParams.getAll('branch');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    
     let normalizedBranches = branches;
     if (branches.length === 0) {
       normalizedBranches = ['ALL'];
@@ -19,11 +22,13 @@ export async function GET(request: NextRequest) {
       normalizedBranches = branches[0].split(',');
     }
 
+    const dateRange = startDate && endDate ? { start: startDate, end: endDate } : undefined;
+
     const cachedQuery = createCachedQuery(
       async () => {
-        return await getRevenueExpenseData(normalizedBranches);
+        return await getRevenueExpenseData(normalizedBranches, dateRange);
       },
-      ['dashboard', 'revenue-expense', ...normalizedBranches],
+      ['dashboard', 'revenue-expense', ...normalizedBranches, startDate || '', endDate || ''],
       CacheDuration.LONG // 10 minutes cache
     );
 
