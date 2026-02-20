@@ -3,21 +3,28 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-    ChevronLeft,
-    ChevronRight,
     Search,
     Filter,
     MoreHorizontal,
-    ArrowUpDown
 } from 'lucide-react';
+import { PaginatedTable, type ColumnDef } from './PaginatedTable';
 
-interface CustomersTableProps {
-    data: any[];
-    currentPage: number;
-    totalPages: number;
+interface Customer {
+    customer_code: string;
+    customer_name: string;
+    total_orders: number;
+    total_spent: number;
+    last_order_date: string;
 }
 
-export function CustomersTable({ data, currentPage, totalPages }: CustomersTableProps) {
+interface CustomersTableProps {
+    data: Customer[];
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+}
+
+export function CustomersTable({ data, currentPage, totalPages, totalItems }: CustomersTableProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -39,6 +46,61 @@ export function CustomersTable({ data, currentPage, totalPages }: CustomersTable
         params.set('page', page.toString());
         router.push(`?${params.toString()}`);
     };
+
+    const columns: ColumnDef<Customer>[] = [
+        {
+            key: 'customer_code',
+            header: 'Customer Code',
+            sortable: true,
+            align: 'left',
+            className: 'font-medium',
+        },
+        {
+            key: 'customer_name',
+            header: 'Customer Name',
+            sortable: true,
+            align: 'left',
+        },
+        {
+            key: 'total_orders',
+            header: 'Total Orders',
+            sortable: true,
+            align: 'right',
+            render: (item) => item.total_orders.toLocaleString(),
+        },
+        {
+            key: 'total_spent',
+            header: 'Total Spent',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+                <span className="font-medium text-[hsl(var(--primary))]">
+                    ฿{item.total_spent.toLocaleString()}
+                </span>
+            ),
+        },
+        {
+            key: 'last_order_date',
+            header: 'Last Order',
+            sortable: true,
+            align: 'left', // Match original
+            render: (item) => new Date(item.last_order_date).toLocaleDateString('th-TH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            }),
+        },
+        {
+            key: 'actions',
+            header: 'Actions',
+            align: 'center',
+            render: () => (
+                <button className="p-2 rounded-lg hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
+                    <MoreHorizontal className="h-4 w-4" />
+                </button>
+            ),
+        },
+    ];
 
     return (
         <div className="space-y-4">
@@ -63,75 +125,18 @@ export function CustomersTable({ data, currentPage, totalPages }: CustomersTable
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--muted-foreground))]">
-                            <tr>
-                                <th className="px-6 py-4 font-medium">Customer Code</th>
-                                <th className="px-6 py-4 font-medium">Customer Name</th>
-                                <th className="px-6 py-4 font-medium text-right">Total Orders</th>
-                                <th className="px-6 py-4 font-medium text-right">Total Spent</th>
-                                <th className="px-6 py-4 font-medium">Last Order</th>
-                                <th className="px-6 py-4 font-medium text-center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[hsl(var(--border))]">
-                            {data.map((item) => (
-                                <tr key={item.cust_code} className="group hover:bg-[hsl(var(--muted)/0.5)] transition-colors">
-                                    <td className="px-6 py-4 font-medium text-[hsl(var(--foreground))]">
-                                        {item.cust_code}
-                                    </td>
-                                    <td className="px-6 py-4 text-[hsl(var(--foreground))]">
-                                        {item.cust_name}
-                                    </td>
-                                    <td className="px-6 py-4 text-right text-[hsl(var(--foreground))]">
-                                        {item.total_orders.toLocaleString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-medium text-[hsl(var(--primary))]">
-                                        ฿{item.total_spent.toLocaleString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-[hsl(var(--muted-foreground))]">
-                                        {new Date(item.last_order_date).toLocaleDateString('th-TH', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric'
-                                        })}
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        <button className="p-2 rounded-lg hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
-                                            <MoreHorizontal className="h-4 w-4" />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Pagination */}
-                <div className="flex items-center justify-between border-t border-[hsl(var(--border))] px-6 py-4">
-                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                        Page <span className="font-medium text-[hsl(var(--foreground))]">{currentPage}</span> of{' '}
-                        <span className="font-medium text-[hsl(var(--foreground))]">{totalPages}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage <= 1}
-                            className="inline-flex items-center justify-center rounded-lg border border-[hsl(var(--border))] p-2 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[hsl(var(--accent))] transition-colors"
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <button
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage >= totalPages}
-                            className="inline-flex items-center justify-center rounded-lg border border-[hsl(var(--border))] p-2 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[hsl(var(--accent))] transition-colors"
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm overflow-hidden flex flex-col">
+                <PaginatedTable
+                    data={data}
+                    columns={columns}
+                    itemsPerPage={20}
+                    totalItems={totalItems}
+                    currentPage={currentPage}
+                    manualPagination={true}
+                    onPageChange={handlePageChange}
+                    keyExtractor={(item) => item.customer_code}
+                    emptyMessage="ไม่พบข้อมูลลูกค้า"
+                />
             </div>
         </div>
     );

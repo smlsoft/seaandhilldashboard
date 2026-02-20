@@ -1,26 +1,66 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { Bell, Search } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Bell, Search, BarChart3, LayoutDashboard } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDateTime } from '@/lib/utils';
+import { BranchSwitcher } from './layout/BranchSwitcher';
+import { cn } from '@/lib/utils';
+import { useComparison } from '@/lib/ComparisonContext';
 
 const pageNames: Record<string, string> = {
-    '/': 'หน้าแรก',
+    '/': 'ภาพรวมธุรกิจ',
     '/accounting': 'การเงิน',
     '/purchase': 'จัดซื้อ',
     '/sales': 'การขาย',
-    '/store': 'คลังสินค้า',
+    '/inventory': 'คลังสินค้า',
+    '/customers': 'ลูกค้า',
     '/settings': 'ตั้งค่า',
+    '/comparison': 'เปรียบเทียบกิจการ',
+    '/accounting/comparison': 'เปรียบเทียบการเงิน',
+    '/sales/comparison': 'เปรียบเทียบการขาย',
+    '/purchase/comparison': 'เปรียบเทียบจัดซื้อ',
+    '/inventory/comparison': 'เปรียบเทียบคลังสินค้า',
+    '/customers/comparison': 'เปรียบเทียบลูกค้า',
+    '/reports/sales': 'รายงานการขาย',
+    '/reports/purchase': 'รายงานการจัดซื้อ',
+    '/reports/inventory': 'รายงานคลังสินค้า',
+    '/reports/accounting': 'รายงานการเงิน',
+    '/test-chat': 'ทดสอบ Chat',
+};
+
+// Map from main page to comparison page
+const comparisonRouteMap: Record<string, string> = {
+    '/': '/comparison',
+    '/accounting': '/accounting/comparison',
+    '/sales': '/sales/comparison',
+    '/inventory': '/inventory/comparison',
+    '/purchase': '/purchase/comparison',
+    '/customers': '/customers/comparison',
+};
+
+// Reverse: comparison page back to main page
+const mainRouteFromComparison: Record<string, string> = {
+    '/comparison': '/',
+    '/accounting/comparison': '/accounting',
+    '/sales/comparison': '/sales',
+    '/inventory/comparison': '/inventory',
+    '/purchase/comparison': '/purchase',
+    '/customers/comparison': '/customers',
 };
 
 export function Header() {
     const pathname = usePathname();
+    const router = useRouter();
     const [currentTime, setCurrentTime] = useState(new Date());
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
     const { isComparisonMode, setComparisonMode, toggleComparisonMode } = useComparison();
 >>>>>>> Stashed changes
+=======
+    const { isComparisonMode, setComparisonMode } = useComparison();
+>>>>>>> main
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -31,6 +71,7 @@ export function Header() {
     }, []);
 
     const pageName = pageNames[pathname] || 'Dashboard';
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
 
@@ -47,6 +88,14 @@ export function Header() {
             toggleComparisonMode();
             return;
         }
+=======
+    
+    // ตรวจสอบว่าอยู่ในหน้าเปรียบเทียบหรือไม่
+    const isComparisonView = pathname.includes('/comparison');
+    
+    // สลับโหมดเปรียบเทียบ
+    const handleToggleComparison = () => {
+>>>>>>> main
         if (isComparisonView) {
             // ปิดโหมดเปรียบเทียบ → ไปหน้าหลัก
             setComparisonMode(false);
@@ -59,21 +108,27 @@ export function Header() {
             router.push(comparisonRoute);
         }
     };
+<<<<<<< HEAD
 >>>>>>> Stashed changes
+=======
+>>>>>>> main
 
     return (
         <header className="h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]/80 backdrop-blur-md sticky top-0 z-40 px-8 flex items-center justify-between">
-            {/* Left: Breadcrumbs or Page Title (Placeholder for now) */}
+            {/* Left: Breadcrumbs or Page Title */}
             <div className="flex items-center gap-4">
                 <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))]">
                     <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
                     <span className="mx-2">/</span>
-                    <span className="font-medium text-[hsl(var(--foreground))]">Overview</span>
+                    <span className="font-medium text-[hsl(var(--foreground))]">{pageName}</span>
                 </div>
             </div>
 
             {/* Right: Actions */}
             <div className="flex items-center gap-4">
+                {/* Branch Switcher */}
+                <BranchSwitcher />
+
                 {/* Search */}
                 <div className="relative hidden md:block">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
@@ -84,19 +139,30 @@ export function Header() {
                     />
                 </div>
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
+=======
+>>>>>>> main
                 {/* Comparison Toggle Button */}
                 <button
                     onClick={handleToggleComparison}
                     className={cn(
                         "inline-flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors",
+<<<<<<< HEAD
                         (isComparisonView || (isReportsPage && isComparisonMode))
+=======
+                        isComparisonView || isComparisonMode
+>>>>>>> main
                             ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                             : "border-[hsl(var(--border))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
                     )}
                 >
+<<<<<<< HEAD
                     {(isComparisonView || (isReportsPage && isComparisonMode)) ? (
+=======
+                    {isComparisonView ? (
+>>>>>>> main
                         <>
                             <LayoutDashboard className="h-4 w-4" />
                             <span className="hidden lg:inline">ภาพรวม</span>
@@ -109,7 +175,10 @@ export function Header() {
                     )}
                 </button>
 
+<<<<<<< HEAD
 >>>>>>> Stashed changes
+=======
+>>>>>>> main
                 {/* Notifications */}
                 <button
                     type="button"

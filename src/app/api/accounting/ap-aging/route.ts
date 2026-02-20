@@ -3,12 +3,20 @@ import { getAPAgingData } from '@/lib/data/accounting';
 import { formatErrorResponse, logError } from '@/lib/errors';
 import { createCachedQuery, CacheDuration } from '@/lib/cache';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getAPAgingData(),
-      ['accounting', 'ap-aging'],
-      CacheDuration.SHORT // Cache for 1 minute (aging data changes frequently)
+      () => getAPAgingData(branches),
+      ['accounting', 'ap-aging', ...branches],
+      CacheDuration.SHORT
     );
 
     const data = await cachedQuery();

@@ -8,10 +8,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const asOfDate = searchParams.get('as_of_date') || new Date().toISOString().split('T')[0];
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getLowStockItems(asOfDate),
-      ['inventory', 'low-stock', asOfDate],
-      CacheDuration.SHORT
+      () => getLowStockItems(asOfDate, branches),
+      ['inventory', 'low-stock', asOfDate, ...branches],
+      CacheDuration.MEDIUM
     );
 
     const data = await cachedQuery();

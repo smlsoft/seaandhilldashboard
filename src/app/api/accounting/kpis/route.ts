@@ -18,10 +18,17 @@ export async function GET(request: Request) {
 
     const dateRange = { start: startDate, end: endDate };
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     // Cache for 5 minutes
     const cachedQuery = createCachedQuery(
-      () => getAccountingKPIs(dateRange),
-      ['accounting', 'kpis', startDate, endDate],
+      () => getAccountingKPIs(dateRange, branches),
+      ['accounting', 'kpis', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

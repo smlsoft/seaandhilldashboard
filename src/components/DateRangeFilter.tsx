@@ -5,6 +5,21 @@ import { Calendar } from 'lucide-react';
 import { DATE_RANGES, type DateRangeKey } from '@/lib/dateRanges';
 import type { DateRange } from '@/lib/data/types';
 
+// Helper functions to convert between YYYY-MM-DD and DD/MM/YYYY
+function formatDateToDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function parseDateFromDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return '';
+  const [day, month, year] = parts;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
 interface DateRangeFilterProps {
   value: DateRange;
   onChange: (range: DateRange) => void;
@@ -15,14 +30,27 @@ interface DateRangeFilterProps {
 export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', className = '' }: DateRangeFilterProps) {
   const [selectedKey, setSelectedKey] = useState<DateRangeKey>(defaultKey);
   const [showCustom, setShowCustom] = useState(false);
+<<<<<<< HEAD
 <<<<<<< Updated upstream
+=======
+  const [customStartDisplay, setCustomStartDisplay] = useState('');
+  const [customEndDisplay, setCustomEndDisplay] = useState('');
+>>>>>>> main
   
-  // เมื่อ component mount ให้ trigger onChange ด้วย preset ที่เลือก เพื่อให้ค่าตรงกัน
+  // Sync selectedKey กับ value จากภายนอก
   useEffect(() => {
-    if (selectedKey !== 'CUSTOM') {
-      const range = DATE_RANGES[selectedKey].getValue();
-      onChange(range);
+    // หาว่า value ปัจจุบันตรงกับ preset ไหน
+    let matchedKey: DateRangeKey | null = null;
+    
+    for (const [key, preset] of Object.entries(DATE_RANGES)) {
+      if (key === 'CUSTOM') continue;
+      const range = preset.getValue();
+      if (range.start === value.start && range.end === value.end) {
+        matchedKey = key as DateRangeKey;
+        break;
+      }
     }
+<<<<<<< HEAD
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // ทำงานครั้งเดียวตอน mount
 =======
@@ -46,6 +74,9 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
       }
     }
 
+=======
+    
+>>>>>>> main
     if (matchedKey) {
       setSelectedKey(matchedKey);
       setShowCustom(false);
@@ -57,21 +88,30 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
       setCustomEndDisplay(formatDateToDDMMYYYY(value.end));
     }
   }, [value]);
+<<<<<<< HEAD
 >>>>>>> Stashed changes
+=======
+>>>>>>> main
 
   const handlePresetChange = (key: DateRangeKey) => {
+    console.log('📅 DateRangeFilter: Changing to', key);
     setSelectedKey(key);
 
     if (key === 'CUSTOM') {
       setShowCustom(true);
+      // Initialize with current values
+      setCustomStartDisplay(formatDateToDDMMYYYY(value.start));
+      setCustomEndDisplay(formatDateToDDMMYYYY(value.end));
     } else {
       setShowCustom(false);
       const range = DATE_RANGES[key].getValue();
+      console.log('📅 DateRangeFilter: New range', range);
       onChange(range);
     }
   };
 
   const handleCustomStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+<<<<<<< HEAD
 <<<<<<< Updated upstream
     onChange({
       start: e.target.value,
@@ -129,6 +169,35 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
       }, 800);
     }
 >>>>>>> Stashed changes
+=======
+    const displayValue = e.target.value;
+    setCustomStartDisplay(displayValue);
+    
+    // Try to parse and update if valid
+    const parsed = parseDateFromDDMMYYYY(displayValue);
+    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+      console.log('📅 DateRangeFilter: Custom start changed to', parsed);
+      onChange({
+        start: parsed,
+        end: value.end,
+      });
+    }
+  };
+
+  const handleCustomEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const displayValue = e.target.value;
+    setCustomEndDisplay(displayValue);
+    
+    // Try to parse and update if valid
+    const parsed = parseDateFromDDMMYYYY(displayValue);
+    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+      console.log('📅 DateRangeFilter: Custom end changed to', parsed);
+      onChange({
+        start: value.start,
+        end: parsed,
+      });
+    }
+>>>>>>> main
   };
 
   return (
@@ -151,17 +220,19 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
       {showCustom && (
         <div className="flex items-center gap-2">
           <input
-            type="date"
-            value={value.start}
+            type="text"
+            value={customStartDisplay}
             onChange={handleCustomStartChange}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            placeholder="DD/MM/YYYY"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-32"
           />
           <span className="text-sm text-muted-foreground">ถึง</span>
           <input
-            type="date"
-            value={value.end}
+            type="text"
+            value={customEndDisplay}
             onChange={handleCustomEndChange}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+            placeholder="DD/MM/YYYY"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary w-32"
           />
         </div>
       )}

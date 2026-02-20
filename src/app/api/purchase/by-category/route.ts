@@ -16,9 +16,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getPurchaseByCategory({ start: startDate, end: endDate }),
-      ['purchase', 'by-category', startDate, endDate],
+      () => getPurchaseByCategory({ start: startDate, end: endDate }, branches),
+      ['purchase', 'by-category', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

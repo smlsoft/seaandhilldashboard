@@ -1,0 +1,323 @@
+import { GoogleGenerativeAI, Tool } from '@google/generative-ai';
+import { getClickHouse } from '@/lib/clickhouse';
+import { getSchemaForPrompt } from '@/lib/schemaCache';
+import { buildSystemInstruction } from '@/lib/systemInstruction';
+
+export const maxDuration = 60;
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
+
+// Tool definitions for Gemini - Only executeQuery and webSearch (schema is cached in system prompt)
+const tools = [
+  {
+    functionDeclarations: [
+      {
+        name: 'executeQuery',
+        description: 'Execute a SELECT query on ClickHouse. The database schema is already provided in the system instructions, so you can write queries directly without needing to discover the schema.',
+        parameters: {
+          type: 'object' as const,
+          properties: {
+            sql: {
+              type: 'string',
+              description: 'The SELECT SQL query to execute',
+            },
+          },
+          required: ['sql'],
+        },
+      },
+      {
+        name: 'webSearch',
+        description: 'Search the web for external information to analyze causes, trends, or context. Use this when you need information outside the database such as economic news, market trends, holidays, or events that might explain data patterns.',
+        parameters: {
+          type: 'object' as const,
+          properties: {
+            query: {
+              type: 'string',
+              description: 'The search query in Thai or English',
+            },
+          },
+          required: ['query'],
+        },
+      },
+    ],
+  },
+] as Tool[];
+
+// Web search function using Serper API (primary) or SerpApi (fallback)
+async function performWebSearch(query: string): Promise<{
+  results: Array<{ title: string; url: string; snippet: string }>;
+  message: string;
+}> {
+  console.log('[Tool] webSearch called:', query);
+
+  // Primary: Use Serper API if configured (faster, more free quota)
+  const serperApiKey = process.env.SERPER_API_KEY;
+  if (serperApiKey) {
+    try {
+      console.log('[webSearch] Using Serper API');
+      const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': serperApiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          q: query,
+          gl: 'th',
+          hl: 'th',
+          num: 5,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.organic && data.organic.length > 0) {
+        const results = data.organic.map((item: { title: string; link: string; snippet?: string }) => ({
+          title: item.title,
+          url: item.link,
+          snippet: item.snippet || '',
+        }));
+
+        console.log(`[webSearch] Serper found ${results.length} results`);
+        return {
+          results,
+          message: `Found ${results.length} search results for "${query}"`,
+        };
+      }
+    } catch (error) {
+      console.error('[webSearch] Serper API error:', error);
+    }
+  }
+
+  // Fallback: Use SerpApi if configured
+  const serpApiKey = process.env.SERPAPI_API_KEY;
+  if (serpApiKey) {
+    try {
+      console.log('[webSearch] Using SerpApi (fallback)');
+      const params = new URLSearchParams({
+        api_key: serpApiKey,
+        engine: 'google',
+        q: query,
+        gl: 'th',
+        hl: 'th',
+        num: '5',
+      });
+      const response = await fetch(`https://serpapi.com/search?${params}`);
+      const data = await response.json();
+
+      if (data.organic_results && data.organic_results.length > 0) {
+        const results = data.organic_results.map((item: { title: string; link: string; snippet?: string }) => ({
+          title: item.title,
+          url: item.link,
+          snippet: item.snippet || '',
+        }));
+
+        console.log(`[webSearch] SerpApi found ${results.length} results`);
+        return {
+          results,
+          message: `Found ${results.length} search results for "${query}"`,
+        };
+      }
+    } catch (error) {
+      console.error('[webSearch] SerpApi error:', error);
+    }
+  }
+
+  // Final fallback: Return a message that search is not configured
+  return {
+    results: [],
+    message: `Web search is not configured. Please set SERPER_API_KEY or SERPAPI_API_KEY in environment variables. Query was: "${query}"`,
+  };
+}
+
+// Tool execution functions
+async function executeTool(name: string, args: Record<string, unknown>) {
+  switch (name) {
+    case 'executeQuery': {
+      console.log('[Tool] executeQuery called');
+      const sql = (args.sql as string).trim().toUpperCase();
+      if (!sql.startsWith('SELECT')) {
+        return { error: 'Only SELECT queries allowed' };
+      }
+
+      try {
+        const clickhouse = await getClickHouse();
+        const result = await clickhouse.query({
+          query: args.sql as string,
+          format: 'JSONEachRow',
+        });
+        const data = await result.json();
+        return {
+          query: args.sql as string,
+          rowCount: (data as unknown[]).length,
+          data: (data as unknown[]).slice(0, 100),
+          message: `Query returned ${(data as unknown[]).length} rows`,
+        };
+      } catch (queryError: unknown) {
+        const errorMsg =
+          queryError instanceof Error ? queryError.message : 'Unknown query error';
+        console.error('[Tool] executeQuery error:', errorMsg);
+        return {
+          error: `SQL Error: ${errorMsg}`,
+          failedQuery: args.sql as string,
+          suggestion:
+            'Please check table/column names from the schema provided in system instructions, then try again with correct names.',
+        };
+      }
+    }
+
+    case 'webSearch': {
+      const query = args.query as string;
+      return await performWebSearch(query);
+    }
+
+    default:
+      return { error: 'Unknown tool' };
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const { messages } = await req.json();
+
+    console.log('[Chat Direct API] Received:', messages.length, 'messages');
+
+    // Get cached schema for system prompt
+    const schemaText = await getSchemaForPrompt();
+    console.log('[DEBUG] Schema loaded, length:', schemaText.length);
+
+    // Build system instruction from template
+    const systemInstruction = buildSystemInstruction(schemaText);
+
+    // Convert messages to Gemini format
+    const geminiMessages = messages.map((msg: { role: string; content: string }) => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }],
+    }));
+
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+    console.log('[DEBUG] Using model:', modelName);
+
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction,
+      tools,
+    });
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const MAX_ITERATIONS = 20;
+        let iterations = 0;
+
+        // Token usage tracking
+        let totalPromptTokens = 0;
+        let totalCandidatesTokens = 0;
+        let totalTokens = 0;
+
+        console.log('[DEBUG] Starting chat with history:', geminiMessages.length - 1, 'messages');
+
+        const chat = model.startChat({
+          history: geminiMessages.slice(0, -1), // All except last message
+        });
+
+        // Send last message
+        const lastMessage = geminiMessages[geminiMessages.length - 1];
+        console.log('[DEBUG] Sending message:', lastMessage.parts[0].text.substring(0, 100) + '...');
+
+        let result = await chat.sendMessage(lastMessage.parts[0].text);
+        console.log('[DEBUG] Initial response received');
+
+        while (iterations < MAX_ITERATIONS) {
+          iterations++;
+          console.log('[DEBUG] Iteration:', iterations);
+
+          const response = result.response;
+          const functionCalls = response.functionCalls();
+
+          // Log token usage for this response
+          const usageMetadata = response.usageMetadata;
+          if (usageMetadata) {
+            const promptTokens = usageMetadata.promptTokenCount || 0;
+            const candidatesTokens = usageMetadata.candidatesTokenCount || 0;
+            const iterationTotal = usageMetadata.totalTokenCount || 0;
+
+            totalPromptTokens += promptTokens;
+            totalCandidatesTokens += candidatesTokens;
+            totalTokens += iterationTotal;
+
+            console.log(`[TOKEN] Iteration ${iterations}: prompt=${promptTokens}, response=${candidatesTokens}, total=${iterationTotal}`);
+          }
+
+          console.log('[DEBUG] Function calls:', functionCalls ? functionCalls.length : 0);
+
+          // If no function calls, stream the text response
+          if (!functionCalls || functionCalls.length === 0) {
+            const text = response.text();
+            console.log('[DEBUG] Final text response length:', text ? text.length : 0);
+            console.log('[DEBUG] Final text preview:', text ? text.substring(0, 200) + '...' : 'EMPTY');
+            if (text) {
+              controller.enqueue(encoder.encode(text));
+            } else {
+              console.log('[DEBUG] WARNING: Empty response from model');
+              console.log('[DEBUG] Response candidates:', JSON.stringify(response.candidates, null, 2));
+            }
+            break;
+          }
+
+          // Execute function calls
+          const functionResponses = [];
+          for (const call of functionCalls) {
+            console.log('[Tool Call]:', call.name, call.args);
+            const toolResult = await executeTool(call.name, call.args as Record<string, unknown>);
+            console.log('[DEBUG] Tool result for', call.name, ':', JSON.stringify(toolResult).substring(0, 200) + '...');
+            functionResponses.push({
+              functionResponse: {
+                name: call.name,
+                response: toolResult,
+              },
+            });
+          }
+
+          // Send function results back
+          console.log('[DEBUG] Sending function responses back to model...');
+          result = await chat.sendMessage(functionResponses);
+          console.log('[DEBUG] Received response after function call');
+        }
+
+        // Send final response if loop ended due to max iterations
+        if (iterations >= MAX_ITERATIONS) {
+          console.log('[DEBUG] WARNING: Max iterations reached!');
+          const text = result.response.text();
+          if (text) {
+            controller.enqueue(encoder.encode(text));
+          }
+        }
+
+        // Log total token usage summary
+        console.log('========================================');
+        console.log('[TOKEN SUMMARY]');
+        console.log(`  Iterations: ${iterations}`);
+        console.log(`  Total Prompt Tokens: ${totalPromptTokens}`);
+        console.log(`  Total Response Tokens: ${totalCandidatesTokens}`);
+        console.log(`  Total Tokens: ${totalTokens}`);
+        console.log('========================================');
+
+        console.log('[DEBUG] Stream completed');
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    });
+  } catch (error: unknown) {
+    console.error('[Chat Direct API Error]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}

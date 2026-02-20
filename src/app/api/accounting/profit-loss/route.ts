@@ -18,9 +18,16 @@ export async function GET(request: Request) {
 
     const dateRange = { start: startDate, end: endDate };
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getProfitLossData(dateRange),
-      ['accounting', 'profit-loss', startDate, endDate],
+      () => getProfitLossData(dateRange, branches),
+      ['accounting', 'profit-loss', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

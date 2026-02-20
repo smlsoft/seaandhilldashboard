@@ -3,18 +3,32 @@
  * ดึงข้อมูลรายได้ vs ค่าใช้จ่าย 12 เดือนล่าสุด
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getRevenueExpenseData } from '@/lib/data/dashboard';
 import { createCachedQuery, CacheDuration } from '@/lib/cache';
 import { formatErrorResponse, logError } from '@/lib/errors';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const branches = searchParams.getAll('branch');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    
+    let normalizedBranches = branches;
+    if (branches.length === 0) {
+      normalizedBranches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      normalizedBranches = branches[0].split(',');
+    }
+
+    const dateRange = startDate && endDate ? { start: startDate, end: endDate } : undefined;
+
     const cachedQuery = createCachedQuery(
       async () => {
-        return await getRevenueExpenseData();
+        return await getRevenueExpenseData(normalizedBranches, dateRange);
       },
-      ['dashboard', 'revenue-expense'],
+      ['dashboard', 'revenue-expense', ...normalizedBranches, startDate || '', endDate || ''],
       CacheDuration.LONG // 10 minutes cache
     );
 

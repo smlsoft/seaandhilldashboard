@@ -18,15 +18,22 @@ export async function GET(request: Request) {
 
     const dateRange = { start: startDate, end: endDate };
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedRevenueQuery = createCachedQuery(
-      () => getRevenueBreakdown(dateRange),
-      ['accounting', 'revenue-breakdown', startDate, endDate],
+      () => getRevenueBreakdown(dateRange, branches),
+      ['accounting', 'revenue-breakdown', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 
     const cachedExpenseQuery = createCachedQuery(
-      () => getExpenseBreakdown(dateRange),
-      ['accounting', 'expense-breakdown', startDate, endDate],
+      () => getExpenseBreakdown(dateRange, branches),
+      ['accounting', 'expense-breakdown', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

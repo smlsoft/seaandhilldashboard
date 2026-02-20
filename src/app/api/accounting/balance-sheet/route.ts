@@ -15,9 +15,16 @@ export async function GET(request: Request) {
       );
     }
 
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getBalanceSheetData(asOfDate),
-      ['accounting', 'balance-sheet', asOfDate],
+      () => getBalanceSheetData(asOfDate, branches),
+      ['accounting', 'balance-sheet', asOfDate, ...branches],
       CacheDuration.MEDIUM
     );
 

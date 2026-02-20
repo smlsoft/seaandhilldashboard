@@ -4,6 +4,7 @@
  */
 
 import { clickhouse } from '../clickhouse';
+import type { DateRange } from './types';
 
 export interface DashboardKPIs {
   totalSales: number;
@@ -35,6 +36,7 @@ export interface RecentSale {
   totalAmount: number;
   docDate: string;
   statusPayment: string;
+  branchName?: string;
 }
 
 export interface Alert {
@@ -46,17 +48,44 @@ export interface Alert {
   timestamp: string;
 }
 
+// Helper to build branch filter
+function buildBranchFilter(branches?: string[]): { sql: string; params: Record<string, any> } {
+  if (!branches || branches.length === 0 || branches.includes('ALL')) {
+    return { sql: '', params: {} };
+  }
+
+  if (branches.length === 1) {
+    return {
+      sql: 'AND branch_sync = {branchSync:String}',
+      params: { branchSync: branches[0] }
+    };
+  }
+
+  return {
+    sql: 'AND branch_sync IN {branchList:Array(String)}',
+    params: { branchList: branches }
+  };
+}
+
 /**
  * Get Dashboard KPIs
  * ดึง KPIs หลักสำหรับ Dashboard
  */
-export async function getDashboardKPIs(): Promise<DashboardKPIs> {
+export async function getDashboardKPIs(branchSync?: string[], dateRange?: DateRange): Promise<DashboardKPIs> {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const lastMonth = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0];
+    // ใช้ dateRange ที่ส่งมา หรือ default เป็นวันนี้
+    const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
+    const startDate = dateRange?.start || endDate;
+    
+    // คำนวณช่วงเวลาที่ผ่านมา (previous period) โดยใช้ระยะเวลาเท่ากัน
+    const daysDiff = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const prevEndDate = new Date(new Date(startDate).getTime() - 86400000).toISOString().split('T')[0]; // วันก่อน startDate
+    const prevStartDate = new Date(new Date(prevEndDate).getTime() - (daysDiff - 1) * 86400000).toISOString().split('T')[0];
+    
+    const branchFilter = buildBranchFilter(branchSync);
 
-    // ยอดขายเดือนนี้
-    const salesQuery = `
+    // ยอดขายช่วงเวลาที่เลือก
+    let salesQuery = `
       SELECT
         sum(total_amount) as currentSales,
         count(DISTINCT doc_no) as currentOrders,
@@ -64,11 +93,13 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
         avg(total_amount) as currentAvgOrder
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
-        AND toStartOfMonth(doc_datetime) = toStartOfMonth(toDate({today:String}))
+        AND toDate(doc_datetime) >= toDate({startDate:String})
+        AND toDate(doc_datetime) <= toDate({endDate:String})
+        ${branchFilter.sql}
     `;
 
-    // ยอดขายเดือนที่แล้ว
-    const prevSalesQuery = `
+    // ยอดขายช่วงเวลาก่อนหน้า
+    let prevSalesQuery = `
       SELECT
         sum(total_amount) as prevSales,
         count(DISTINCT doc_no) as prevOrders,
@@ -76,18 +107,28 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
         avg(total_amount) as prevAvgOrder
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
-        AND toStartOfMonth(doc_datetime) = toStartOfMonth(toDate({lastMonth:String}))
+        AND toDate(doc_datetime) >= toDate({prevStartDate:String})
+        AND toDate(doc_datetime) <= toDate({prevEndDate:String})
+        ${branchFilter.sql}
     `;
 
     const [currentResult, prevResult] = await Promise.all([
       clickhouse.query({
         query: salesQuery,
-        query_params: { today },
+        query_params: {
+          startDate,
+          endDate,
+          ...branchFilter.params
+        },
         format: 'JSONEachRow',
       }),
       clickhouse.query({
         query: prevSalesQuery,
-        query_params: { lastMonth },
+        query_params: {
+          prevStartDate,
+          prevEndDate,
+          ...branchFilter.params
+        },
         format: 'JSONEachRow',
       }),
     ]);
@@ -121,25 +162,41 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
 }
 
 /**
- * Get Sales Chart Data (Last 30 days)
- * ดึงข้อมูลกราฟยอดขาย 30 วันล่าสุด
+ * Get Sales Chart Data
+ * ดึงข้อมูลกราฟยอดขายตามช่วงวันที่
  */
-export async function getSalesChartData(): Promise<SalesChartData[]> {
+export async function getSalesChartData(branchSync?: string[], dateRange?: DateRange): Promise<SalesChartData[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+    
+    // ใช้ dateRange ที่ส่งมา หรือ default เป็น 30 วันล่าสุด
+    const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
+    const startDate = dateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    let query = `
       SELECT
         toDate(doc_datetime) as date,
         sum(total_amount) as amount,
         count(DISTINCT doc_no) as orders
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
-        AND doc_datetime >= now() - INTERVAL 30 DAY
+        AND toDate(doc_datetime) >= toDate({startDate:String})
+        AND toDate(doc_datetime) <= toDate({endDate:String})
+        ${branchFilter.sql}
+    `;
+
+    query += `
       GROUP BY date
       ORDER BY date ASC
     `;
 
     const result = await clickhouse.query({
       query,
+      query_params: {
+        startDate,
+        endDate,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -156,36 +213,112 @@ export async function getSalesChartData(): Promise<SalesChartData[]> {
 }
 
 /**
- * Get Revenue vs Expense Data (Last 12 months)
- * ดึงข้อมูลรายได้ vs ค่าใช้จ่าย 12 เดือนล่าสุด
+ * Get Revenue vs Expense Data
+ * ดึงข้อมูลรายได้ vs ค่าใช้จ่ายตามช่วงวันที่ (กลุ่มเป็นรายเดือน)
  */
-export async function getRevenueExpenseData(): Promise<RevenueExpenseData[]> {
+export async function getRevenueExpenseData(branchSync?: string[], dateRange?: DateRange): Promise<RevenueExpenseData[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+    
+    // ใช้ dateRange ที่ส่งมา หรือ default เป็น 12 เดือนล่าสุด
+    const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
+    const startDate = dateRange?.start || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Query revenue from sales
+    let revenueQuery = `
       SELECT
         formatDateTime(toStartOfMonth(doc_datetime), '%Y-%m') as month,
-        sum(total_amount) as revenue,
-        sum(total_cost) as expense,
-        revenue - expense as profit
+        sum(total_amount) as revenue
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
-        AND doc_datetime >= now() - INTERVAL 12 MONTH
+        AND toDate(doc_datetime) >= toDate({startDate:String})
+        AND toDate(doc_datetime) <= toDate({endDate:String})
+        ${branchFilter.sql}
+    `;
+
+    revenueQuery += `
       GROUP BY month
       ORDER BY month ASC
     `;
 
-    const result = await clickhouse.query({
-      query,
-      format: 'JSONEachRow',
+    // Query expenses from purchases
+    let expenseQuery = `
+      SELECT
+        formatDateTime(toStartOfMonth(doc_datetime), '%Y-%m') as month,
+        sum(total_amount) as expense
+      FROM purchase_transaction
+      WHERE status_cancel != 'Cancel'
+        AND toDate(doc_datetime) >= toDate({startDate:String})
+        AND toDate(doc_datetime) <= toDate({endDate:String})
+        ${branchFilter.sql}
+    `;
+
+    expenseQuery += `
+      GROUP BY month
+      ORDER BY month ASC
+    `;
+
+    const [revenueResult, expenseResult] = await Promise.all([
+      clickhouse.query({
+        query: revenueQuery,
+        query_params: {
+          startDate,
+          endDate,
+          ...branchFilter.params
+        },
+        format: 'JSONEachRow',
+      }),
+      clickhouse.query({
+        query: expenseQuery,
+        query_params: {
+          startDate,
+          endDate,
+          ...branchFilter.params
+        },
+        format: 'JSONEachRow',
+      }),
+    ]);
+
+    const revenueData = await revenueResult.json();
+    const expenseData = await expenseResult.json();
+
+    // Create a map of expenses by month
+    const expenseMap = new Map<string, number>();
+    expenseData.forEach((row: any) => {
+      expenseMap.set(row.month, Number(row.expense) || 0);
     });
 
-    const data = await result.json();
-    return data.map((row: any) => ({
-      month: row.month,
-      revenue: Number(row.revenue) || 0,
-      expense: Number(row.expense) || 0,
-      profit: Number(row.profit) || 0,
-    }));
+    // Combine revenue and expense data
+    const combined: RevenueExpenseData[] = revenueData.map((row: any) => {
+      const month = row.month;
+      const revenue = Number(row.revenue) || 0;
+      const expense = expenseMap.get(month) || 0;
+      return {
+        month,
+        revenue,
+        expense,
+        profit: revenue - expense,
+      };
+    });
+
+    // Add any months that have expenses but no revenue
+    expenseData.forEach((row: any) => {
+      const month = row.month;
+      if (!combined.find((item: RevenueExpenseData) => item.month === month)) {
+        const expense = Number(row.expense) || 0;
+        combined.push({
+          month,
+          revenue: 0,
+          expense,
+          profit: -expense,
+        });
+      }
+    });
+
+    // Sort by month
+    combined.sort((a: RevenueExpenseData, b: RevenueExpenseData) => a.month.localeCompare(b.month));
+
+    return combined;
   } catch (error) {
     console.error('Error fetching revenue/expense data:', error);
     throw error;
@@ -193,27 +326,44 @@ export async function getRevenueExpenseData(): Promise<RevenueExpenseData[]> {
 }
 
 /**
- * Get Recent Sales (Last 10 transactions)
- * ดึงรายการขายล่าสุด 10 รายการ (ภายใน 30 วันล่าสุด)
+ * Get Recent Sales
+ * ดึงรายการขายล่าสุด 10 รายการตามช่วงวันที่
  */
-export async function getRecentSales(): Promise<RecentSale[]> {
+export async function getRecentSales(branchSync?: string[], dateRange?: DateRange): Promise<RecentSale[]> {
   try {
-    const query = `
+    const branchFilter = buildBranchFilter(branchSync);
+    
+    // ใช้ dateRange ที่ส่งมา หรือ default เป็น 30 วันล่าสุด
+    const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
+    const startDate = dateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    let query = `
       SELECT
         doc_no as docNo,
         customer_name as customerName,
         total_amount as totalAmount,
         doc_datetime as docDate,
-        status_payment as statusPayment
+        status_payment as statusPayment,
+        branch_sync_name as branchName
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
-        AND doc_datetime >= now() - INTERVAL 30 DAY
+        AND toDate(doc_datetime) >= toDate({startDate:String})
+        AND toDate(doc_datetime) <= toDate({endDate:String})
+        ${branchFilter.sql}
+    `;
+
+    query += `
       ORDER BY doc_datetime DESC
       LIMIT 10
     `;
 
     const result = await clickhouse.query({
       query,
+      query_params: {
+        startDate,
+        endDate,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -224,6 +374,7 @@ export async function getRecentSales(): Promise<RecentSale[]> {
       totalAmount: Number(row.totalAmount) || 0,
       docDate: row.docDate,
       statusPayment: row.statusPayment || 'รอชำระ',
+      branchName: row.branchName || '',
     }));
   } catch (error) {
     console.error('Error fetching recent sales:', error);
@@ -235,32 +386,35 @@ export async function getRecentSales(): Promise<RecentSale[]> {
  * Get Dashboard Alerts
  * ดึงการแจ้งเตือนสำคัญต่างๆ
  */
-export async function getDashboardAlerts(): Promise<Alert[]> {
+export async function getDashboardAlerts(branchSync?: string[]): Promise<Alert[]> {
   try {
     const alerts: Alert[] = [];
     const today = new Date().toISOString().split('T')[0];
+    const branchFilter = buildBranchFilter(branchSync);
 
     // 1. Low Stock Items
-    const lowStockQuery = `
+    let lowStockQuery = `
       SELECT count(*) as count
       FROM stock_transaction
       WHERE toDate(doc_datetime) <= toDate({today:String})
         AND qty_onhand > 0
         AND qty_onhand < reorder_point
         AND reorder_point > 0
+        ${branchFilter.sql.replace(/branch_sync/g, 'wh_code')}
     `;
 
     // 2. Overstock Items
-    const overstockQuery = `
+    let overstockQuery = `
       SELECT count(*) as count
       FROM stock_transaction
       WHERE toDate(doc_datetime) <= toDate({today:String})
         AND qty_onhand > max_stock_level
         AND max_stock_level > 0
+        ${branchFilter.sql.replace(/branch_sync/g, 'wh_code')}
     `;
 
     // 3. Overdue Payments (AR)
-    const overdueQuery = `
+    let overdueQuery = `
       SELECT count(*) as count, sum(outstanding) as amount
       FROM (
         SELECT
@@ -272,13 +426,22 @@ export async function getDashboardAlerts(): Promise<Alert[]> {
           AND status_payment != 'ชำระแล้ว'
           AND due_date < now()
           AND outstanding > 0
+          ${branchFilter.sql}
+    `;
+
+    overdueQuery += `
       )
     `;
 
+    const queryParams = {
+      today,
+      ...branchFilter.params
+    };
+
     const [lowStockRes, overstockRes, overdueRes] = await Promise.all([
-      clickhouse.query({ query: lowStockQuery, query_params: { today }, format: 'JSONEachRow' }),
-      clickhouse.query({ query: overstockQuery, query_params: { today }, format: 'JSONEachRow' }),
-      clickhouse.query({ query: overdueQuery, format: 'JSONEachRow' }),
+      clickhouse.query({ query: lowStockQuery, query_params: queryParams, format: 'JSONEachRow' }),
+      clickhouse.query({ query: overstockQuery, query_params: queryParams, format: 'JSONEachRow' }),
+      clickhouse.query({ query: overdueQuery, query_params: queryParams, format: 'JSONEachRow' }),
     ]);
 
     const lowStockData = (await lowStockRes.json())[0] as Record<string, unknown> | undefined;

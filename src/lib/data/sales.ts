@@ -1,4 +1,5 @@
 // Sales data queries for ClickHouse
+import 'server-only';
 
 import { clickhouse } from '@/lib/clickhouse';
 import type {
@@ -16,6 +17,35 @@ import type {
 } from './types';
 import { calculateGrowth, getPreviousPeriod } from '@/lib/comparison';
 
+// Re-export query functions for convenience (server-side usage only)
+export * from './sales-queries';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Build branch filter SQL clause and parameters
+ * Handles single branch, multiple branches, or ALL branches
+ */
+function buildBranchFilter(branches?: string[]): { sql: string; params: Record<string, any> } {
+  if (!branches || branches.length === 0 || branches.includes('ALL')) {
+    return { sql: '', params: {} };
+  }
+
+  if (branches.length === 1) {
+    return {
+      sql: 'AND branch_sync = {branchSync:String}',
+      params: { branchSync: branches[0] }
+    };
+  }
+
+  return {
+    sql: 'AND branch_sync IN {branchList:Array(String)}',
+    params: { branchList: branches }
+  };
+}
+
 // ============================================================================
 // Data Fetching Functions
 // ============================================================================
@@ -23,9 +53,10 @@ import { calculateGrowth, getPreviousPeriod } from '@/lib/comparison';
 /**
  * Get Sales KPIs: Total sales, gross profit, orders, avg order value
  */
-export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
+export async function getSalesKPIs(dateRange: DateRange, branchSync?: string[]): Promise<SalesKPIs> {
   try {
     const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
+    const branchFilter = buildBranchFilter(branchSync);
 
     // Total Sales
     const salesQuery = `
@@ -34,10 +65,13 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
         (SELECT sum(total_amount)
          FROM saleinvoice_transaction
          WHERE status_cancel != 'Cancel'
-           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
+           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}
+           ${branchFilter.sql}
+        ) as previous_value
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
     `;
 
     // Gross Profit
@@ -49,11 +83,14 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
          FROM saleinvoice_transaction_detail sid2
          JOIN saleinvoice_transaction si2 ON sid2.doc_no = si2.doc_no AND sid2.branch_sync = si2.branch_sync
          WHERE si2.status_cancel != 'Cancel'
-           AND si2.doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
+           AND si2.doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}
+           ${branchFilter.sql.replace(/branch_sync/g, 'si2.branch_sync')}
+        ) as previous_value
       FROM saleinvoice_transaction_detail sid
       JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
       WHERE si.status_cancel != 'Cancel'
         AND si.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
     `;
 
     // Total Orders
@@ -63,10 +100,13 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
         (SELECT count(DISTINCT doc_no)
          FROM saleinvoice_transaction
          WHERE status_cancel != 'Cancel'
-           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
+           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}
+           ${branchFilter.sql}
+        ) as previous_value
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
     `;
 
     // Average Order Value
@@ -76,10 +116,13 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
         (SELECT avg(total_amount)
          FROM saleinvoice_transaction
          WHERE status_cancel != 'Cancel'
-           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}) as previous_value
+           AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}
+           ${branchFilter.sql}
+        ) as previous_value
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
     `;
 
     const params = {
@@ -87,6 +130,7 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
       end_date: dateRange.end,
       previous_start: previousPeriod.start,
       previous_end: previousPeriod.end,
+      ...branchFilter.params
     };
 
     const [salesResult, profitResult, ordersResult, avgOrderResult] = await Promise.all([
@@ -137,8 +181,10 @@ export async function getSalesKPIs(dateRange: DateRange): Promise<SalesKPIs> {
 /**
  * Get Sales Trend data by day/month
  */
-export async function getSalesTrendData(dateRange: DateRange): Promise<SalesTrendData[]> {
+export async function getSalesTrendData(dateRange: DateRange, branchSync?: string[]): Promise<SalesTrendData[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         toStartOfDay(doc_datetime) as date,
@@ -147,13 +193,18 @@ export async function getSalesTrendData(dateRange: DateRange): Promise<SalesTren
       FROM saleinvoice_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
       GROUP BY date
       ORDER BY date ASC
     `;
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -172,8 +223,10 @@ export async function getSalesTrendData(dateRange: DateRange): Promise<SalesTren
 /**
  * Get Top 10 selling products
  */
-export async function getTopProducts(dateRange: DateRange): Promise<TopProduct[]> {
+export async function getTopProducts(dateRange: DateRange, branchSync?: string[]): Promise<TopProduct[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         sid.item_code as itemCode,
@@ -188,6 +241,7 @@ export async function getTopProducts(dateRange: DateRange): Promise<TopProduct[]
       JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
       WHERE si.status_cancel != 'Cancel'
         AND si.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
       GROUP BY sid.item_code, sid.item_name, sid.item_brand_name, sid.item_category_name
       ORDER BY totalSales DESC
       LIMIT 10
@@ -195,7 +249,11 @@ export async function getTopProducts(dateRange: DateRange): Promise<TopProduct[]
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -219,8 +277,10 @@ export async function getTopProducts(dateRange: DateRange): Promise<TopProduct[]
 /**
  * Get Sales by Branch
  */
-export async function getSalesByBranch(dateRange: DateRange): Promise<SalesByBranch[]> {
+export async function getSalesByBranch(dateRange: DateRange, branchSync?: string[]): Promise<SalesByBranch[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         branch_code as branchCode,
@@ -231,13 +291,18 @@ export async function getSalesByBranch(dateRange: DateRange): Promise<SalesByBra
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
         AND branch_code != ''
+        ${branchFilter.sql}
       GROUP BY branch_code, branch_name
       ORDER BY totalSales DESC
     `;
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -257,8 +322,10 @@ export async function getSalesByBranch(dateRange: DateRange): Promise<SalesByBra
 /**
  * Get Sales by Salesperson
  */
-export async function getSalesBySalesperson(dateRange: DateRange): Promise<SalesBySalesperson[]> {
+export async function getSalesBySalesperson(dateRange: DateRange, branchSync?: string[]): Promise<SalesBySalesperson[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         sale_code as saleCode,
@@ -271,6 +338,7 @@ export async function getSalesBySalesperson(dateRange: DateRange): Promise<Sales
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
         AND sale_code != ''
+        ${branchFilter.sql}
       GROUP BY sale_code, sale_name
       ORDER BY totalSales DESC
       LIMIT 20
@@ -278,7 +346,11 @@ export async function getSalesBySalesperson(dateRange: DateRange): Promise<Sales
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -300,8 +372,10 @@ export async function getSalesBySalesperson(dateRange: DateRange): Promise<Sales
 /**
  * Get Top Customers
  */
-export async function getTopCustomers(dateRange: DateRange): Promise<TopCustomer[]> {
+export async function getTopCustomers(dateRange: DateRange, branchSync?: string[]): Promise<TopCustomer[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         customer_code as customerCode,
@@ -315,6 +389,7 @@ export async function getTopCustomers(dateRange: DateRange): Promise<TopCustomer
       WHERE status_cancel != 'Cancel'
         AND customer_code != ''
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
       GROUP BY customer_code, customer_name
       ORDER BY totalSpent DESC
       LIMIT 20
@@ -322,7 +397,11 @@ export async function getTopCustomers(dateRange: DateRange): Promise<TopCustomer
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -345,8 +424,10 @@ export async function getTopCustomers(dateRange: DateRange): Promise<TopCustomer
 /**
  * Get AR Status Summary
  */
-export async function getARStatus(dateRange: DateRange): Promise<ARStatus[]> {
+export async function getARStatus(dateRange: DateRange, branchSync?: string[]): Promise<ARStatus[]> {
   try {
+    const branchFilter = buildBranchFilter(branchSync);
+
     const query = `
       SELECT
         status_payment as statusPayment,
@@ -358,13 +439,18 @@ export async function getARStatus(dateRange: DateRange): Promise<ARStatus[]> {
       WHERE status_cancel != 'Cancel'
         AND doc_type = 'CREDIT'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
       GROUP BY statusPayment
       ORDER BY totalOutstanding DESC
     `;
 
     const result = await clickhouse.query({
       query,
-      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
       format: 'JSONEachRow',
     });
 
@@ -381,6 +467,7 @@ export async function getARStatus(dateRange: DateRange): Promise<ARStatus[]> {
     throw error;
   }
 }
+<<<<<<< HEAD
 
 <<<<<<< Updated upstream
 // ============================================
@@ -731,3 +818,5 @@ export async function getSalesAnalysisData(dateRange: DateRange, branchSync?: st
   }
 >>>>>>> Stashed changes
 }
+=======
+>>>>>>> main

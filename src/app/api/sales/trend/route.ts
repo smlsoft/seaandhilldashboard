@@ -16,9 +16,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const branches = searchParams.getAll('branch');
+    let normalizedBranches = branches;
+    if (branches.length === 0) {
+      normalizedBranches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      normalizedBranches = branches[0].split(',');
+    }
+
     const cachedQuery = createCachedQuery(
-      () => getSalesTrendData({ start: startDate, end: endDate }),
-      ['sales', 'trend', startDate, endDate],
+      () => getSalesTrendData({ start: startDate, end: endDate }, normalizedBranches),
+      ['sales', 'trend', startDate, endDate, ...normalizedBranches],
       CacheDuration.SHORT
     );
 

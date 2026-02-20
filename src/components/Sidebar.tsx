@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/SidebarContext';
+import { useComparison } from '@/lib/ComparisonContext';
 
 const menuItems = [
     { name: 'ภาพรวม', icon: LayoutDashboard, href: '/' },
@@ -32,6 +33,16 @@ const menuItems = [
     { name: 'จัดซื้อ', icon: ClipboardList, href: '/purchase' },
     { name: 'ลูกค้า', icon: Users, href: '/customers' },
 ];
+
+// Map main hrefs to comparison hrefs
+const comparisonHrefMap: Record<string, string> = {
+    '/': '/comparison',
+    '/accounting': '/accounting/comparison',
+    '/sales': '/sales/comparison',
+    '/inventory': '/inventory/comparison',
+    '/purchase': '/purchase/comparison',
+    '/customers': '/customers/comparison',
+};
 
 // Report menu with submenus
 const reportMenu = {
@@ -52,6 +63,7 @@ const secondaryItems = [
 export function Sidebar() {
     const pathname = usePathname();
     const { isCollapsed, toggleSidebar } = useSidebar();
+    const { isComparisonMode } = useComparison();
     const [isReportOpen, setIsReportOpen] = useState(false);
 
     // Check if any report submenu is active
@@ -101,11 +113,16 @@ export function Sidebar() {
                     )}
                     <nav className="space-y-1">
                         {menuItems.map((item) => {
-                            const isActive = pathname === item.href;
+                            const actualHref = isComparisonMode
+                                ? (comparisonHrefMap[item.href] || item.href)
+                                : item.href;
+                            const isActive = isComparisonMode
+                                ? pathname === comparisonHrefMap[item.href]
+                                : pathname === item.href;
                             return (
                                 <Link
                                     key={item.href}
-                                    href={item.href}
+                                    href={actualHref}
                                     title={isCollapsed ? item.name : undefined}
                                     className={cn(
                                         "flex items-center gap-3 py-3 text-sm font-medium rounded-xl transition-all duration-300 group",
@@ -227,7 +244,7 @@ export function Sidebar() {
                                 {!isCollapsed && item.name}
                             </Link>
                         ))}
-                        <button 
+                        <button
                             title={isCollapsed ? "ออกจากระบบ" : undefined}
                             className={cn(
                                 "w-full flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all duration-200 group",
