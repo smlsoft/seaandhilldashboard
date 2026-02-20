@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -117,33 +119,56 @@ export default function AccountingReportPage() {
     fetchReportData(selectedReport);
   }, [dateRange, selectedReport]);
 
+  // Listen for branch changes
+  useBranchChange(() => fetchReportData(selectedReport));
+
   const fetchReportData = async (reportType: ReportType) => {
     setLoading(true);
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
+
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => params.append('branch', b));
+      }
 
       let endpoint = '';
       switch (reportType) {
         case 'profit-loss':
           endpoint = `/api/accounting/profit-loss?${params}`;
           break;
-        case 'balance-sheet':
-          endpoint = `/api/accounting/balance-sheet?as_of_date=${dateRange.end}`;
+        case 'balance-sheet': {
+          const bsParams = new URLSearchParams({ as_of_date: dateRange.end });
+          if (branches.length > 0 && !branches.includes('ALL')) {
+            branches.forEach(b => bsParams.append('branch', b));
+          }
+          endpoint = `/api/accounting/balance-sheet?${bsParams}`;
           break;
+        }
         case 'cash-flow':
           endpoint = `/api/accounting/cash-flow?${params}`;
           break;
-        case 'ar-aging':
-          endpoint = '/api/accounting/ar-aging';
+        case 'ar-aging': {
+          const arParams = new URLSearchParams();
+          if (branches.length > 0 && !branches.includes('ALL')) {
+            branches.forEach(b => arParams.append('branch', b));
+          }
+          endpoint = arParams.toString() ? `/api/accounting/ar-aging?${arParams}` : '/api/accounting/ar-aging';
           break;
-        case 'ap-aging':
-          endpoint = '/api/accounting/ap-aging';
+        }
+        case 'ap-aging': {
+          const apParams = new URLSearchParams();
+          if (branches.length > 0 && !branches.includes('ALL')) {
+            branches.forEach(b => apParams.append('branch', b));
+          }
+          endpoint = apParams.toString() ? `/api/accounting/ap-aging?${apParams}` : '/api/accounting/ap-aging';
           break;
+        }
         case 'revenue-breakdown':
         case 'expense-breakdown':
           endpoint = `/api/accounting/revenue-expense-breakdown?${params}`;

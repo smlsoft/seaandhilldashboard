@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -108,11 +110,15 @@ export default function InventoryReportPage() {
     fetchReportData(selectedReport);
   }, [dateRange, selectedReport]);
 
+  // Listen for branch changes
+  useBranchChange(() => fetchReportData(selectedReport));
+
   const fetchReportData = async (reportType: ReportType) => {
     setLoading(true);
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
@@ -120,6 +126,13 @@ export default function InventoryReportPage() {
       });
 
       const asOfParams = new URLSearchParams({ as_of_date: asOfDate });
+
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => {
+          params.append('branch', b);
+          asOfParams.append('branch', b);
+        });
+      }
 
       let endpoint = '';
       switch (reportType) {

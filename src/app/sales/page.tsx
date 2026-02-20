@@ -9,14 +9,14 @@ import { KPICardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/Load
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { SalesTrendChart } from '@/components/sales/SalesTrendChart';
 import { TopProductsTable } from '@/components/sales/TopProductsTable';
-import { SalesByBranchChart } from '@/components/sales/SalesByBranchChart';
+import { SalesByCategoryChart } from '@/components/sales/SalesByCategoryChart';
 import { SalesBySalespersonTable } from '@/components/sales/SalesBySalespersonTable';
 import { TopCustomersTable } from '@/components/sales/TopCustomersTable';
 import { ARStatusChart } from '@/components/sales/ARStatusChart';
 import { ShoppingCart, DollarSign, TrendingUp, Package } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { formatGrowthPercentage } from '@/lib/comparison';
-import type { DateRange, SalesKPIs, SalesTrendData, TopProduct, SalesByBranch, SalesBySalesperson, TopCustomer, ARStatus } from '@/lib/data/types';
+import type { DateRange, SalesKPIs, SalesTrendData, TopProduct, SalesByCategory, SalesBySalesperson, TopCustomer, ARStatus } from '@/lib/data/types';
 import {
   getTotalSalesQuery,
   getGrossProfitQuery,
@@ -24,7 +24,7 @@ import {
   getAvgOrderValueQuery,
   getSalesTrendQuery,
   getTopProductsQuery,
-  getSalesByBranchQuery,
+  getSalesByCategorySummaryQuery,
   getSalesBySalespersonQuery,
   getTopCustomersQuery,
   getARStatusQuery,
@@ -38,7 +38,7 @@ export default function SalesPage() {
   const [kpis, setKpis] = useState<SalesKPIs | null>(null);
   const [trendData, setTrendData] = useState<SalesTrendData[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [salesByBranch, setSalesByBranch] = useState<SalesByBranch[]>([]);
+  const [salesByCategory, setSalesByCategory] = useState<SalesByCategory[]>([]);
   const [salesBySalesperson, setSalesBySalesperson] = useState<SalesBySalesperson[]>([]);
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
   const [arStatus, setArStatus] = useState<ARStatus[]>([]);
@@ -62,7 +62,7 @@ export default function SalesPage() {
         kpisRes,
         trendRes,
         productsRes,
-        branchRes,
+        categoryRes,
         salespersonRes,
         customersRes,
         arRes,
@@ -70,7 +70,7 @@ export default function SalesPage() {
         fetch(`/api/sales/kpis?${params}`),
         fetch(`/api/sales/trend?${params}`),
         fetch(`/api/sales/top-products?${params}`),
-        fetch(`/api/sales/by-branch?${params}`),
+        fetch(`/api/sales/category-summary?${params}`),
         fetch(`/api/sales/by-salesperson?${params}`),
         fetch(`/api/sales/top-customers?${params}`),
         fetch(`/api/sales/ar-status?${params}`),
@@ -79,16 +79,16 @@ export default function SalesPage() {
       if (!kpisRes.ok) throw new Error('Failed to fetch KPIs');
       if (!trendRes.ok) throw new Error('Failed to fetch trend data');
       if (!productsRes.ok) throw new Error('Failed to fetch top products');
-      if (!branchRes.ok) throw new Error('Failed to fetch sales by branch');
+      if (!categoryRes.ok) throw new Error('Failed to fetch sales by category');
       if (!salespersonRes.ok) throw new Error('Failed to fetch sales by salesperson');
       if (!customersRes.ok) throw new Error('Failed to fetch top customers');
       if (!arRes.ok) throw new Error('Failed to fetch AR status');
 
-      const [kpisData, trendDataRes, productsData, branchData, salespersonData, customersData, arData] = await Promise.all([
+      const [kpisData, trendDataRes, productsData, categoryData, salespersonData, customersData, arData] = await Promise.all([
         kpisRes.json(),
         trendRes.json(),
         productsRes.json(),
-        branchRes.json(),
+        categoryRes.json(),
         salespersonRes.json(),
         customersRes.json(),
         arRes.json(),
@@ -97,7 +97,7 @@ export default function SalesPage() {
       setKpis(kpisData.data);
       setTrendData(trendDataRes.data);
       setTopProducts(productsData.data);
-      setSalesByBranch(branchData.data);
+      setSalesByCategory(categoryData.data);
       setSalesBySalesperson(salespersonData.data);
       setTopCustomers(customersData.data);
       setArStatus(arData.data);
@@ -286,18 +286,18 @@ export default function SalesPage() {
         <PermissionGuard componentKey="sales.by_branch">
           <ErrorBoundary>
             <DataCard
-              title="ยอดขายแยกตามสาขา"
-              description="เปรียบเทียบยอดขายของแต่ละสาขา"
-              linkTo="/reports/sales#by-branch"
+              title="ยอดขายแยกตามหมวดหมู่"
+              description="เปรียบเทียบยอดขายของแต่ละหมวดหมู่"
+              linkTo="/reports/sales#by-category"
               queryInfo={{
-                query: getSalesByBranchQuery(dateRange.start, dateRange.end),
+                query: getSalesByCategorySummaryQuery(dateRange.start, dateRange.end),
                 format: 'JSONEachRow'
               }}
             >
               {loading ? (
                 <ChartSkeleton />
               ) : (
-                <SalesByBranchChart data={salesByBranch} />
+                <SalesByCategoryChart data={salesByCategory} />
               )}
             </DataCard>
           </ErrorBoundary>

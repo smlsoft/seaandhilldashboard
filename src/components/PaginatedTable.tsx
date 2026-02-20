@@ -14,6 +14,15 @@ export interface ColumnDef<T> {
   summaryRender?: (data: T[]) => ReactNode;
 }
 
+export interface ColumnGroup<T> {
+  header: string;
+  columns: (ColumnDef<T> | ColumnGroup<T>)[];
+  className?: string;
+  align?: 'left' | 'center' | 'right';
+}
+
+export type TableColumn<T> = ColumnDef<T> | ColumnGroup<T>;
+
 // เพิ่ม SummaryConfig type
 export interface SummaryConfig<T> {
   label?: string;
@@ -35,6 +44,15 @@ interface PaginatedTableProps<T> {
   // เพิ่ม summary props
   showSummary?: boolean;
   summaryConfig?: SummaryConfig<T>;
+<<<<<<< Updated upstream
+=======
+  // Server-side pagination props
+  manualPagination?: boolean;
+  totalItems?: number;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
+  paginationClassName?: string;
+>>>>>>> Stashed changes
 }
 
 export function PaginatedTable<T = any>({
@@ -48,6 +66,14 @@ export function PaginatedTable<T = any>({
   defaultSortOrder = 'desc',
   showSummary = false,
   summaryConfig,
+<<<<<<< Updated upstream
+=======
+  manualPagination = false,
+  totalItems = 0,
+  currentPage: externalPage = 1,
+  onPageChange,
+  paginationClassName,
+>>>>>>> Stashed changes
 }: PaginatedTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(defaultSortOrder);
@@ -242,7 +268,7 @@ export function PaginatedTable<T = any>({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-2 py-3  border-border mt-auto">
+        <div className={`flex items-center justify-between px-2 pr-16 py-3 border-t border-border bg-white sticky bottom-0 z-10 mt-auto ${paginationClassName || ''}`}>
           <div className="text-xs text-muted-foreground">
             แสดง {startIndex + 1}-{Math.min(endIndex, sortedData.length)} จาก {sortedData.length} รายการ
           </div>
@@ -260,11 +286,18 @@ export function PaginatedTable<T = any>({
               <button
                 key={page}
                 onClick={() => goToPage(page)}
+<<<<<<< Updated upstream
                 className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${
                   currentPage === page
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                 }`}
+=======
+                className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted'
+                  }`}
+>>>>>>> Stashed changes
               >
                 {page}
               </button>

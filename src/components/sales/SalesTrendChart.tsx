@@ -56,12 +56,13 @@ export function SalesTrendChart({ data, height = '400px' }: SalesTrendChartProps
         left: '3%',
         right: '4%',
         bottom: '3%',
+        top: '15%',
         containLabel: true,
       },
       xAxis: {
         type: 'category',
         data: dates,
-        boundaryGap: false,
+        boundaryGap: true,
       },
       yAxis: [
         {

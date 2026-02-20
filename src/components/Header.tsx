@@ -17,6 +17,10 @@ const pageNames: Record<string, string> = {
 export function Header() {
     const pathname = usePathname();
     const [currentTime, setCurrentTime] = useState(new Date());
+<<<<<<< Updated upstream
+=======
+    const { isComparisonMode, setComparisonMode, toggleComparisonMode } = useComparison();
+>>>>>>> Stashed changes
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -27,6 +31,35 @@ export function Header() {
     }, []);
 
     const pageName = pageNames[pathname] || 'Dashboard';
+<<<<<<< Updated upstream
+=======
+
+    // ตรวจสอบว่าอยู่ในหน้าเปรียบเทียบหรือไม่
+    const isComparisonView = pathname.includes('/comparison');
+
+    // หน้า Reports: toggle mode ใน context โดยไม่ navigate ไปหน้าอื่น
+    const isReportsPage = pathname.startsWith('/reports/');
+
+    // สลับโหมดเปรียบเทียบ
+    const handleToggleComparison = () => {
+        if (isReportsPage) {
+            // toggle context mode only, stay on same page
+            toggleComparisonMode();
+            return;
+        }
+        if (isComparisonView) {
+            // ปิดโหมดเปรียบเทียบ → ไปหน้าหลัก
+            setComparisonMode(false);
+            const mainRoute = mainRouteFromComparison[pathname] || '/';
+            router.push(mainRoute);
+        } else {
+            // เปิดโหมดเปรียบเทียบ → ไปหน้าเปรียบเทียบ
+            setComparisonMode(true);
+            const comparisonRoute = comparisonRouteMap[pathname] || '/comparison';
+            router.push(comparisonRoute);
+        }
+    };
+>>>>>>> Stashed changes
 
     return (
         <header className="h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]/80 backdrop-blur-md sticky top-0 z-40 px-8 flex items-center justify-between">
@@ -51,6 +84,32 @@ export function Header() {
                     />
                 </div>
 
+<<<<<<< Updated upstream
+=======
+                {/* Comparison Toggle Button */}
+                <button
+                    onClick={handleToggleComparison}
+                    className={cn(
+                        "inline-flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors",
+                        (isComparisonView || (isReportsPage && isComparisonMode))
+                            ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "border-[hsl(var(--border))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
+                    )}
+                >
+                    {(isComparisonView || (isReportsPage && isComparisonMode)) ? (
+                        <>
+                            <LayoutDashboard className="h-4 w-4" />
+                            <span className="hidden lg:inline">ภาพรวม</span>
+                        </>
+                    ) : (
+                        <>
+                            <BarChart3 className="h-4 w-4" />
+                            <span className="hidden lg:inline">เปรียบเทียบกิจการ</span>
+                        </>
+                    )}
+                </button>
+
+>>>>>>> Stashed changes
                 {/* Notifications */}
                 <button
                     type="button"

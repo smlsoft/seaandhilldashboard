@@ -10,6 +10,8 @@ import type {
   SalesBySalesperson,
   TopCustomer,
   ARStatus,
+  SalesByCategory,
+  SalesAnalysisData,
   KPIData,
 } from './types';
 import { calculateGrowth, getPreviousPeriod } from '@/lib/comparison';
@@ -380,6 +382,7 @@ export async function getARStatus(dateRange: DateRange): Promise<ARStatus[]> {
   }
 }
 
+<<<<<<< Updated upstream
 // ============================================
 // SQL Query Functions - Generate queries with actual dates
 // ============================================
@@ -573,4 +576,158 @@ WHERE status_cancel != 'Cancel'
 GROUP BY statusPayment
 ORDER BY totalOutstanding DESC
   `.trim();
+=======
+/**
+ * Get Sales by Category
+ */
+export async function getSalesByCategory(dateRange: DateRange, branchSync?: string[]): Promise<SalesByCategory[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+
+    const query = `
+      SELECT
+        si.branch_name as branchName,
+        COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+        count(DISTINCT si.doc_no) as orderCount,
+        sum(sid.qty) as totalQtySold,
+        sum(sid.sum_amount) as totalSales,
+        sum(sid.sum_amount - sid.sum_of_cost) as totalProfit,
+        (totalProfit / totalSales) * 100 as profitMarginPct
+      FROM saleinvoice_transaction_detail sid
+      JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
+      WHERE si.status_cancel != 'Cancel'
+        AND si.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
+      GROUP BY si.branch_sync, si.branch_name, categoryName
+      ORDER BY si.branch_name ASC, totalSales DESC
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      branchName: row.branchName || 'ไม่ระบุสาขา',
+      categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      orderCount: Number(row.orderCount) || 0,
+      totalQtySold: Number(row.totalQtySold) || 0,
+      totalSales: Number(row.totalSales) || 0,
+      totalProfit: Number(row.totalProfit) || 0,
+      profitMarginPct: Number(row.profitMarginPct) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching sales by category:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Sales by Category Summary (Aggregated)
+ */
+export async function getSalesByCategorySummary(dateRange: DateRange, branchSync?: string[]): Promise<SalesByCategory[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+
+    const query = `
+      SELECT
+        COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+        sum(sid.sum_amount) as totalSales,
+        count(DISTINCT si.doc_no) as orderCount
+      FROM saleinvoice_transaction_detail sid
+      JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
+      WHERE si.status_cancel != 'Cancel'
+        AND si.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
+      GROUP BY categoryName
+      ORDER BY totalSales DESC
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      branchName: 'All', // Placeholder as this is aggregated
+      categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      orderCount: Number(row.orderCount) || 0,
+      totalQtySold: 0, // Not fetched in summary
+      totalSales: Number(row.totalSales) || 0,
+      totalProfit: 0, // Not fetched in summary
+      profitMarginPct: 0, // Not fetched in summary
+    }));
+  } catch (error) {
+    console.error('Error fetching sales by category summary:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Detailed Sales Analysis Data
+ */
+export async function getSalesAnalysisData(dateRange: DateRange, branchSync?: string[]): Promise<SalesAnalysisData[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+
+    const query = `
+      SELECT
+        COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+        toDate(si.doc_datetime) as docDate,
+        si.doc_no as docNo,
+        sid.item_code as itemCode,
+        sid.item_name as itemName,
+        sid.unit_code as unitCode,
+        sid.qty as qty,
+        sid.sum_amount / NULLIF(sid.qty, 0) as price,
+        sid.discount_amount as discountAmount,
+        sid.sum_amount as totalAmount
+      FROM saleinvoice_transaction_detail sid
+      JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
+      WHERE si.status_cancel != 'Cancel'
+        AND si.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
+      ORDER BY categoryName, docDate, docNo
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      docDate: row.docDate,
+      docNo: row.docNo,
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      unitCode: row.unitCode || '',
+      qty: Number(row.qty) || 0,
+      price: Number(row.price) || 0,
+      discountAmount: Number(row.discountAmount) || 0,
+      totalAmount: Number(row.totalAmount) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching sales analysis:', error);
+    throw error;
+  }
+>>>>>>> Stashed changes
 }
