@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Calendar } from 'lucide-react';
 import { DATE_RANGES, type DateRangeKey } from '@/lib/dateRanges';
 import type { DateRange } from '@/lib/data/types';
@@ -32,12 +32,15 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
   const [showCustom, setShowCustom] = useState(false);
   const [customStartDisplay, setCustomStartDisplay] = useState('');
   const [customEndDisplay, setCustomEndDisplay] = useState('');
-  
+
+  // Debounce timer ref to prevent fetching on every keystroke
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Sync selectedKey กับ value จากภายนอก
   useEffect(() => {
     // หาว่า value ปัจจุบันตรงกับ preset ไหน
     let matchedKey: DateRangeKey | null = null;
-    
+
     for (const [key, preset] of Object.entries(DATE_RANGES)) {
       if (key === 'CUSTOM') continue;
       const range = preset.getValue();
@@ -46,7 +49,7 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
         break;
       }
     }
-    
+
     if (matchedKey) {
       setSelectedKey(matchedKey);
       setShowCustom(false);
@@ -79,30 +82,46 @@ export function DateRangeFilter({ value, onChange, defaultKey = 'THIS_MONTH', cl
   const handleCustomStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const displayValue = e.target.value;
     setCustomStartDisplay(displayValue);
-    
-    // Try to parse and update if valid
+
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Try to parse and update if valid, but with debounce
     const parsed = parseDateFromDDMMYYYY(displayValue);
     if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
-      console.log('📅 DateRangeFilter: Custom start changed to', parsed);
-      onChange({
-        start: parsed,
-        end: value.end,
-      });
+      // Set new timer - only call onChange after 800ms of no typing
+      debounceTimerRef.current = setTimeout(() => {
+        console.log('📅 DateRangeFilter: Custom start changed to', parsed);
+        onChange({
+          start: parsed,
+          end: value.end,
+        });
+      }, 800);
     }
   };
 
   const handleCustomEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const displayValue = e.target.value;
     setCustomEndDisplay(displayValue);
-    
-    // Try to parse and update if valid
+
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Try to parse and update if valid, but with debounce
     const parsed = parseDateFromDDMMYYYY(displayValue);
     if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
-      console.log('📅 DateRangeFilter: Custom end changed to', parsed);
-      onChange({
-        start: value.start,
-        end: parsed,
-      });
+      // Set new timer - only call onChange after 800ms of no typing
+      debounceTimerRef.current = setTimeout(() => {
+        console.log('📅 DateRangeFilter: Custom end changed to', parsed);
+        onChange({
+          start: value.start,
+          end: parsed,
+        });
+      }, 800);
     }
   };
 

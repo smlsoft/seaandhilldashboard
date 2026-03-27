@@ -137,13 +137,13 @@ export async function getProfitLossData(dateRange: DateRange, branchSync?: strin
 /**
  * Get Balance Sheet data
  */
-export async function getBalanceSheetData(asOfDate: string, branchSync?: string[]): Promise<BalanceSheetItem[]> {
+export async function getBalanceSheetData(dateRange: DateRange, branchSync?: string[]): Promise<BalanceSheetItem[]> {
   try {
-    const query = getBalanceSheetQuery(asOfDate, branchSync);
+    const query = getBalanceSheetQuery(dateRange, branchSync);
 
     const result = await clickhouse.query({
       query,
-      query_params: { as_of_date: asOfDate },
+      query_params: { start_date: dateRange.start, end_date: dateRange.end },
       format: 'JSONEachRow',
     });
 
@@ -190,11 +190,15 @@ export async function getCashFlowData(dateRange: DateRange, branchSync?: string[
 /**
  * Get AR (Accounts Receivable) Aging data
  */
-export async function getARAgingData(branchSync?: string[]): Promise<AgingItem[]> {
+export async function getARAgingData(dateRange: DateRange, branchSync?: string[]): Promise<AgingItem[]> {
   try {
-    const query = getARAgingQuery(branchSync);
+    const query = getARAgingQuery(dateRange, branchSync);
 
-    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const result = await clickhouse.query({
+      query,
+      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      format: 'JSONEachRow'
+    });
     const data = await result.json();
 
     return data.map((row: any) => ({
@@ -218,11 +222,15 @@ export async function getARAgingData(branchSync?: string[]): Promise<AgingItem[]
 /**
  * Get AP (Accounts Payable) Aging data
  */
-export async function getAPAgingData(branchSync?: string[]): Promise<AgingItem[]> {
+export async function getAPAgingData(dateRange: DateRange, branchSync?: string[]): Promise<AgingItem[]> {
   try {
-    const query = getAPAgingQuery(branchSync);
+    const query = getAPAgingQuery(dateRange, branchSync);
 
-    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const result = await clickhouse.query({
+      query,
+      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      format: 'JSONEachRow'
+    });
     const data = await result.json();
 
     return data.map((row: any) => ({

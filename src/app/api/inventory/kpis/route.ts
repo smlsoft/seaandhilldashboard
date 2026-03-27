@@ -6,7 +6,15 @@ import { formatErrorResponse, logError } from '@/lib/errors';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const asOfDate = searchParams.get('as_of_date') || new Date().toISOString().split('T')[0];
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+
+    if (!startDate || !endDate) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required parameters: start_date, end_date' },
+        { status: 400 }
+      );
+    }
 
     let branches = searchParams.getAll('branch');
     if (branches.length === 0) {
@@ -16,8 +24,8 @@ export async function GET(request: NextRequest) {
     }
 
     const cachedQuery = createCachedQuery(
-      () => getInventoryKPIs(asOfDate, branches),
-      ['inventory', 'kpis', asOfDate, ...branches],
+      () => getInventoryKPIs({ start: startDate, end: endDate }, branches),
+      ['inventory', 'kpis', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

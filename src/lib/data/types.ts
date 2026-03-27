@@ -141,6 +141,32 @@ export interface ARStatus {
   totalOutstanding: number;
 }
 
+export interface SalesAnalysisData {
+  categoryName: string;
+  docDate: string;
+  docNo: string;
+  itemCode: string;
+  itemName: string;
+  unitCode: string;
+  qty: number;
+  price: number;
+  discountAmount: number;
+  totalAmount: number;
+}
+
+export interface SalesByCategory {
+  branchName: string;
+  categoryCode: string;
+  categoryName: string;
+  itemCode: string;
+  itemName: string;
+  orderCount: number;
+  totalQtySold: number;
+  totalSales: number;
+  totalProfit: number;
+  profitMarginPct: number;
+}
+
 // ============================================
 // Purchase Types
 // ============================================
@@ -174,6 +200,8 @@ export interface TopSupplier {
 export interface PurchaseByCategory {
   categoryCode: string;
   categoryName: string;
+  itemCode: string;
+  itemName: string;
   totalQty: number;
   totalPurchaseValue: number;
   uniqueItems?: number;

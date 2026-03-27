@@ -8,7 +8,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
-    const asOfDate = searchParams.get('as_of_date') || new Date().toISOString().split('T')[0];
 
     if (!startDate || !endDate) {
       return NextResponse.json(
@@ -25,8 +24,8 @@ export async function GET(request: NextRequest) {
     }
 
     const cachedQuery = createCachedQuery(
-      () => getSlowMovingItems({ start: startDate, end: endDate }, asOfDate, branches),
-      ['inventory', 'slow-moving', startDate, endDate, asOfDate, ...branches],
+      () => getSlowMovingItems({ start: startDate, end: endDate }, branches),
+      ['inventory', 'slow-moving', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

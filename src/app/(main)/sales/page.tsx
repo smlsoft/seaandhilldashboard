@@ -13,6 +13,7 @@ import { PermissionGuard } from '@/components/PermissionGuard';
 import { SalesTrendChart } from '@/components/sales/SalesTrendChart';
 import { TopProductsTable } from '@/components/sales/TopProductsTable';
 import { SalesByBranchChart } from '@/components/sales/SalesByBranchChart';
+import { SalesByCategoryChart } from '@/components/sales/SalesByCategoryChart';
 import { SalesBySalespersonTable } from '@/components/sales/SalesBySalespersonTable';
 import { TopCustomersTable } from '@/components/sales/TopCustomersTable';
 import { ARStatusChart } from '@/components/sales/ARStatusChart';
@@ -20,7 +21,7 @@ import { ShoppingCart, DollarSign, TrendingUp, Package } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import Link from 'next/link';
 import { formatGrowthPercentage } from '@/lib/comparison';
-import type { DateRange, SalesKPIs, SalesTrendData, TopProduct, SalesByBranch, SalesBySalesperson, TopCustomer, ARStatus } from '@/lib/data/types';
+import type { DateRange, SalesKPIs, SalesTrendData, TopProduct, SalesByBranch, SalesByCategory, SalesBySalesperson, TopCustomer, ARStatus } from '@/lib/data/types';
 import {
   getTotalSalesQuery,
   getGrossProfitQuery,
@@ -28,8 +29,8 @@ import {
   getAvgOrderValueQuery,
   getSalesTrendQuery,
   getTopProductsQuery,
-  getSalesByBranchQuery,
   getSalesBySalespersonQuery,
+  getSalesByCategoryDetailQuery,
   getTopCustomersQuery,
   getARStatusQuery,
 } from '@/lib/data/sales-queries';
@@ -43,6 +44,7 @@ export default function SalesPage() {
   const [trendData, setTrendData] = useState<SalesTrendData[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [salesByBranch, setSalesByBranch] = useState<SalesByBranch[]>([]);
+  const [salesByCategory, setSalesByCategory] = useState<SalesByCategory[]>([]);
   const [salesBySalesperson, setSalesBySalesperson] = useState<SalesBySalesperson[]>([]);
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
   const [arStatus, setArStatus] = useState<ARStatus[]>([]);
@@ -66,12 +68,18 @@ export default function SalesPage() {
         branches.forEach(b => params.append('branch', b));
       }
 
+      // Debug: Log API parameters
+      console.log('🏠 Sales Page - Date Range:', dateRange);
+      console.log('🏠 Sales Page - Branches:', branches);
+      console.log('🏠 Sales Page - API Params:', params.toString());
+
       // Fetch all data in parallel
       const [
         kpisRes,
         trendRes,
         productsRes,
         branchRes,
+        categoryRes,
         salespersonRes,
         customersRes,
         arRes,
@@ -80,6 +88,7 @@ export default function SalesPage() {
         fetch(`/api/sales/trend?${params}`),
         fetch(`/api/sales/top-products?${params}`),
         fetch(`/api/sales/by-branch?${params}`),
+        fetch(`/api/sales/by-category?${params}`),
         fetch(`/api/sales/by-salesperson?${params}`),
         fetch(`/api/sales/top-customers?${params}`),
         fetch(`/api/sales/ar-status?${params}`),
@@ -89,15 +98,17 @@ export default function SalesPage() {
       if (!trendRes.ok) throw new Error('Failed to fetch trend data');
       if (!productsRes.ok) throw new Error('Failed to fetch top products');
       if (!branchRes.ok) throw new Error('Failed to fetch sales by branch');
+      if (!categoryRes.ok) throw new Error('Failed to fetch sales by category');
       if (!salespersonRes.ok) throw new Error('Failed to fetch sales by salesperson');
       if (!customersRes.ok) throw new Error('Failed to fetch top customers');
       if (!arRes.ok) throw new Error('Failed to fetch AR status');
 
-      const [kpisData, trendDataRes, productsData, branchData, salespersonData, customersData, arData] = await Promise.all([
+      const [kpisData, trendDataRes, productsData, branchData, categoryData, salespersonData, customersData, arData] = await Promise.all([
         kpisRes.json(),
         trendRes.json(),
         productsRes.json(),
         branchRes.json(),
+        categoryRes.json(),
         salespersonRes.json(),
         customersRes.json(),
         arRes.json(),
@@ -107,6 +118,7 @@ export default function SalesPage() {
       setTrendData(trendDataRes.data);
       setTopProducts(productsData.data);
       setSalesByBranch(branchData.data);
+      setSalesByCategory(categoryData.data);
       setSalesBySalesperson(salespersonData.data);
       setTopCustomers(customersData.data);
       setArStatus(arData.data);
@@ -230,6 +242,28 @@ export default function SalesPage() {
 
       {/* Top Products & Sales by Branch */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+
+
+        <PermissionGuard componentKey="sales.by_branch">
+          <ErrorBoundary>
+            <DataCard
+              title="ยอดขายแยกตามหมวดหมู่"
+              description="เปรียบเทียบยอดขายของแต่ละหมวดหมู่"
+              linkTo="/reports/sales#by-category"
+              queryInfo={{
+                query: getSalesByCategoryDetailQuery(dateRange.start, dateRange.end),
+                format: 'JSONEachRow'
+              }}
+            >
+              {loading ? (
+                <ChartSkeleton />
+              ) : (
+                <SalesByCategoryChart data={salesByCategory} />
+              )}
+            </DataCard>
+          </ErrorBoundary>
+        </PermissionGuard>
+
         <PermissionGuard componentKey="sales.top_products">
           <ErrorBoundary>
             <DataCard
@@ -245,26 +279,6 @@ export default function SalesPage() {
                 <TableSkeleton rows={10} />
               ) : (
                 <TopProductsTable data={topProducts} />
-              )}
-            </DataCard>
-          </ErrorBoundary>
-        </PermissionGuard>
-
-        <PermissionGuard componentKey="sales.top_customers">
-          <ErrorBoundary>
-            <DataCard
-              title="ลูกค้า VIP Top 20"
-              description="ลูกค้าที่มียอดซื้อสูงสุด"
-              linkTo="/reports/sales#top-customers"
-              queryInfo={{
-                query: getTopCustomersQuery(dateRange.start, dateRange.end),
-                format: 'JSONEachRow'
-              }}
-            >
-              {loading ? (
-                <TableSkeleton rows={10} />
-              ) : (
-                <TopCustomersTable data={topCustomers} />
               )}
             </DataCard>
           </ErrorBoundary>
@@ -295,21 +309,22 @@ export default function SalesPage() {
 
       {/* Top Customers & AR Status */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        <PermissionGuard componentKey="sales.by_branch">
+
+        <PermissionGuard componentKey="sales.top_customers">
           <ErrorBoundary>
             <DataCard
-              title="ยอดขายแยกตามสาขา"
-              description="เปรียบเทียบยอดขายของแต่ละสาขา"
-              linkTo="/reports/sales#by-branch"
+              title="ลูกค้า VIP Top 20"
+              description="ลูกค้าที่มียอดซื้อสูงสุด"
+              linkTo="/reports/sales#top-customers"
               queryInfo={{
-                query: getSalesByBranchQuery(dateRange.start, dateRange.end),
+                query: getTopCustomersQuery(dateRange.start, dateRange.end),
                 format: 'JSONEachRow'
               }}
             >
               {loading ? (
-                <ChartSkeleton />
+                <TableSkeleton rows={10} />
               ) : (
-                <SalesByBranchChart data={salesByBranch} />
+                <TopCustomersTable data={topCustomers} />
               )}
             </DataCard>
           </ErrorBoundary>

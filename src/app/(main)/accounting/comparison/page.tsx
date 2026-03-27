@@ -101,20 +101,14 @@ export default function AccountingComparisonPage() {
         const dateParams = new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end });
         dateParams.append('branch', branchKey);
 
-        const asOfParams = new URLSearchParams({ as_of_date: dateRange.end });
-        asOfParams.append('branch', branchKey);
-
-        const agingParams = new URLSearchParams();
-        agingParams.append('branch', branchKey);
-
         try {
           const [kpisRes, plRes, bsRes, cfRes, arRes, apRes, brkRes] = await Promise.all([
             fetch(`/api/accounting/kpis?${dateParams}`),
             fetch(`/api/accounting/profit-loss?${dateParams}`),
-            fetch(`/api/accounting/balance-sheet?${asOfParams}`),
+            fetch(`/api/accounting/balance-sheet?${dateParams}`),
             fetch(`/api/accounting/cash-flow?${dateParams}`),
-            fetch(`/api/accounting/ar-aging?${agingParams}`),
-            fetch(`/api/accounting/ap-aging?${agingParams}`),
+            fetch(`/api/accounting/ar-aging?${dateParams}`),
+            fetch(`/api/accounting/ap-aging?${dateParams}`),
             fetch(`/api/accounting/revenue-expense-breakdown?${dateParams}`),
           ]);
 

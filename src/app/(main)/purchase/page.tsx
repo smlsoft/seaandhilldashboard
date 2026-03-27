@@ -8,11 +8,11 @@ import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { KPICardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/LoadingSkeleton';
+import { PaginatedTable } from '@/components/PaginatedTable';
 import { PurchaseTrendChart } from '@/components/purchase/PurchaseTrendChart';
 import { HorizontalBarChart, type HorizontalBarItem } from '@/components/charts/HorizontalBarChart';
 import { PurchaseByCategoryChart } from '@/components/purchase/PurchaseByCategoryChart';
 import { PurchaseByBrandChart } from '@/components/purchase/PurchaseByBrandChart';
-import { APOutstandingChart } from '@/components/purchase/APOutstandingChart';
 import { ShoppingBag, Package, TrendingDown, FileText } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { formatGrowthPercentage } from '@/lib/comparison';
@@ -33,6 +33,7 @@ export default function PurchasePage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
   // Data states
   const [kpis, setKpis] = useState<PurchaseKPIs | null>(null);
@@ -45,6 +46,11 @@ export default function PurchasePage() {
 
   useEffect(() => {
     fetchAllData();
+  }, [dateRange]);
+
+  // Reset category filter when date range changes
+  useEffect(() => {
+    setSelectedCategory('ALL');
   }, [dateRange]);
 
   const fetchAllData = async () => {
@@ -125,6 +131,74 @@ export default function PurchasePage() {
     });
   };
 
+  // Aggregate purchase by category data for Pie Chart (sum all items per category)
+  const aggregatedPurchaseByCategory = (() => {
+    const categoryMap = new Map<string, PurchaseByCategory>();
+    
+    purchaseByCategory.forEach(item => {
+      const key = item.categoryCode;
+      const existing = categoryMap.get(key);
+      
+      if (existing) {
+        existing.totalQty += item.totalQty;
+        existing.totalPurchaseValue += item.totalPurchaseValue;
+      } else {
+        categoryMap.set(key, {
+          categoryCode: item.categoryCode,
+          categoryName: item.categoryName,
+          itemCode: '', // Not used in aggregated data
+          itemName: '', // Not used in aggregated data
+          totalQty: item.totalQty,
+          totalPurchaseValue: item.totalPurchaseValue,
+          uniqueItems: item.uniqueItems,
+        });
+      }
+    });
+    
+    return Array.from(categoryMap.values());
+  })();
+
+  // Calculate unique categories and filtered data
+  const uniqueCategories = Array.from(
+    new Set(purchaseByCategory.map(item => JSON.stringify({ code: item.categoryCode, name: item.categoryName })))
+  )
+    .map(str => JSON.parse(str))
+    .sort((a, b) => a.name.localeCompare(b.name, 'th'));
+
+  const filteredPurchaseByCategory = selectedCategory === 'ALL'
+    ? purchaseByCategory
+    : purchaseByCategory.filter(item => item.categoryCode === selectedCategory);
+
+  // Column definitions for purchase by category
+  const purchaseByCategoryColumns = [
+    {
+      key: 'itemCode',
+      header: 'รหัสสินค้า',
+      render: (item: PurchaseByCategory) => (
+        <span className="font-mono text-xs">{item.itemCode}</span>
+      ),
+    },
+    {
+      key: 'itemName',
+      header: 'ชื่อสินค้า',
+      render: (item: PurchaseByCategory) => (
+        <span className="font-medium">{item.itemName}</span>
+      ),
+    },
+    {
+      key: 'totalQty',
+      header: 'จำนวนที่ซื้อ',
+      align: 'right' as const,
+      render: (item: PurchaseByCategory) => formatNumber(item.totalQty),
+    },
+    {
+      key: 'totalPurchaseValue',
+      header: 'มูลค่าทั้งหมด',
+      align: 'right' as const,
+      render: (item: PurchaseByCategory) => formatCurrency(item.totalPurchaseValue),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -202,24 +276,26 @@ export default function PurchasePage() {
       ) : null}
 
       {/* Purchase Trend Chart */}
-      <div className="grid gap-5 ">
-        <ErrorBoundary>
-          <DataCard
-            title="แนวโน้มการจัดซื้อ"
-            description="ยอดซื้อและจำนวนออเดอร์รายวัน"
-            linkTo="/reports/purchase#trend"
-            queryInfo={{
-              query: getPurchaseTrendQuery(dateRange),
-              format: 'JSONEachRow'
-            }}
-          >
-            {loading ? (
-              <ChartSkeleton />
-            ) : (
-              <PurchaseTrendChart data={trendData} />
-            )}
-          </DataCard>
-        </ErrorBoundary>
+      <ErrorBoundary>
+        <DataCard
+          title="แนวโน้มการจัดซื้อ"
+          description="ยอดซื้อและจำนวนออเดอร์รายวัน"
+          linkTo="/reports/purchase#trend"
+          queryInfo={{
+            query: getPurchaseTrendQuery(dateRange),
+            format: 'JSONEachRow'
+          }}
+        >
+          {loading ? (
+            <ChartSkeleton />
+          ) : (
+            <PurchaseTrendChart data={trendData} />
+          )}
+        </DataCard>
+      </ErrorBoundary>
+
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+
 
         {/* Top Suppliers */}
         <ErrorBoundary>
@@ -247,7 +323,10 @@ export default function PurchasePage() {
                     lastPurchaseDate: supplier.lastPurchaseDate,
                   },
                 }))}
-                height="600px"
+                height="500px"
+              //  gridLeft={35}
+                gridRight={90}
+                yAxisLabelMargin={270}
                 tooltipFormatter={(item, percentage) => {
                   const poCount = item.extraData?.poCount || 0;
                   const avgPOValue = item.extraData?.avgPOValue || 0;
@@ -256,7 +335,7 @@ export default function PurchasePage() {
                     : '-';
                   return `
                   <div style="padding: 8px;">
-                    <div style="font-weight: 600; margin-bottom: 6px;">อันดับ ${item.rank}: ${item.name}</div>
+                    <div style="font-weight: 6000; margin-bottom: 6px;">อันดับ ${item.rank}: ${item.name}</div>
                     <div style="color: #666; font-size: 12px; margin-bottom: 8px;">${item.subLabel}</div>
                     <div>ยอดซื้อ: <b style="color: #3b82f6;">฿${item.value.toLocaleString('th-TH')}</b></div>
                     <div>จำนวน PO: <b>${poCount} รายการ</b></div>
@@ -270,9 +349,7 @@ export default function PurchasePage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
-      {/* Purchase by Category & Brand */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+
         <ErrorBoundary>
           <DataCard
             title="การซื้อตามหมวดสินค้า"
@@ -286,10 +363,14 @@ export default function PurchasePage() {
             {loading ? (
               <ChartSkeleton />
             ) : (
-              <PurchaseByCategoryChart data={purchaseByCategory} />
+              <PurchaseByCategoryChart data={aggregatedPurchaseByCategory} />
             )}
           </DataCard>
         </ErrorBoundary>
+      </div>
+
+      {/* Purchase by Category & Brand */}
+      <div className="grid gap-6">
 
         <ErrorBoundary>
           <DataCard
@@ -310,11 +391,50 @@ export default function PurchasePage() {
         </ErrorBoundary>
       </div>
 
+      {/* Purchase Items by Category - Detailed Table */}
+      <ErrorBoundary>
+        <DataCard
+          title="รายละเอียดสินค้าแยกตามหมวดหมู่"
+          description="รายการสินค้าทั้งหมดในแต่ละหมวดหมู่"
+          linkTo="/reports/purchase#by-category"
+          queryInfo={{
+            query: getPurchaseByCategoryQuery(dateRange),
+            format: 'JSONEachRow'
+          }}
+          headerExtra={
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="ALL">ทุกหมวดหมู่</option>
+              {uniqueCategories.map(cat => (
+                <option key={cat.code} value={cat.code}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          }
+        >
+          {loading ? (
+            <TableSkeleton />
+          ) : (
+            <PaginatedTable
+              data={filteredPurchaseByCategory}
+              columns={purchaseByCategoryColumns}
+              keyExtractor={(item, index) => `${item.categoryCode}-${item.itemCode}-${index}`}
+              itemsPerPage={15}
+              emptyMessage="ไม่พบข้อมูลสินค้า"
+            />
+          )}
+        </DataCard>
+      </ErrorBoundary>
+
       {/* AP Outstanding */}
       <ErrorBoundary>
         <DataCard
-          title="สถานะเจ้าหนี้การค้า (AP)"
-          description="สรุปยอดเจ้าหนี้ตามสถานะการชำระเงิน"
+          title="สถานะเจ้าหนี้การค้า (AP) Top 20"
+          description="ซัพพลายเออร์ที่มียอดค้างชำระสูงสุด"
           linkTo="/reports/purchase#ap-outstanding"
           queryInfo={{
             query: getAPOutstandingQuery(dateRange),
@@ -322,9 +442,87 @@ export default function PurchasePage() {
           }}
         >
           {loading ? (
-            <ChartSkeleton height="350px" />
+            <ChartSkeleton height="600px" />
           ) : (
-            <APOutstandingChart data={apOutstanding} height="350px" />
+            <HorizontalBarChart
+              data={apOutstanding.map((ap, index) => ({
+                rank: index + 1,
+                name: ap.supplierName,
+                value: ap.totalOutstanding,
+                subLabel: ap.supplierCode,
+                extraData: {
+                  overdueAmount: ap.overdueAmount,
+                  notOverdueAmount: ap.totalOutstanding - ap.overdueAmount,
+                  docCount: ap.docCount,
+                  overduePercent: ap.totalOutstanding > 0
+                    ? ((ap.overdueAmount / ap.totalOutstanding) * 100).toFixed(1)
+                    : '0',
+                },
+              }))}
+              height="500px"
+              gridLeft={350}
+              gridRight={40}
+              yAxisLabelMargin={340}
+              showRank={true}
+              showLegend={false}
+              getBarColor={(rank) => {
+                // ใช้ gradient amber-orange สำหรับ AP (warning theme)
+                const intensity = 0.9 - (rank - 1) * 0.04;
+                return `rgba(245, 158, 11, ${Math.max(0.4, intensity)})`;
+              }}
+              tooltipFormatter={(item, percentage) => {
+                const overdueAmount = item.extraData?.overdueAmount || 0;
+                const notOverdueAmount = item.extraData?.notOverdueAmount || 0;
+                const docCount = item.extraData?.docCount || 0;
+                const overduePercent = item.extraData?.overduePercent || '0';
+                const overduePercentNum = parseFloat(overduePercent);
+
+                return `
+                  <div style="padding: 10px; min-width: 300px;">
+                    <div style="font-weight: 600; margin-bottom: 4px; color: #1f2937;">อันดับ ${item.rank}: ${item.name}</div>
+                    <div style="color: #6b7280; font-size: 11px; margin-bottom: 10px;">${item.subLabel}</div>
+                    
+                    <div style="margin-bottom: 8px; padding: 8px; background: #fef3c7; border-radius: 6px;">
+                      <div style="color: #92400e; font-size: 11px; margin-bottom: 2px;">ยอดค้างชำระทั้งหมด</div>
+                      <div style="font-size: 18px; font-weight: 700; color: #d97706;">฿${item.value.toLocaleString('th-TH')}</div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; margin-bottom: 10px;">
+                      <div style="flex: 1; padding: 6px; background: #dbeafe; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 2px;">
+                          <span style="display: inline-block; width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; margin-right: 6px;"></span>
+                          <span style="font-size: 10px; color: #1e40af;">ยังไม่ครบกำหนด</span>
+                        </div>
+                        <div style="font-weight: 600; color: #1e3a8a; font-size: 13px;">฿${notOverdueAmount.toLocaleString('th-TH')}</div>
+                      </div>
+                      
+                      <div style="flex: 1; padding: 6px; background: #fee2e2; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 2px;">
+                          <span style="display: inline-block; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; margin-right: 6px;"></span>
+                          <span style="font-size: 10px; color: #991b1b;">เกินกำหนด</span>
+                        </div>
+                        <div style="font-weight: 600; color: #991b1b; font-size: 13px;">฿${overdueAmount.toLocaleString('th-TH')}</div>
+                      </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #e5e7eb;">
+                      <span style="font-size: 11px; color: #6b7280;">สัดส่วนเกินกำหนด</span>
+                      <span style="font-weight: 700; font-size: 13px; color: ${overduePercentNum > 50 ? '#dc2626' : overduePercentNum > 30 ? '#f59e0b' : '#10b981'};">${overduePercent}%</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                      <span style="font-size: 11px; color: #6b7280;">จำนวนบิล</span>
+                      <span style="font-weight: 600; color: #374151; font-size: 12px;">${docCount} รายการ</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #e5e7eb;">
+                      <span style="font-size: 11px; color: #6b7280;">สัดส่วนจากยอดค้างทั้งหมด</span>
+                      <span style="font-weight: 600; color: #f59e0b; font-size: 12px;">${percentage}%</span>
+                    </div>
+                  </div>
+                `;
+              }}
+            />
           )}
         </DataCard>
       </ErrorBoundary>

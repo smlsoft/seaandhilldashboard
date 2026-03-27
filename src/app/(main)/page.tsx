@@ -57,11 +57,9 @@ export default function Dashboard() {
       if (branches.length > 0 && !branches.includes('ALL')) {
         branches.forEach(b => params.append('branch', b));
       }
-      
       // Add date range to params
       params.append('startDate', dateRange.start);
       params.append('endDate', dateRange.end);
-      
       const queryParams = params.toString() ? `?${params.toString()}` : '';
       console.log('🔗 API URL:', `/api/dashboard${queryParams}`);
 
@@ -84,6 +82,7 @@ export default function Dashboard() {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+
     }
   }, [dateRange]);
 
@@ -198,8 +197,8 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <DateRangeFilter 
-            value={dateRange} 
+          <DateRangeFilter
+            value={dateRange}
             onChange={setDateRange}
             defaultKey="TODAY"
           />
@@ -249,36 +248,77 @@ export default function Dashboard() {
 
       {/* Charts Section */}
       <div className="grid gap-6 lg:grid-cols-7">
-        <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 h-[400px]">
-          <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '350px', width: '100%' }} />
-        </DataCard>
-        <DataCard
-          title="รายได้ vs ค่าใช้จ่าย"
-          className="lg:col-span-3 h-[400px]"
-        >
-          <ReactECharts option={revenueOption} theme={theme} style={{ height: '350px', width: '100%' }} />
-        </DataCard>
-      </div>
+        {loading ? (
+          // Skeleton loading for charts
+          <>
+            <div className="lg:col-span-4 rounded-xl border border-border bg-card p-6 h-[400px] animate-pulse">
+              <div className="h-5 bg-muted rounded w-32 mb-4"></div>
+              <div className="h-[320px] bg-muted rounded"></div>
+            </div>
+            <div className="lg:col-span-3 rounded-xl border border-border bg-card p-6 h-[400px] animate-pulse">
+              <div className="h-5 bg-muted rounded w-32 mb-4"></div>
+              <div className="h-[320px] bg-muted rounded"></div>
+            </div>
+          </>
+        ) : (
+          <>
+            <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 h-[400px]">
+              <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '350px', width: '100%' }} />
+            </DataCard>
+            <DataCard
+              title="รายได้ vs ค่าใช้จ่าย"
+              className="lg:col-span-3 h-[400px]"
+            >
+              <ReactECharts option={revenueOption} theme={theme} style={{ height: '350px', width: '100%' }} />
+            </DataCard>
+          </>
+        )}
+      </div >
 
       {/* Bottom Section */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <DataCard
-            title="รายการขายล่าสุด"
-            action={
-              <button className="text-xs font-medium text-[hsl(var(--primary))] hover:underline">
-                ดูทั้งหมด
-              </button>
-            }
-            className="lg:col-span-2"
-          >
-            <RecentSales sales={data?.recentSales || []} />
-          </DataCard>
-        </div>
-        <div>
-          <AlertsCard alerts={data?.alerts || []} />
-        </div>
-      </div>
-    </div>
+      < div className="grid gap-6 lg:grid-cols-3" >
+        {
+          loading ? (
+            // Skeleton loading for bottom section
+            <>
+              <div className="lg:col-span-2 rounded-xl border border-border bg-card p-6 animate-pulse">
+                <div className="h-5 bg-muted rounded w-32 mb-4"></div>
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-16 bg-muted rounded"></div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-6 animate-pulse">
+                <div className="h-5 bg-muted rounded w-24 mb-4"></div>
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 bg-muted rounded"></div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="lg:col-span-2">
+                <DataCard
+                  title="รายการขายล่าสุด"
+                  action={
+                    <button className="text-xs font-medium text-[hsl(var(--primary))] hover:underline">
+                      ดูทั้งหมด
+                    </button>
+                  }
+                  className="lg:col-span-2"
+                >
+                  <RecentSales sales={data?.recentSales || []} />
+                </DataCard>
+              </div>
+              <div>
+                <AlertsCard alerts={data?.alerts || []} />
+              </div>
+            </>
+          )}
+      </div >
+    </div >
   );
 }

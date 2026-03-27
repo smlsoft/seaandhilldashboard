@@ -811,22 +811,22 @@ export default function InventoryReportPage() {
           title={currentReport?.label || ''}
           description={currentReport?.description || ''}
           queryInfo={selectedReport === 'stock-movement' ? {
-            query: getStockMovementQuery(dateRange.start, dateRange.end),
+            query: getStockMovementQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'low-stock' ? {
-            query: getLowStockItemsQuery(asOfDate),
+            query: getLowStockItemsQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'overstock' ? {
-            query: getOverstockItemsQuery(asOfDate),
+            query: getOverstockItemsQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'slow-moving' ? {
-            query: getSlowMovingItemsQuery(dateRange.start, dateRange.end, asOfDate),
+            query: getSlowMovingItemsQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'turnover' ? {
-            query: getInventoryTurnoverQuery(dateRange.start, dateRange.end, asOfDate),
+            query: getInventoryTurnoverQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'by-branch' ? {
-            query: getStockByBranchQuery(asOfDate),
+            query: getStockByBranchQuery(dateRange),
             format: 'JSONEachRow'
           } : undefined}
           onExportExcel={getExportFunction()}

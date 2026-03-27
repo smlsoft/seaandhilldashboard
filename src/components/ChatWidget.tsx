@@ -107,7 +107,7 @@ export default function ChatWidget() {
             aria-label="Open AI Assistant"
           >
             <MessageCircle className="w-6 h-6" />
-            
+
             {/* Message count badge */}
             {messages.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-white">
@@ -153,16 +153,14 @@ export default function ChatWidget() {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                }`}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-4 py-2 ${
-                    message.role === 'user'
+                  className={`max-w-[85%] rounded-lg px-4 py-2 ${message.role === 'user'
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                  }`}
+                    }`}
                 >
                   {message.role === 'user' ? (
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>

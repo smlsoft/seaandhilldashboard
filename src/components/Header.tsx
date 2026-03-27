@@ -53,7 +53,7 @@ export function Header() {
     const pathname = usePathname();
     const router = useRouter();
     const [currentTime, setCurrentTime] = useState(new Date());
-    const { isComparisonMode, setComparisonMode } = useComparison();
+    const { isComparisonMode, setComparisonMode, toggleComparisonMode } = useComparison();
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -64,12 +64,19 @@ export function Header() {
     }, []);
 
     const pageName = pageNames[pathname] || 'Dashboard';
-    
     // ตรวจสอบว่าอยู่ในหน้าเปรียบเทียบหรือไม่
     const isComparisonView = pathname.includes('/comparison');
-    
+
+    // หน้า Reports: toggle mode ใน context โดยไม่ navigate ไปหน้าอื่น
+    const isReportsPage = pathname.startsWith('/reports/');
+
     // สลับโหมดเปรียบเทียบ
     const handleToggleComparison = () => {
+        if (isReportsPage) {
+            // toggle context mode only, stay on same page
+            toggleComparisonMode();
+            return;
+        }
         if (isComparisonView) {
             // ปิดโหมดเปรียบเทียบ → ไปหน้าหลัก
             setComparisonMode(false);
@@ -114,12 +121,12 @@ export function Header() {
                     onClick={handleToggleComparison}
                     className={cn(
                         "inline-flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors",
-                        isComparisonView || isComparisonMode
+                        (isComparisonView || (isReportsPage && isComparisonMode))
                             ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                             : "border-[hsl(var(--border))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
                     )}
                 >
-                    {isComparisonView ? (
+                    {(isComparisonView || (isReportsPage && isComparisonMode)) ? (
                         <>
                             <LayoutDashboard className="h-4 w-4" />
                             <span className="hidden lg:inline">ภาพรวม</span>
@@ -131,7 +138,6 @@ export function Header() {
                         </>
                     )}
                 </button>
-
                 {/* Notifications */}
                 <button
                     type="button"

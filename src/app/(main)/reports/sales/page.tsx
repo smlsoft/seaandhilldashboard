@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
+import { getSelectedBranch } from '@/app/actions/branch-actions';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -14,6 +16,7 @@ import {
   MapPin,
   UserCheck,
   CreditCard,
+  FolderTree,
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
@@ -24,6 +27,7 @@ import type {
   SalesTrendData,
   TopProduct,
   SalesByBranch,
+  SalesByCategory,
   SalesBySalesperson,
   TopCustomer,
   ARStatus,
@@ -34,6 +38,7 @@ type ReportType =
   | 'sales-trend'
   | 'top-products'
   | 'by-branch'
+  | 'by-category'
   | 'by-salesperson'
   | 'top-customers'
   | 'ar-status';
@@ -56,6 +61,12 @@ const reportOptions: ReportOption<ReportType>[] = [
     label: 'ยอดขายตามสาขา',
     icon: MapPin,
     description: 'ยอดขายแยกตามสาขา/คลัง',
+  },
+  {
+    value: 'by-category',
+    label: 'ยอดขายตามหมวดหมู่',
+    icon: FolderTree,
+    description: 'ยอดขายแยกตามหมวดหมู่สินค้า',
   },
   {
     value: 'by-salesperson',
@@ -82,6 +93,7 @@ export default function SalesReportPage() {
     getDateRange('THIS_MONTH')
   );
   const [selectedReport, setSelectedReport] = useState<ReportType>('sales-trend');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +101,7 @@ export default function SalesReportPage() {
   const [trendData, setTrendData] = useState<SalesTrendData[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [salesByBranch, setSalesByBranch] = useState<SalesByBranch[]>([]);
+  const [salesByCategory, setSalesByCategory] = useState<SalesByCategory[]>([]);
   const [salesBySalesperson, setSalesBySalesperson] = useState<
     SalesBySalesperson[]
   >([]);
@@ -102,15 +115,32 @@ export default function SalesReportPage() {
     fetchReportData(selectedReport);
   }, [dateRange, selectedReport]);
 
+  // Reset category filter when switching reports
+  useEffect(() => {
+    setSelectedCategory('ALL');
+  }, [selectedReport]);
+
+  // Listen for branch changes
+  useBranchChange(() => fetchReportData(selectedReport));
+
   const fetchReportData = async (reportType: ReportType) => {
     setLoading(true);
     setError(null);
 
     try {
+      const branches = await getSelectedBranch();
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
+      if (branches.length > 0 && !branches.includes('ALL')) {
+        branches.forEach(b => params.append('branch', b));
+      }
+
+      // Debug: Log API parameters
+      console.log('📋 Reports Page - Date Range:', dateRange);
+      console.log('📋 Reports Page - Branches:', branches);
+      console.log('📋 Reports Page - API Params:', params.toString());
 
       let endpoint = '';
       switch (reportType) {
@@ -122,6 +152,9 @@ export default function SalesReportPage() {
           break;
         case 'by-branch':
           endpoint = `/api/sales/by-branch?${params}`;
+          break;
+        case 'by-category':
+          endpoint = `/api/sales/by-category?${params}`;
           break;
         case 'by-salesperson':
           endpoint = `/api/sales/by-salesperson?${params}`;
@@ -148,6 +181,9 @@ export default function SalesReportPage() {
           break;
         case 'by-branch':
           setSalesByBranch(result.data);
+          break;
+        case 'by-category':
+          setSalesByCategory(result.data);
           break;
         case 'by-salesperson':
           setSalesBySalesperson(result.data);
@@ -341,6 +377,83 @@ export default function SalesReportPage() {
         const avg =
           item.orderCount > 0 ? item.totalSales / item.orderCount : 0;
         return <span>฿{formatCurrency(avg)}</span>;
+      },
+    },
+  ];
+
+  // Column definitions for Sales by Category
+  const salesByCategoryColumns: ColumnDef<SalesByCategory>[] = [
+    {
+      key: 'itemCode',
+      header: 'รหัสสินค้า',
+      sortable: true,
+      align: 'left',
+      render: (item: SalesByCategory) => (
+        <span className="font-mono text-xs">{item.itemCode}</span>
+      ),
+    },
+    {
+      key: 'itemName',
+      header: 'ชื่ตสินค้า',
+      sortable: true,
+      align: 'left',
+      render: (item: SalesByCategory) => (
+        <span className="font-medium">{item.itemName}</span>
+      ),
+    },
+    {
+      key: 'orderCount',
+      header: 'จำนวนออเดอร์',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => formatNumber(item.orderCount),
+    },
+    {
+      key: 'totalQtySold',
+      header: 'จำนวนขาย',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => formatNumber(item.totalQtySold),
+    },
+    {
+      key: 'totalSales',
+      header: 'ยอดขาย',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => (
+        <span className="font-medium text-green-600">
+          ฿{formatCurrency(item.totalSales)}
+        </span>
+      ),
+    },
+    {
+      key: 'totalProfit',
+      header: 'กำไร',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => (
+        <span className="font-medium text-blue-600">
+          ฿{formatCurrency(item.totalProfit)}
+        </span>
+      ),
+    },
+    {
+      key: 'profitMarginPct',
+      header: 'อัตรากำไร',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => {
+        const color =
+          item.profitMarginPct >= 30
+            ? 'text-green-600'
+            : item.profitMarginPct >= 15
+              ? 'text-yellow-600'
+              : 'text-red-600';
+        return (
+          <span className={`font-medium ${color}`}>
+            {formatPercent(item.profitMarginPct)}
+          </span>
+        );
       },
     },
   ];
@@ -556,6 +669,33 @@ export default function SalesReportPage() {
   // Get current report option
   const currentReport = reportOptions.find(opt => opt.value === selectedReport);
 
+  // Get unique categories from salesByCategory
+  const uniqueCategories = Array.from(
+    new Set(salesByCategory.map(item => JSON.stringify({ 
+      code: item.categoryCode, 
+      name: item.categoryName 
+    })))
+  ).map(str => JSON.parse(str));
+
+  // Filter salesByCategory by selected category
+  const filteredSalesByCategory = selectedCategory === 'ALL' 
+    ? salesByCategory 
+    : salesByCategory.filter(item => item.categoryCode === selectedCategory);
+
+  // Debug: Log filtered data
+  if (selectedReport === 'by-category') {
+    console.log('📊 Report Selected Category:', selectedCategory);
+    console.log('📊 Report Total Data Count:', salesByCategory.length);
+    console.log('📊 Report Unique Categories:', uniqueCategories);
+    if (selectedCategory !== 'ALL') {
+      console.log('📊 Report Filtered Items Count:', filteredSalesByCategory.length);
+      console.log('📊 Report Total Sales (filtered):', filteredSalesByCategory.reduce((sum, item) => sum + item.totalSales, 0));
+      console.log('📊 First 3 filtered items:', filteredSalesByCategory.slice(0, 3));
+    } else {
+      console.log('📊 Report Total Sales (all):', salesByCategory.reduce((sum, item) => sum + item.totalSales, 0));
+    }
+  }
+
   // Render report content based on selected type
   const renderReportContent = () => {
     switch (selectedReport) {
@@ -645,6 +785,41 @@ export default function SalesReportPage() {
                 totalSales: (data) => {
                   const total = data.reduce((sum, item) => sum + item.totalSales, 0);
                   return <span className="font-medium text-green-600">฿{formatCurrency(total)}</span>;
+                }
+              }
+            }}
+          />
+        );
+
+      case 'by-category':
+        return (
+          <PaginatedTable
+            data={filteredSalesByCategory}
+            columns={salesByCategoryColumns}
+            itemsPerPage={15}
+            emptyMessage="ไม่มีข้อมูลหมวดหมู่"
+            defaultSortKey="categoryName"
+            defaultSortOrder="asc"
+            keyExtractor={(item: SalesByCategory, index?: number) => `${item.categoryCode}-${item.itemCode}-${index}`}
+            showSummary={true}
+            summaryConfig={{
+              labelColSpan: 2,
+              values: {
+                orderCount: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.orderCount, 0);
+                  return <span className="font-medium text-black">{formatNumber(total)}</span>;
+                },
+                totalQtySold: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.totalQtySold, 0);
+                  return <span className="font-medium text-black">{formatNumber(total)}</span>;
+                },
+                totalSales: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.totalSales, 0);
+                  return <span className="font-medium text-green-600">฿{formatCurrency(total)}</span>;
+                },
+                totalProfit: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.totalProfit, 0);
+                  return <span className="font-medium text-blue-600">฿{formatCurrency(total)}</span>;
                 }
               }
             }}
@@ -796,6 +971,33 @@ export default function SalesReportPage() {
           }
         });
 
+      case 'by-category':
+        return () => {
+          const categoryName = selectedCategory === 'ALL' 
+            ? 'ทั้งหมด' 
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+          
+          return exportStyledReport({
+            data: filteredSalesByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', orderCount: 'จำนวนออเดอร์', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย', totalProfit: 'กำไร', profitMarginPct: 'อัตรากำไร (%)' },
+            filename: `ยอดขายตามหมวดหมู่_${categoryName}`,
+            sheetName: 'Sales by Category',
+            title: `รายงานยอดขายตามหมวดหมู่ - ${categoryName}`,
+            subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+            numberColumns: ['orderCount', 'totalQtySold'],
+            currencyColumns: ['totalSales', 'totalProfit'],
+            percentColumns: ['profitMarginPct'],
+            summaryConfig: {
+              columns: {
+                orderCount: 'sum',
+                totalQtySold: 'sum',
+                totalSales: 'sum',
+                totalProfit: 'sum',
+              }
+            }
+          });
+        };
+
       case 'by-salesperson':
         return () => exportStyledReport({
           data: salesBySalesperson,
@@ -893,6 +1095,28 @@ export default function SalesReportPage() {
           title={currentReport?.label || ''}
           description={currentReport?.description || ''}
           onExportExcel={getExportFunction()}
+          headerExtra={
+            selectedReport === 'by-category' ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="category-filter" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                  หมวดหมู่:
+                </label>
+                <select
+                  id="category-filter"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                >
+                  <option value="ALL">ทั้งหมด</option>
+                  {uniqueCategories.map((cat) => (
+                    <option key={cat.code} value={cat.code}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : undefined
+          }
         >
           {loading ? (
             <TableSkeleton rows={10} />

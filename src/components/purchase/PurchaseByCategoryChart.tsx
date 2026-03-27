@@ -36,20 +36,21 @@ export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCa
         },
       },
       legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'center',
+        orient: 'horizontal',
+        bottom: '0%',
+        left: 'center',
         textStyle: {
           fontSize: 11,
         },
         type: 'scroll',
+        itemGap: 15,
       },
       series: [
         {
           name: 'ยอดซื้อ',
           type: 'pie',
-          radius: ['40%', '70%'],
-          center: ['40%', '50%'],
+          radius: ['35%', '65%'],
+          center: ['50%', '48%'],
           avoidLabelOverlap: false,
           itemStyle: {
             borderRadius: 10,

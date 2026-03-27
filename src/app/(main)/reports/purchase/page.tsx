@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBranchChange } from '@/lib/branch-events';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -73,6 +74,7 @@ export default function PurchaseReportPage() {
     getDateRange('THIS_MONTH')
   );
   const [selectedReport, setSelectedReport] = useState<ReportType>('purchase-trend');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +91,14 @@ export default function PurchaseReportPage() {
   useEffect(() => {
     fetchReportData(selectedReport);
   }, [dateRange, selectedReport]);
+
+  // Reset category filter when switching reports
+  useEffect(() => {
+    setSelectedCategory('ALL');
+  }, [selectedReport]);
+
+  // Listen for branch changes
+  useBranchChange(() => fetchReportData(selectedReport));
 
   const fetchReportData = async (reportType: ReportType) => {
     setLoading(true);
@@ -252,20 +262,22 @@ export default function PurchaseReportPage() {
   // Column definitions for Purchase by Category
   const purchaseByCategoryColumns: ColumnDef<PurchaseByCategory>[] = [
     {
-      key: 'categoryName',
-      header: 'หมวดหมู่',
+      key: 'itemCode',
+      header: 'รหัสสินค้า',
       sortable: true,
       align: 'left',
       render: (item: PurchaseByCategory) => (
-        <span className="font-medium">{item.categoryName}</span>
+        <span className="font-mono text-xs">{item.itemCode}</span>
       ),
     },
     {
-      key: 'uniqueItems',
-      header: 'จำนวนรายการ',
+      key: 'itemName',
+      header: 'ชื่อสินค้า',
       sortable: true,
-      align: 'right',
-      render: (item: PurchaseByCategory) => formatNumber(item.uniqueItems || 0),
+      align: 'left',
+      render: (item: PurchaseByCategory) => (
+        <span className="font-medium">{item.itemName}</span>
+      ),
     },
     {
       key: 'totalQty',
@@ -382,6 +394,19 @@ export default function PurchaseReportPage() {
   // Get current report option
   const currentReport = reportOptions.find(opt => opt.value === selectedReport);
 
+  // Get unique categories from purchaseByCategory
+  const uniqueCategories = Array.from(
+    new Set(purchaseByCategory.map(item => JSON.stringify({ 
+      code: item.categoryCode, 
+      name: item.categoryName 
+    })))
+  ).map(str => JSON.parse(str));
+
+  // Filter purchaseByCategory by selected category
+  const filteredPurchaseByCategory = selectedCategory === 'ALL' 
+    ? purchaseByCategory 
+    : purchaseByCategory.filter(item => item.categoryCode === selectedCategory);
+
   // Render report content based on selected type
   const renderReportContent = () => {
     switch (selectedReport) {
@@ -448,16 +473,16 @@ export default function PurchaseReportPage() {
       case 'by-category':
         return (
           <PaginatedTable
-            data={purchaseByCategory}
+            data={filteredPurchaseByCategory}
             columns={purchaseByCategoryColumns}
-            itemsPerPage={10}
+            itemsPerPage={15}
             emptyMessage="ไม่มีข้อมูลหมวดหมู่"
-            defaultSortKey="totalPurchase"
-            defaultSortOrder="desc"
-            keyExtractor={(item: PurchaseByCategory) => item.categoryName}
+            defaultSortKey="categoryName"
+            defaultSortOrder="asc"
+            keyExtractor={(item: PurchaseByCategory, index?: number) => `${item.categoryCode}-${item.itemCode}-${index}`}
             showSummary={true}
             summaryConfig={{
-              labelColSpan: 1,
+              labelColSpan: 2,
               values: {
                 totalQty: (data) => {
                   const total = data.reduce((sum, item) => sum + item.totalQty, 0);
@@ -560,23 +585,28 @@ export default function PurchaseReportPage() {
         });
 
       case 'by-category':
-        return () => exportStyledReport({
-          data: purchaseByCategory,
-          headers: { categoryName: 'หมวดหมู่', itemCount: 'จำนวนรายการ', totalQty: 'จำนวนซื้อ', totalPurchase: 'ยอดซื้อ', percentage: 'สัดส่วน (%)' },
-          filename: 'การซื้อตามหมวดหมู่',
-          sheetName: 'By Category',
-          title: 'รายงานการซื้อตามหมวดหมู่',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
-          numberColumns: ['itemCount', 'totalQty'],
-          currencyColumns: ['totalPurchase'],
-          percentColumns: ['percentage'],
-          summaryConfig: {
-            columns: {
-              totalQty: 'sum',
-              totalPurchase: 'sum',
+        return () => {
+          const categoryName = selectedCategory === 'ALL' 
+            ? 'ทั้งหมด' 
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+          
+          return exportStyledReport({
+            data: filteredPurchaseByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', totalQty: 'จำนวนซื้อ', totalPurchaseValue: 'ยอดซื้อ' },
+            filename: `การซื้อตามหมวดหมู่_${categoryName}`,
+            sheetName: 'By Category',
+            title: `รายงานการซื้อตามหมวดหมู่ - ${categoryName}`,
+            subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+            numberColumns: ['totalQty'],
+            currencyColumns: ['totalPurchaseValue'],
+            summaryConfig: {
+              columns: {
+                totalQty: 'sum',
+                totalPurchaseValue: 'sum',
+              }
             }
-          }
-        });
+          });
+        };
 
       case 'by-brand':
         return () => exportStyledReport({
@@ -656,6 +686,28 @@ export default function PurchaseReportPage() {
           description={currentReport?.description || ''}
           queryInfo={undefined}
           onExportExcel={getExportFunction()}
+          headerExtra={
+            selectedReport === 'by-category' ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="category-filter" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                  หมวดหมู่:
+                </label>
+                <select
+                  id="category-filter"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                >
+                  <option value="ALL">ทั้งหมด</option>
+                  {uniqueCategories.map((cat) => (
+                    <option key={cat.code} value={cat.code}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : undefined
+          }
         >
           {loading ? (
             <TableSkeleton rows={10} />

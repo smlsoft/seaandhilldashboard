@@ -6,11 +6,12 @@ import { createCachedQuery, CacheDuration } from '@/lib/cache';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const asOfDate = searchParams.get('as_of_date');
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
 
-    if (!asOfDate) {
+    if (!startDate || !endDate) {
       return NextResponse.json(
-        { error: 'as_of_date is required' },
+        { error: 'start_date and end_date are required' },
         { status: 400 }
       );
     }
@@ -22,9 +23,11 @@ export async function GET(request: Request) {
       branches = branches[0].split(',');
     }
 
+    const dateRange = { start: startDate, end: endDate };
+
     const cachedQuery = createCachedQuery(
-      () => getBalanceSheetData(asOfDate, branches),
-      ['accounting', 'balance-sheet', asOfDate, ...branches],
+      () => getBalanceSheetData(dateRange, branches),
+      ['accounting', 'balance-sheet', startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

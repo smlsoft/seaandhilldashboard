@@ -25,7 +25,7 @@ async function testConnections() {
             console.log('⚠️  ไม่พบการ config database ใน .env.local');
             console.log('\n💡 ตัวอย่างการ config:');
             console.log('   DB1_TYPE=CLICKHOUSE');
-            console.log('   DB1_CLICKHOUSE_HOST=http://103.13.30.32:8123');
+            console.log('   DB1_CLICKHOUSE_HOST=http://103.13.30.32:9000');
             console.log('   DB1_CLICKHOUSE_USER=changsiam');
             console.log('   ...');
             return;

@@ -64,17 +64,9 @@ export default function AccountingPage() {
         end_date: dateRange.end,
       });
 
-      const asOfParams = new URLSearchParams({
-        as_of_date: dateRange.end,
-      });
-
-      const agingParams = new URLSearchParams();
-
       if (branches.length > 0 && !branches.includes('ALL')) {
         branches.forEach(b => {
           params.append('branch', b);
-          asOfParams.append('branch', b);
-          agingParams.append('branch', b);
         });
       }
 
@@ -90,10 +82,10 @@ export default function AccountingPage() {
       ] = await Promise.all([
         fetch(`/api/accounting/kpis?${params}`),
         fetch(`/api/accounting/profit-loss?${params}`),
-        fetch(`/api/accounting/balance-sheet?${asOfParams}`),
+        fetch(`/api/accounting/balance-sheet?${params}`),
         fetch(`/api/accounting/cash-flow?${params}`),
-        fetch(`/api/accounting/ar-aging?${agingParams}`),
-        fetch(`/api/accounting/ap-aging?${agingParams}`),
+        fetch(`/api/accounting/ar-aging?${params}`),
+        fetch(`/api/accounting/ap-aging?${params}`),
         fetch(`/api/accounting/revenue-expense-breakdown?${params}`),
       ]);
 
@@ -255,7 +247,7 @@ export default function AccountingPage() {
             description="สินทรัพย์ หนี้สิน และส่วนของผู้ถือหุ้น"
             linkTo="/reports/accounting#balance-sheet"
             queryInfo={{
-              query: getBalanceSheetQuery(dateRange.end),
+              query: getBalanceSheetQuery(dateRange),
               format: 'JSONEachRow'
             }}
           >
@@ -294,7 +286,7 @@ export default function AccountingPage() {
             description="รายการลูกหนี้ค้างชำระ"
             linkTo="/reports/accounting#ar-aging"
             queryInfo={{
-              query: getARAgingQuery(),
+              query: getARAgingQuery(dateRange),
               format: 'JSONEachRow'
             }}
           >
@@ -312,7 +304,7 @@ export default function AccountingPage() {
             description="รายการเจ้าหนี้ค้างชำระ"
             linkTo="/reports/accounting#ap-aging"
             queryInfo={{
-              query: getAPAgingQuery(),
+              query: getAPAgingQuery(dateRange),
               format: 'JSONEachRow'
             }}
           >

@@ -129,7 +129,7 @@ export function getProfitLossQuery(dateRange: DateRange, branchSync?: string[]):
   `;
 }
 
-export function getBalanceSheetQuery(asOfDate: string, branchSync?: string[]): string {
+export function getBalanceSheetQuery(dateRange: DateRange, branchSync?: string[]): string {
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
     SELECT
@@ -145,7 +145,7 @@ export function getBalanceSheetQuery(asOfDate: string, branchSync?: string[]): s
       if(account_type = 'ASSETS', sum(debit - credit), sum(credit - debit)) as balance
     FROM journal_transaction_detail
     WHERE (account_type = 'ASSETS' OR account_type = 'LIABILITIES' OR account_type = 'EQUITY')
-      AND doc_datetime <= '${asOfDate}'
+      AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
     GROUP BY account_type, accountType, typeName, account_code, account_name
     HAVING balance != 0
@@ -182,7 +182,7 @@ export function getCashFlowQuery(dateRange: DateRange, branchSync?: string[]): s
   `;
 }
 
-export function getARAgingQuery(branchSync?: string[]): string {
+export function getARAgingQuery(dateRange: DateRange, branchSync?: string[]): string {
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
     SELECT
@@ -206,13 +206,14 @@ export function getARAgingQuery(branchSync?: string[]): string {
     WHERE status_payment IN ('Outstanding', 'Partially Paid')
       AND status_cancel != 'Cancel'
       AND doc_type = 'CREDIT'
+      AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
     ORDER BY daysOverdue DESC
     LIMIT 100
   `;
 }
 
-export function getAPAgingQuery(branchSync?: string[]): string {
+export function getAPAgingQuery(dateRange: DateRange, branchSync?: string[]): string {
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
     SELECT
@@ -236,6 +237,7 @@ export function getAPAgingQuery(branchSync?: string[]): string {
     WHERE status_payment IN ('Outstanding', 'Partially Paid')
       AND status_cancel != 'Cancel'
       AND doc_type = 'CREDIT'
+      AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
     ORDER BY daysOverdue DESC
     LIMIT 100

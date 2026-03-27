@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStockByBranch } from '@/lib/data/inventory';
+import { getSalesByCategory } from '@/lib/data/sales';
 import { createCachedQuery, CacheDuration } from '@/lib/cache';
 import { formatErrorResponse, logError } from '@/lib/errors';
 
@@ -16,16 +16,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let branches = searchParams.getAll('branch');
+    const branches = searchParams.getAll('branch');
+    let normalizedBranches = branches;
     if (branches.length === 0) {
-      branches = ['ALL'];
+      normalizedBranches = ['ALL'];
     } else if (branches.length === 1 && branches[0].includes(',')) {
-      branches = branches[0].split(',');
+      normalizedBranches = branches[0].split(',');
     }
 
     const cachedQuery = createCachedQuery(
-      () => getStockByBranch({ start: startDate, end: endDate }, branches),
-      ['inventory', 'by-branch', startDate, endDate, ...branches],
+      () => getSalesByCategory({ start: startDate, end: endDate }, normalizedBranches),
+      ['sales', 'by-category', startDate, endDate, ...normalizedBranches],
       CacheDuration.MEDIUM
     );
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
       data,
     });
   } catch (error) {
-    logError(error, 'GET /api/inventory/by-branch');
+    logError(error, 'GET /api/sales/by-category');
     return NextResponse.json(formatErrorResponse(error), { status: 500 });
   }
 }

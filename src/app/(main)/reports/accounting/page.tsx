@@ -133,16 +133,16 @@ export default function AccountingReportPage() {
           endpoint = `/api/accounting/profit-loss?${params}`;
           break;
         case 'balance-sheet':
-          endpoint = `/api/accounting/balance-sheet?as_of_date=${dateRange.end}`;
+          endpoint = `/api/accounting/balance-sheet?start_date=${dateRange.start}&end_date=${dateRange.end}`;
           break;
         case 'cash-flow':
           endpoint = `/api/accounting/cash-flow?${params}`;
           break;
         case 'ar-aging':
-          endpoint = '/api/accounting/ar-aging';
+          endpoint = `/api/accounting/ar-aging?${params}`;
           break;
         case 'ap-aging':
-          endpoint = '/api/accounting/ap-aging';
+          endpoint = `/api/accounting/ap-aging?${params}`;
           break;
         case 'revenue-breakdown':
         case 'expense-breakdown':
@@ -482,7 +482,7 @@ export default function AccountingReportPage() {
             emptyMessage="ไม่มีข้อมูลงบดุล"
             defaultSortKey="accountCode"
             defaultSortOrder="asc"
-            keyExtractor={(item: BalanceSheetItem) => item.accountCode}
+            keyExtractor={(item: BalanceSheetItem, index: number) => `${item.accountType}-${item.accountCode}-${index}`}
             showSummary={true}
             summaryConfig={{
               labelColSpan: 2,
@@ -546,7 +546,7 @@ export default function AccountingReportPage() {
             emptyMessage={selectedReport === 'ar-aging' ? 'ไม่มีลูกหนี้ค้างชำระ' : 'ไม่มีเจ้าหนี้ค้างชำระ'}
             defaultSortKey="outstanding"
             defaultSortOrder="desc"
-            keyExtractor={(item: AgingItem) => item.docNo}
+            keyExtractor={(item: AgingItem, index: number) => `${item.code}-${item.docNo}-${index}`}
           />
         );
 
@@ -561,7 +561,7 @@ export default function AccountingReportPage() {
             emptyMessage="ไม่มีข้อมูล"
             defaultSortKey="amount"
             defaultSortOrder="desc"
-            keyExtractor={(item: CategoryBreakdown) => item.accountGroup}
+            keyExtractor={(item: CategoryBreakdown, index: number) => `${item.accountGroup}-${index}`}
             showSummary={true}
             summaryConfig={{
               labelColSpan: 1,
@@ -764,16 +764,16 @@ export default function AccountingReportPage() {
             query: getProfitLossQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'balance-sheet' ? {
-            query: getBalanceSheetQuery(dateRange.end),
+            query: getBalanceSheetQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'cash-flow' ? {
             query: getCashFlowQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'ar-aging' ? {
-            query: getARAgingQuery(),
+            query: getARAgingQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'ap-aging' ? {
-            query: getAPAgingQuery(),
+            query: getAPAgingQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'revenue-breakdown' ? {
             query: getRevenueBreakdownQuery(dateRange),

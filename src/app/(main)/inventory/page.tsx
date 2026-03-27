@@ -44,9 +44,6 @@ export default function InventoryPage() {
   const [inventoryTurnover, setInventoryTurnover] = useState<InventoryTurnover[]>([]);
   const [stockByBranch, setStockByBranch] = useState<StockByBranch[]>([]);
 
-  // Get as_of_date (today by default)
-  const asOfDate = new Date().toISOString().split('T')[0];
-
   useEffect(() => {
     fetchAllData();
   }, [dateRange]);
@@ -60,21 +57,11 @@ export default function InventoryPage() {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
-        as_of_date: asOfDate,
-      });
-
-      const kpisParams = new URLSearchParams({
-        as_of_date: asOfDate,
-      });
-      const asOfParams = new URLSearchParams({
-        as_of_date: asOfDate,
       });
 
       if (branches.length > 0 && !branches.includes('ALL')) {
         branches.forEach(b => {
           params.append('branch', b);
-          kpisParams.append('branch', b);
-          asOfParams.append('branch', b);
         });
       }
 
@@ -88,13 +75,13 @@ export default function InventoryPage() {
         turnoverRes,
         branchRes,
       ] = await Promise.all([
-        fetch(`/api/inventory/kpis?${kpisParams}`),
+        fetch(`/api/inventory/kpis?${params}`),
         fetch(`/api/inventory/stock-movement?${params}`),
-        fetch(`/api/inventory/low-stock?${asOfParams}`),
-        fetch(`/api/inventory/overstock?${asOfParams}`),
+        fetch(`/api/inventory/low-stock?${params}`),
+        fetch(`/api/inventory/overstock?${params}`),
         fetch(`/api/inventory/slow-moving?${params}`),
         fetch(`/api/inventory/turnover?${params}`),
-        fetch(`/api/inventory/by-branch?${asOfParams}`),
+        fetch(`/api/inventory/by-branch?${params}`),
       ]);
 
       if (!kpisRes.ok) throw new Error('Failed to fetch KPIs');
@@ -181,7 +168,7 @@ export default function InventoryPage() {
             value={formatCurrency(kpis.totalInventoryValue.value)}
             icon={Package}
             queryInfo={{
-              query: getInventoryValueQuery(asOfDate),
+              query: getInventoryValueQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -190,7 +177,7 @@ export default function InventoryPage() {
             value={formatNumber(kpis.totalItemsInStock.value)}
             icon={Package}
             queryInfo={{
-              query: getTotalItemsQuery(asOfDate),
+              query: getTotalItemsQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -201,7 +188,7 @@ export default function InventoryPage() {
             trendUp={false}
             className={kpis.lowStockAlerts.value > 0 ? 'border-yellow-500/50' : ''}
             queryInfo={{
-              query: getLowStockCountQuery(asOfDate),
+              query: getLowStockCountQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -212,7 +199,7 @@ export default function InventoryPage() {
             trendUp={false}
             className={kpis.overstockAlerts.value > 0 ? 'border-orange-500/50' : ''}
             queryInfo={{
-              query: getOverstockCountQuery(asOfDate),
+              query: getOverstockCountQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -226,7 +213,7 @@ export default function InventoryPage() {
           description="จำนวนสินค้ารับเข้าและจ่ายออกรายวัน"
           linkTo="/reports/inventory#stock-movement"
           queryInfo={{
-            query: getStockMovementQuery(dateRange.start, dateRange.end),
+            query: getStockMovementQuery(dateRange),
             format: 'JSONEachRow',
           }}
         >
@@ -246,7 +233,7 @@ export default function InventoryPage() {
             description="รายการสินค้าที่ต่ำกว่าจุด Reorder Point"
             linkTo="/reports/inventory#low-stock"
             queryInfo={{
-              query: getLowStockItemsQuery(asOfDate),
+              query: getLowStockItemsQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
@@ -264,7 +251,7 @@ export default function InventoryPage() {
             description="รายการสินค้าที่เกินระดับสูงสุด"
             linkTo="/reports/inventory#overstock"
             queryInfo={{
-              query: getOverstockItemsQuery(asOfDate),
+              query: getOverstockItemsQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
@@ -284,7 +271,7 @@ export default function InventoryPage() {
           description="รายการสินค้าที่มีสต็อกคงค้างนานกว่า 90 วัน"
           linkTo="/reports/inventory#slow-moving"
           queryInfo={{
-            query: getSlowMovingItemsQuery(dateRange.start, dateRange.end, asOfDate),
+            query: getSlowMovingItemsQuery(dateRange),
             format: 'JSONEachRow',
           }}
         >
@@ -304,7 +291,7 @@ export default function InventoryPage() {
             description="การหมุนเวียนและวันขายหมดตามหมวดสินค้า"
             linkTo="/reports/inventory#turnover"
             queryInfo={{
-              query: getInventoryTurnoverQuery(dateRange.start, dateRange.end, asOfDate),
+              query: getInventoryTurnoverQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
@@ -322,7 +309,7 @@ export default function InventoryPage() {
             description="มูลค่าและจำนวนรายการสินค้าในแต่ละสาขา"
             linkTo="/reports/inventory#by-branch"
             queryInfo={{
-              query: getStockByBranchQuery(asOfDate),
+              query: getStockByBranchQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >

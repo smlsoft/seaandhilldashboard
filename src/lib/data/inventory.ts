@@ -53,7 +53,7 @@ function buildBranchFilter(branches?: string[]): { sql: string; params: Record<s
  * Note: stock_transaction table has qty (>0=in, <0=out), cost, amount
  * We calculate current stock by summing qty per item
  */
-export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]): Promise<InventoryKPIs> {
+export async function getInventoryKPIs(dateRange: DateRange, branchSync?: string[]): Promise<InventoryKPIs> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
@@ -68,7 +68,7 @@ export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]):
           sum(qty) as total_qty,
           sum(qty * cost) as total_value
         FROM stock_transaction
-        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
         ${branchFilter.sql}
     `;
 
@@ -87,7 +87,7 @@ export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]):
           item_code,
           sum(qty) as total_qty
         FROM stock_transaction
-        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
         ${branchFilter.sql}
     `;
 
@@ -106,7 +106,7 @@ export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]):
           item_code,
           sum(qty) as total_qty
         FROM stock_transaction
-        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
         ${branchFilter.sql}
     `;
 
@@ -125,7 +125,7 @@ export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]):
           item_code,
           sum(qty) as total_qty
         FROM stock_transaction
-        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
         ${branchFilter.sql}
     `;
 
@@ -136,7 +136,8 @@ export async function getInventoryKPIs(asOfDate: string, branchSync?: string[]):
     `;
 
     const params = {
-      as_of_date: asOfDate,
+      start_date: dateRange.start,
+      end_date: dateRange.end,
       ...branchFilter.params
     };
 
@@ -227,7 +228,7 @@ export async function getStockMovement(dateRange: DateRange, branchSync?: string
 /**
  * Get Low Stock Items (items with stock balance <= 10 units)
  */
-export async function getLowStockItems(asOfDate: string, branchSync?: string[]): Promise<LowStockItem[]> {
+export async function getLowStockItems(dateRange: DateRange, branchSync?: string[]): Promise<LowStockItem[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
@@ -243,7 +244,7 @@ export async function getLowStockItems(asOfDate: string, branchSync?: string[]):
         10 as reorderPoint,
         if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
       FROM stock_transaction
-      WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+      WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter.sql}
     `;
 
@@ -257,7 +258,8 @@ export async function getLowStockItems(asOfDate: string, branchSync?: string[]):
     const result = await clickhouse.query({
       query,
       query_params: {
-        as_of_date: asOfDate,
+        start_date: dateRange.start,
+        end_date: dateRange.end,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -285,7 +287,7 @@ export async function getLowStockItems(asOfDate: string, branchSync?: string[]):
 /**
  * Get Overstock Items (items with stock > 1000 units)
  */
-export async function getOverstockItems(asOfDate: string, branchSync?: string[]): Promise<OverstockItem[]> {
+export async function getOverstockItems(dateRange: DateRange, branchSync?: string[]): Promise<OverstockItem[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
@@ -300,7 +302,7 @@ export async function getOverstockItems(asOfDate: string, branchSync?: string[])
         1000 as maxStockLevel,
         if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
       FROM stock_transaction
-      WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+      WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter.sql}
     `;
 
@@ -314,7 +316,8 @@ export async function getOverstockItems(asOfDate: string, branchSync?: string[])
     const result = await clickhouse.query({
       query,
       query_params: {
-        as_of_date: asOfDate,
+        start_date: dateRange.start,
+        end_date: dateRange.end,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -348,7 +351,7 @@ export async function getOverstockItems(asOfDate: string, branchSync?: string[])
  * Get Slow Moving Items (items with low turnover)
  * Calculate current stock by summing qty movements
  */
-export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string, branchSync?: string[]): Promise<SlowMovingItem[]> {
+export async function getSlowMovingItems(dateRange: DateRange, branchSync?: string[]): Promise<SlowMovingItem[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
@@ -374,7 +377,7 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string,
           if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg,
           sum(qty * cost) as stockValue
         FROM stock_transaction
-        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
         ${branchFilter.sql}
         GROUP BY item_code
         HAVING currentStock > 0
@@ -400,7 +403,6 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string,
       query_params: {
         start_date: dateRange.start,
         end_date: dateRange.end,
-        as_of_date: asOfDate,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -434,7 +436,7 @@ export async function getSlowMovingItems(dateRange: DateRange, asOfDate: string,
  * Get Inventory Turnover by Category
  * Calculate using stock movements (qty) instead of non-existent columns
  */
-export async function getInventoryTurnover(dateRange: DateRange, asOfDate: string, branchSync?: string[]): Promise<InventoryTurnover[]> {
+export async function getInventoryTurnover(dateRange: DateRange, branchSync?: string[]): Promise<InventoryTurnover[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
@@ -450,7 +452,7 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
           item_category_name as categoryName,
           sum(qty * cost) as avgInventoryValue
         FROM stock_transaction
-        WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
           AND item_category_name != ''
           ${branchFilter.sql}
         GROUP BY item_category_name
@@ -476,7 +478,6 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
       query_params: {
         start_date: dateRange.start,
         end_date: dateRange.end,
-        as_of_date: asOfDate,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -507,7 +508,7 @@ export async function getInventoryTurnover(dateRange: DateRange, asOfDate: strin
  * Get Stock by Branch
  * Note: stock_transaction doesn't have branch_code/branch_name, using wh_code/wh_name (warehouse) instead
  */
-export async function getStockByBranch(asOfDate: string, branchSync?: string[]): Promise<StockByBranch[]> {
+export async function getStockByBranch(dateRange: DateRange, branchSync?: string[]): Promise<StockByBranch[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
@@ -519,7 +520,7 @@ export async function getStockByBranch(asOfDate: string, branchSync?: string[]):
         sum(qty) as qtyOnHand,
         sum(qty * cost) as inventoryValue
       FROM stock_transaction
-      WHERE toDate(doc_datetime) <= toDate('${asOfDate}')
+      WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
         AND wh_code != ''
         ${branchFilter.sql}
     `;
@@ -533,7 +534,8 @@ export async function getStockByBranch(asOfDate: string, branchSync?: string[]):
     const result = await clickhouse.query({
       query,
       query_params: {
-        as_of_date: asOfDate,
+        start_date: dateRange.start,
+        end_date: dateRange.end,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
