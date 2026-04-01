@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { motion } from 'framer-motion';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
 import { SimpleKPICard, KPIGrid } from '@/components/comparison/SimpleKPICard';
@@ -388,11 +389,26 @@ export default function SalesComparisonPage() {
     };
   }, [data, rankedData]);
 
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   /* ═══ Render ═══ */
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-widest font-semibold mb-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
@@ -402,7 +418,7 @@ export default function SalesComparisonPage() {
           <p className="text-sm text-muted-foreground mt-0.5">เปรียบเทียบข้อมูลการขาย สินค้า และลูกค้าทั้งหมดระหว่างกิจการ</p>
         </div>
         <ComparisonDateFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Loading / Empty */}
       {loading ? (
@@ -425,17 +441,19 @@ export default function SalesComparisonPage() {
           {/* ════════════════════════════════════════
              1) KPI Summary Cards
              ════════════════════════════════════════ */}
-          <KPIGrid
-            columns={6}
-            cards={[
-              { icon: DollarSign, iconColor: 'text-indigo-600', label: 'ยอดขายรวม', value: totals.sales, barColor: 'bg-indigo-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
-              { icon: TrendingUp, iconColor: 'text-emerald-600', label: 'กำไรขั้นต้นรวม', value: totals.profit, barColor: 'bg-emerald-500', subText: `${totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : 0}% margin`, format: 'money' },
-              { icon: ShoppingCart, iconColor: 'text-amber-600', label: 'ออเดอร์รวม', value: totals.orders, barColor: 'bg-amber-500', format: 'number' },
-              { icon: Receipt, iconColor: 'text-sky-600', label: 'เฉลี่ยต่อบิล', value: totals.avgOrder, barColor: 'bg-sky-500', format: 'money' },
-              { icon: Users, iconColor: 'text-violet-600', label: 'ลูกค้า Top', value: totals.customers, barColor: 'bg-violet-500', format: 'number' },
-              { icon: CreditCard, iconColor: 'text-rose-600', label: 'AR ค้างชำระ', value: totals.arOutstanding, barColor: 'bg-rose-500', format: 'money' },
-            ]}
-          />
+          <motion.div variants={itemVariants}>
+            <KPIGrid
+              columns={6}
+              cards={[
+                { icon: DollarSign, iconColor: 'text-indigo-600', label: 'ยอดขายรวม', value: totals.sales, barColor: 'bg-indigo-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
+                { icon: TrendingUp, iconColor: 'text-emerald-600', label: 'กำไรขั้นต้นรวม', value: totals.profit, barColor: 'bg-emerald-500', subText: `${totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : 0}% margin`, format: 'money' },
+                { icon: ShoppingCart, iconColor: 'text-amber-600', label: 'ออเดอร์รวม', value: totals.orders, barColor: 'bg-amber-500', format: 'number' },
+                { icon: Receipt, iconColor: 'text-sky-600', label: 'เฉลี่ยต่อบิล', value: totals.avgOrder, barColor: 'bg-sky-500', format: 'money' },
+                { icon: Users, iconColor: 'text-violet-600', label: 'ลูกค้า Top', value: totals.customers, barColor: 'bg-violet-500', format: 'number' },
+                { icon: CreditCard, iconColor: 'text-rose-600', label: 'AR ค้างชำระ', value: totals.arOutstanding, barColor: 'bg-rose-500', format: 'money' },
+              ]}
+            />
+          </motion.div>
 
           {/* ════════════════════════════════════════
              2) Hero - Top Performer
@@ -489,7 +507,7 @@ export default function SalesComparisonPage() {
           {/* ════════════════════════════════════════
              3) Ranking Table
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<Trophy className="h-4 w-4 text-amber-500" />}
               title="อันดับยอดขายกิจการ"
@@ -536,12 +554,12 @@ export default function SalesComparisonPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              4) Sales vs Profit + Sales Share
              ════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <SectionHeader icon={<DollarSign className="h-4 w-4 text-indigo-600" />} title="ยอดขาย vs กำไรขั้นต้น" desc="เปรียบเทียบรายได้และกำไรแต่ละกิจการ" />
               <div className="px-6 pb-5">
@@ -555,12 +573,12 @@ export default function SalesComparisonPage() {
                 <ReactECharts option={salesShareChart} style={{ height: 300 }} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              5) Margin & Growth + Orders
              ════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <SectionHeader icon={<Percent className="h-4 w-4 text-violet-600" />} title="Gross Margin & Sales Growth" desc="อัตรากำไรขั้นต้นและอัตราเติบโต" />
               <div className="px-6 pb-5">
@@ -574,22 +592,22 @@ export default function SalesComparisonPage() {
                 <ReactECharts option={ordersChart} style={{ height: 300 }} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              6) Sales Trend
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader icon={<TrendingUp className="h-4 w-4 text-emerald-600" />} title="แนวโน้มยอดขาย" desc="เปรียบเทียบยอดขายรายวัน/รายเดือน" />
             <div className="px-6 pb-5">
               <ReactECharts option={trendChart} style={{ height: 320 }} />
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              7) Top Products + Customer Metrics
              ════════════════════════════════════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <SectionHeader icon={<Package className="h-4 w-4 text-amber-600" />} title="สินค้าขายดี Top 10" desc="สินค้าที่ขายดีจากทุกกิจการ" />
               <div className="px-6 pb-5">
@@ -603,22 +621,22 @@ export default function SalesComparisonPage() {
                 <ReactECharts option={customerRadarChart} style={{ height: 300, width: '100%' }} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              8) AR Status
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader icon={<CreditCard className="h-4 w-4 text-rose-600" />} title="สถานะลูกหนี้ (AR)" desc="เปรียบเทียบสถานะการชำระเงินของลูกค้า" />
             <div className="px-6 pb-5">
               <ReactECharts option={arChart} style={{ height: 300 }} />
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              9) Top Products per Branch
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm p-6">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm p-6">
             <h3 className="font-bold text-lg mb-1">สินค้าขายดี Top 5 แต่ละกิจการ</h3>
             <p className="text-sm text-muted-foreground mb-6">เปรียบเทียบสินค้าที่ขายดีที่สุดในแต่ละกิจการ</p>
             <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -640,12 +658,12 @@ export default function SalesComparisonPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              10) Salesperson Comparison
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm p-6">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm p-6">
             <h3 className="font-bold text-lg mb-1">Top พนักงานขายแต่ละกิจการ</h3>
             <p className="text-sm text-muted-foreground mb-6">เปรียบเทียบพนักงานขายยอดเยี่ยม</p>
             <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -670,12 +688,12 @@ export default function SalesComparisonPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              11) Top Customers Comparison
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm p-6">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm p-6">
             <h3 className="font-bold text-lg mb-1">ลูกค้า Top 5 แต่ละกิจการ</h3>
             <p className="text-sm text-muted-foreground mb-6">เปรียบเทียบลูกค้าที่ซื้อมากที่สุด</p>
             <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -700,21 +718,21 @@ export default function SalesComparisonPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              12) Branch Legend
-             ════════════════════════════════════════ 
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
+             ════════════════════════════════════════ */}
+          <motion.div variants={itemVariants} className="rounded-xl border bg-card p-4 shadow-sm">
             <p className="text-xs font-semibold text-muted-foreground mb-2">กิจการที่แสดง</p>
             <div className="flex flex-wrap gap-4">
               {rankedData.map((b, i) => (
                 <LegendDot key={b.branchKey} color={BRANCH_PALETTE[i % BRANCH_PALETTE.length].hex} label={b.branchName} />
               ))}
             </div>
-          </div>*/}
+          </motion.div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 }

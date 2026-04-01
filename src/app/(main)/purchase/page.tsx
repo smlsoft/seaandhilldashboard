@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -31,40 +32,23 @@ import {
 
 export default function PurchasePage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-
-  // Data states
-  const [kpis, setKpis] = useState<PurchaseKPIs | null>(null);
-  const [trendData, setTrendData] = useState<PurchaseTrendData[]>([]);
-  const [topSuppliers, setTopSuppliers] = useState<TopSupplier[]>([]);
-  const [purchaseByCategory, setPurchaseByCategory] = useState<PurchaseByCategory[]>([]);
-  const [purchaseByBrand, setPurchaseByBrand] = useState<PurchaseByBrand[]>([]);
-  const [apOutstanding, setApOutstanding] = useState<APOutstanding[]>([]);
-
-
-  useEffect(() => {
-    fetchAllData();
-  }, [dateRange]);
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   // Reset category filter when date range changes
   useEffect(() => {
     setSelectedCategory('ALL');
   }, [dateRange]);
 
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['purchaseData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
 
       // Fetch all data in parallel
@@ -100,22 +84,34 @@ export default function PurchasePage() {
         apRes.json(),
       ]);
 
-      setKpis(kpisData.data);
-      setTrendData(trendDataRes.data);
-      setTopSuppliers(suppliersData.data);
-      setPurchaseByCategory(categoryData.data);
-      setPurchaseByBrand(brandData.data);
-      setApOutstanding(apData.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching purchase data:', err);
-    } finally {
-      setLoading(false);
+      return {
+        kpis: kpisData.data as PurchaseKPIs,
+        trendData: trendDataRes.data as PurchaseTrendData[],
+        topSuppliers: suppliersData.data as TopSupplier[],
+        purchaseByCategory: categoryData.data as PurchaseByCategory[],
+        purchaseByBrand: brandData.data as PurchaseByBrand[],
+        apOutstanding: apData.data as APOutstanding[],
+      };
     }
-  };
+  });
 
-  // Listen for branch changes
-  useBranchChange(fetchAllData);
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+  const kpis = data?.kpis;
+  const trendData = data?.trendData || [];
+  const topSuppliers = data?.topSuppliers || [];
+  const purchaseByCategory = data?.purchaseByCategory || [];
+  const purchaseByBrand = data?.purchaseByBrand || [];
+  const apOutstanding = data?.apOutstanding || [];
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -200,9 +196,14 @@ export default function PurchasePage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             การจัดซื้อและซัพพลายเออร์
@@ -212,22 +213,22 @@ export default function PurchasePage() {
           </p>
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
       {error && (
-        <ErrorDisplay error={error} onRetry={fetchAllData} />
+        <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>
       )}
 
       {/* KPI Cards */}
       {loading ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <KPICardSkeleton key={i} />
           ))}
-        </div>
+        </motion.div>
       ) : kpis ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="ยอดซื้อรวม"
             value={formatCurrency(kpis.totalPurchases.value)}
@@ -272,10 +273,11 @@ export default function PurchasePage() {
               format: 'JSONEachRow'
             }}
           />
-        </div>
+        </motion.div>
       ) : null}
 
       {/* Purchase Trend Chart */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="แนวโน้มการจัดซื้อ"
@@ -293,13 +295,15 @@ export default function PurchasePage() {
           )}
         </DataCard>
       </ErrorBoundary>
+      </motion.div>
 
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
 
 
         {/* Top Suppliers */}
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="ซัพพลายเออร์ยอดนิยม Top 20"
             description="รายการซัพพลายเออร์ที่มียอดซื้อสูงสุด"
             linkTo="/reports/purchase#top-suppliers"
@@ -352,6 +356,7 @@ export default function PurchasePage() {
 
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="การซื้อตามหมวดสินค้า"
             description="สัดส่วนการซื้อแยกตามหมวดหมู่"
             linkTo="/reports/purchase#by-category"
@@ -367,10 +372,10 @@ export default function PurchasePage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* Purchase by Category & Brand */}
-      <div className="grid gap-6">
+      <motion.div variants={itemVariants} className="grid gap-6">
 
         <ErrorBoundary>
           <DataCard
@@ -389,9 +394,10 @@ export default function PurchasePage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* Purchase Items by Category - Detailed Table */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="รายละเอียดสินค้าแยกตามหมวดหมู่"
@@ -429,8 +435,10 @@ export default function PurchasePage() {
           )}
         </DataCard>
       </ErrorBoundary>
+      </motion.div>
 
       {/* AP Outstanding */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="สถานะเจ้าหนี้การค้า (AP) Top 20"
@@ -526,6 +534,7 @@ export default function PurchasePage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

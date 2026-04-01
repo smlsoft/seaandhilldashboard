@@ -9,7 +9,7 @@ const https = require('https');
 const http = require('http');
 
 // ดึง config จาก .env.local
-const CLICKHOUSE_HOST = 'http://103.13.30.32:9000';
+const CLICKHOUSE_HOST = 'http://103.13.30.32:8123';
 const CLICKHOUSE_USER = 'changsiam';
 const CLICKHOUSE_PASSWORD = 'n300sJzuR0ArXpbo';
 const CLICKHOUSE_DB = 'datachangsiam';

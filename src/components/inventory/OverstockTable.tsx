@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { PaginatedTable, type ColumnDef } from '../PaginatedTable';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, RotateCcw } from 'lucide-react';
 import type { OverstockItem } from '@/lib/data/types';
 
 interface OverstockChartProps {
@@ -26,7 +26,7 @@ const STATUS_CONFIG = [
 
 export function OverstockTable({ data, height = '300px' }: OverstockChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>('all');
 
   // Calculate excess percent and status for each item
   const getExcessPercent = (item: OverstockItem): number => {
@@ -290,26 +290,27 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
         {selectedStatus && (
           <button
             onClick={() => setSelectedStatus(null)}
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 dark:bg-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500 transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all text-gray-700 dark:text-gray-700"
           >
-            ❌ ล้างตัวกรอง
+            <RotateCcw size={16} />
+          
           </button>
         )}
       </div>
 
       {/* Chart */}
       {data.length === 0 ? (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center shrink-0" style={{ height }}>
           <p className="text-muted-foreground text-sm">ไม่มีสินค้าเกินคลัง</p>
         </div>
       ) : (
-        <div ref={chartRef} style={{ height, width: '100%' }} />
+        <div ref={chartRef} style={{ height, width: '100%' }} className="shrink-0" />
       )}
 
       {/* Detail Table - Show when status is selected */}
-      {selectedStatus && filteredData.length > 0 && (
-        <div className="-mt-28 border-t pt-1">
-          <div className="flex items-center gap-2 mb-0">
+      {selectedStatus && (
+        <div className="-mt-28 border-t pt-1 flex-1 flex flex-col min-h-[320px] relative z-10 bg-card rounded-b-xl">
+          <div className="flex items-center gap-2 mb-0 shrink-0 pt-2 bg-card">
             <AlertCircle className={`h-5 w-5 ${selectedStatus === 'all' ? 'text-gray-600' : getSeverityColor(selectedStatus)}`} />
             <h4 className="font-semibold">
               {selectedStatus === 'all'
@@ -318,7 +319,7 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
               }
             </h4>
           </div>
-          <div className="-mt-1">
+          <div className="-mt-1 flex-1 flex flex-col min-h-0 bg-card pb-2">
             <PaginatedTable
               data={filteredData}
               columns={columns}

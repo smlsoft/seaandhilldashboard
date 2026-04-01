@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { motion } from 'framer-motion';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
 import { SimpleKPICard, KPIGrid } from '@/components/comparison/SimpleKPICard';
@@ -250,11 +251,26 @@ export default function AccountingComparisonPage() {
     return groups;
   };
 
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   /* ═══ Render ═══ */
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-widest font-semibold mb-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
@@ -264,7 +280,7 @@ export default function AccountingComparisonPage() {
           <p className="text-sm text-muted-foreground mt-0.5">เปรียบเทียบข้อมูลทางบัญชีและการเงินทั้งหมดระหว่างกิจการ</p>
         </div>
         <ComparisonDateFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Loading / Empty */}
       {loading ? (
@@ -287,20 +303,22 @@ export default function AccountingComparisonPage() {
           {/* ════════════════════════════════════════
              1) KPI Summary Cards (รวม)
              ════════════════════════════════════════ */}
-          <KPIGrid
-            columns={5}
-            cards={[
-              { icon: TrendingUp, iconColor: 'text-emerald-600', label: 'รายได้รวม', value: totals.revenue, barColor: 'bg-emerald-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
-              { icon: TrendingDown, iconColor: 'text-rose-600', label: 'ค่าใช้จ่ายรวม', value: totals.expenses, barColor: 'bg-rose-500', subText: `${totals.revenue > 0 ? ((totals.expenses / totals.revenue) * 100).toFixed(1) : 0}% ของรายได้`, format: 'money' },
-              { icon: Wallet, iconColor: 'text-sky-600', label: 'สินทรัพย์รวม', value: totals.assets, barColor: 'bg-sky-500', format: 'money' },
-              { icon: CreditCard, iconColor: 'text-amber-600', label: 'หนี้สินรวม', value: totals.liabilities, barColor: 'bg-amber-500', subText: `D/E ${totals.equity > 0 ? (totals.liabilities / totals.equity).toFixed(2) : '-'}`, format: 'money' },
-              { icon: PiggyBank, iconColor: 'text-violet-600', label: 'ส่วนของทุนรวม', value: totals.equity, barColor: 'bg-violet-500', format: 'money' },
-            ]}
-          />
+          <motion.div variants={itemVariants}>
+            <KPIGrid
+              columns={5}
+              cards={[
+                { icon: TrendingUp, iconColor: 'text-emerald-600', label: 'รายได้รวม', value: totals.revenue, barColor: 'bg-emerald-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
+                { icon: TrendingDown, iconColor: 'text-rose-600', label: 'ค่าใช้จ่ายรวม', value: totals.expenses, barColor: 'bg-rose-500', subText: `${totals.revenue > 0 ? ((totals.expenses / totals.revenue) * 100).toFixed(1) : 0}% ของรายได้`, format: 'money' },
+                { icon: Wallet, iconColor: 'text-sky-600', label: 'สินทรัพย์รวม', value: totals.assets, barColor: 'bg-sky-500', format: 'money' },
+                { icon: CreditCard, iconColor: 'text-amber-600', label: 'หนี้สินรวม', value: totals.liabilities, barColor: 'bg-amber-500', subText: `D/E ${totals.equity > 0 ? (totals.liabilities / totals.equity).toFixed(2) : '-'}`, format: 'money' },
+                { icon: PiggyBank, iconColor: 'text-violet-600', label: 'ส่วนของทุนรวม', value: totals.equity, barColor: 'bg-violet-500', format: 'money' },
+              ]}
+            />
+          </motion.div>
           {/* ════════════════════════════════════════
              3) อันดับผลประกอบการ (Profitability Ranking)
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<Trophy className="h-4 w-4 text-amber-500" />}
               title="อันดับผลประกอบการ"
@@ -349,9 +367,9 @@ export default function AccountingComparisonPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* ════════════════════════════════════════
              2) รายได้ vs ค่าใช้จ่าย (Grouped Bar)
              ════════════════════════════════════════ */}
@@ -443,13 +461,13 @@ export default function AccountingComparisonPage() {
                 })()}
               </div>
             </div>
-          </div>
+          </motion.div>
 
 
           {/* ════════════════════════════════════════
              4) กำไร-ขาดทุนสุทธิ รายเดือน — Stacked Area Chart
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<Receipt className="h-4 w-4 text-indigo-500" />}
               title="กำไร-ขาดทุนสุทธิ รายเดือน"
@@ -510,12 +528,12 @@ export default function AccountingComparisonPage() {
                 return <ReactECharts option={option} style={{ height: 320 }} opts={{ renderer: 'svg' }} />;
               })()}
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              6) กระแสเงินสด
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<Layers className="h-4 w-4 text-teal-500" />}
               title="กระแสเงินสด"
@@ -557,7 +575,7 @@ export default function AccountingComparisonPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              7) อายุลูกหนี้ (AR Aging) — Grouped Bar
@@ -634,7 +652,7 @@ export default function AccountingComparisonPage() {
           {/* ════════════════════════════════════════
              9) รายได้ตามหมวด — Nightingale Rose (Polar Bar) แยกกิจการ
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
               title="รายได้ตามหมวด"
@@ -722,12 +740,12 @@ export default function AccountingComparisonPage() {
                 })}
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* ════════════════════════════════════════
              10) ค่าใช้จ่ายตามหมวด — Donut Charts
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<TrendingDown className="h-4 w-4 text-rose-500" />}
               title="ค่าใช้จ่ายตามหมวด"
@@ -782,9 +800,9 @@ export default function AccountingComparisonPage() {
                 })}
               </div>
             </div>
-          </div>
+          </motion.div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 }

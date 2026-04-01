@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -94,56 +95,29 @@ export default function SalesReportPage() {
   );
   const [selectedReport, setSelectedReport] = useState<ReportType>('sales-trend');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Data states
-  const [trendData, setTrendData] = useState<SalesTrendData[]>([]);
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [salesByBranch, setSalesByBranch] = useState<SalesByBranch[]>([]);
-  const [salesByCategory, setSalesByCategory] = useState<SalesByCategory[]>([]);
-  const [salesBySalesperson, setSalesBySalesperson] = useState<
-    SalesBySalesperson[]
-  >([]);
-  const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
-  const [arStatus, setArStatus] = useState<ARStatus[]>([]);
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
-
-  useEffect(() => {
-    fetchReportData(selectedReport);
-  }, [dateRange, selectedReport]);
 
   // Reset category filter when switching reports
   useEffect(() => {
     setSelectedCategory('ALL');
   }, [selectedReport]);
 
-  // Listen for branch changes
-  useBranchChange(() => fetchReportData(selectedReport));
-
-  const fetchReportData = async (reportType: ReportType) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['salesReportData', selectedReport, dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
 
-      // Debug: Log API parameters
-      console.log('📋 Reports Page - Date Range:', dateRange);
-      console.log('📋 Reports Page - Branches:', branches);
-      console.log('📋 Reports Page - API Params:', params.toString());
-
       let endpoint = '';
-      switch (reportType) {
+      switch (selectedReport) {
         case 'sales-trend':
           endpoint = `/api/sales/trend?${params}`;
           break;
@@ -168,42 +142,24 @@ export default function SalesReportPage() {
       }
 
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${reportType} data`);
+      if (!response.ok) throw new Error(`Failed to fetch ${selectedReport} data`);
 
       const result = await response.json();
-
-      switch (reportType) {
-        case 'sales-trend':
-          setTrendData(result.data);
-          break;
-        case 'top-products':
-          setTopProducts(result.data);
-          break;
-        case 'by-branch':
-          setSalesByBranch(result.data);
-          break;
-        case 'by-category':
-          setSalesByCategory(result.data);
-          break;
-        case 'by-salesperson':
-          setSalesBySalesperson(result.data);
-          break;
-        case 'top-customers':
-          setTopCustomers(result.data);
-          break;
-        case 'ar-status':
-          setArStatus(result.data);
-          break;
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล'
-      );
-      console.error('Error fetching sales data:', err);
-    } finally {
-      setLoading(false);
+      return result.data;
     }
-  };
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+
+  const trendData: SalesTrendData[] = selectedReport === 'sales-trend' ? (reportData || []) : [];
+  const topProducts: TopProduct[] = selectedReport === 'top-products' ? (reportData || []) : [];
+  const salesByBranch: SalesByBranch[] = selectedReport === 'by-branch' ? (reportData || []) : [];
+  const salesByCategory: SalesByCategory[] = selectedReport === 'by-category' ? (reportData || []) : [];
+  const salesBySalesperson: SalesBySalesperson[] = selectedReport === 'by-salesperson' ? (reportData || []) : [];
+  const topCustomers: TopCustomer[] = selectedReport === 'top-customers' ? (reportData || []) : [];
+  const arStatus: ARStatus[] = selectedReport === 'ar-status' ? (reportData || []) : [];
+
+  const fetchReportData = () => { refetch(); };
 
   // Column definitions for Sales Trend
   const salesTrendColumns: ColumnDef<SalesTrendData>[] = [
@@ -1061,10 +1017,25 @@ export default function SalesReportPage() {
     }
   };
 
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header with integrated controls */}
-      <div className="flex flex-col gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
@@ -1083,13 +1054,14 @@ export default function SalesReportPage() {
           options={reportOptions}
           onChange={(value) => setSelectedReport(value as ReportType)}
         />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
-      {error && <ErrorDisplay error={error} onRetry={() => fetchReportData(selectedReport)} />}
+      {error && <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>}
 
       {/* Report Content */}
-      <ErrorBoundary>
+      <motion.div variants={itemVariants}>
+        <ErrorBoundary>
         <DataCard
           id={selectedReport}
           title={currentReport?.label || ''}
@@ -1125,6 +1097,7 @@ export default function SalesReportPage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

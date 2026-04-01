@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { motion } from 'framer-motion';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { AlertsCard } from '@/components/AlertsCard';
@@ -9,10 +10,10 @@ import { RecentSales } from '@/components/RecentSales';
 import { DownloadReportButton } from '@/components/DownloadReportButton';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { DollarSign, ShoppingCart, Users, Package } from 'lucide-react';
-import { useBranchChange } from '@/lib/branch-events';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { getDateRange } from '@/lib/dateRanges';
 import type { DateRange } from '@/lib/data/types';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
 
 // Custom ECharts Theme
 const theme = {
@@ -44,55 +45,47 @@ const theme = {
 };
 
 export default function Dashboard() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('TODAY'));
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    console.log('📅 Fetching data with dateRange:', dateRange);
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['dashboardData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams();
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
-      // Add date range to params
       params.append('startDate', dateRange.start);
       params.append('endDate', dateRange.end);
       const queryParams = params.toString() ? `?${params.toString()}` : '';
-      console.log('🔗 API URL:', `/api/dashboard${queryParams}`);
 
       const [dashboardRes, salesChartRes, revenueRes] = await Promise.all([
         fetch(`/api/dashboard${queryParams}`),
         fetch(`/api/sales-chart${queryParams}`),
-        fetch(`/api/revenue-expense${queryParams}`)
+        fetch(`/api/revenue-expense${queryParams}`),
       ]);
 
       const dashboardData = await dashboardRes.json();
       const salesChartData = await salesChartRes.json();
       const revenueData = await revenueRes.json();
 
-      setData({
+      return {
         ...dashboardData,
         salesChart: Array.isArray(salesChartData) ? salesChartData : [],
-        revenueChart: Array.isArray(revenueData) ? revenueData : []
-      });
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
+        revenueChart: Array.isArray(revenueData) ? revenueData : [],
+      };
+    },
+  });
 
-    }
-  }, [dateRange]);
-
-  useEffect(() => {
-    console.log('🔄 DateRange changed:', dateRange);
-    fetchData();
-  }, [dateRange, fetchData]);
-
-  // Listen for branch changes
-  useBranchChange(fetchData);
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   if (loading) {
     return (
@@ -185,9 +178,14 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <motion.div 
+      className="space-y-8"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header Section */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[hsl(var(--foreground))]">
             ภาพรวมธุรกิจ
@@ -204,10 +202,10 @@ export default function Dashboard() {
           />
           <DownloadReportButton />
         </div>
-      </div>
+      </motion.div>
 
       {/* KPI Grid */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <motion.div variants={itemVariants} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="ยอดขายรวม"
           value={`฿${data?.totalSales?.toLocaleString() || 0}`}
@@ -215,7 +213,6 @@ export default function Dashboard() {
           trend={data?.salesGrowth ? `${data.salesGrowth > 0 ? '+' : ''}${data.salesGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.salesGrowth > 0}
           description="เทียบกับเดือนที่แล้ว"
-          className="delay-100"
         />
         <KPICard
           title="คำสั่งซื้อ"
@@ -224,7 +221,6 @@ export default function Dashboard() {
           trend={data?.ordersGrowth ? `${data.ordersGrowth > 0 ? '+' : ''}${data.ordersGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.ordersGrowth > 0}
           description="เทียบกับเดือนที่แล้ว"
-          className="delay-200"
         />
         <KPICard
           title="ลูกค้า"
@@ -233,7 +229,6 @@ export default function Dashboard() {
           trend={data?.customersGrowth ? `${data.customersGrowth > 0 ? '+' : ''}${data.customersGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.customersGrowth > 0}
           description="เทียบกับเดือนที่แล้ว"
-          className="delay-300"
         />
         <KPICard
           title="มูลค่าเฉลี่ย"
@@ -242,12 +237,11 @@ export default function Dashboard() {
           trend={data?.avgOrderGrowth ? `${data.avgOrderGrowth > 0 ? '+' : ''}${data.avgOrderGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.avgOrderGrowth > 0}
           description="ต่อคำสั่งซื้อ"
-          className="delay-400"
         />
-      </div>
+      </motion.div>
 
       {/* Charts Section */}
-      <div className="grid gap-6 lg:grid-cols-7">
+      <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-7">
         {loading ? (
           // Skeleton loading for charts
           <>
@@ -273,10 +267,10 @@ export default function Dashboard() {
             </DataCard>
           </>
         )}
-      </div >
+      </motion.div >
 
       {/* Bottom Section */}
-      < div className="grid gap-6 lg:grid-cols-3" >
+      <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-3" >
         {
           loading ? (
             // Skeleton loading for bottom section
@@ -318,7 +312,7 @@ export default function Dashboard() {
               </div>
             </>
           )}
-      </div >
-    </div >
+      </motion.div >
+    </motion.div >
   );
 }

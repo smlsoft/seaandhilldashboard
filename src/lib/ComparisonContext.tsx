@@ -1,135 +1,67 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
-import { BRANCH_CHANGE_EVENT } from '@/lib/branch-events';
+/**
+ * ComparisonContext — Compatibility shim
+ *
+ * isComparisonMode and selectedBranches logic have been migrated to Zustand:
+ *   - useUIStore   → isComparisonMode, toggleComparisonMode, setComparisonMode
+ *   - useBranchStore → selectedBranches, availableBranches, isLoaded
+ *
+ * This file keeps the original `useComparison()` hook API intact so that
+ * any existing components using `useComparison()` continue to work without changes.
+ * Internally it simply reads from the Zustand stores.
+ */
 
-interface BranchInfo {
+import { useBranchStore } from '@/store/useBranchStore';
+import { useUIStore } from '@/store/useUIStore';
+
+export interface BranchInfo {
   key: string;
   name: string;
 }
 
-interface ComparisonContextType {
-  /** Individual branches to compare (expanded from 'ALL' if needed) */
+export interface ComparisonContextType {
   selectedBranches: string[];
-  /** Available branches list (excluding 'ALL') */
   availableBranches: BranchInfo[];
-  /** Whether the context is loaded */
   isLoaded: boolean;
-  /** Whether comparison mode is active (persisted in localStorage) */
   isComparisonMode: boolean;
-  /** Toggle comparison mode on/off */
   toggleComparisonMode: () => void;
-  /** Directly set comparison mode */
   setComparisonMode: (mode: boolean) => void;
 }
 
-const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
+/**
+ * Drop-in replacement for the old `useComparison()` hook.
+ * Now reads from Zustand stores instead of React Context.
+ */
+export function useComparison(): ComparisonContextType {
+  const {
+    selectedBranches: rawSelection,
+    availableBranches,
+    isLoaded,
+  } = useBranchStore();
 
-const COMPARISON_MODE_KEY = 'comparison_mode_active';
+  const { isComparisonMode, toggleComparisonMode, setComparisonMode } = useUIStore();
 
-export function ComparisonProvider({ children }: { children: React.ReactNode }) {
-  const [rawSelection, setRawSelection] = useState<string[]>([]);
-  const [availableBranches, setAvailableBranches] = useState<BranchInfo[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isComparisonMode, setIsComparisonModeState] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Check if mounted (client-side only)
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Load comparison mode from localStorage (only after mount)
-  useEffect(() => {
-    if (!isMounted) return;
-    try {
-      const stored = localStorage.getItem(COMPARISON_MODE_KEY);
-      if (stored === 'true') {
-        setIsComparisonModeState(true);
-      }
-    } catch {
-      // ignore
-    }
-  }, [isMounted]);
-
-  // Load initial branch selection from cookie + fetch available branches
-  useEffect(() => {
-    const loadBranches = async () => {
-      try {
-        const [keys, res] = await Promise.all([
-          getSelectedBranch(),
-          fetch('/api/branches'),
-        ]);
-
-        setRawSelection(keys);
-
-        if (res.ok) {
-          const data: BranchInfo[] = await res.json();
-          const filtered = data.filter((b: BranchInfo) => b.key !== 'ALL');
-          setAvailableBranches(filtered);
-        }
-      } catch (err) {
-        console.error('Failed to load branches:', err);
-      } finally {
-        setIsLoaded(true);
-      }
-    };
-    loadBranches();
-  }, []);
-
-  // Listen for branch change events from BranchSwitcher
-  useEffect(() => {
-    const handleBranchChange = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (customEvent.detail?.branchKeys) {
-        setRawSelection(customEvent.detail.branchKeys);
-      }
-    };
-    window.addEventListener(BRANCH_CHANGE_EVENT, handleBranchChange);
-    return () => window.removeEventListener(BRANCH_CHANGE_EVENT, handleBranchChange);
-  }, []);
-
-  // Compute selectedBranches: if 'ALL' is selected, expand to all individual branches
+  // Expand 'ALL' → individual branch keys (same logic as before)
   const selectedBranches = rawSelection.includes('ALL')
-    ? availableBranches.map((b: BranchInfo) => b.key)
+    ? availableBranches.filter((b) => b.key !== 'ALL').map((b) => b.key)
     : rawSelection;
 
-  const toggleComparisonMode = useCallback(() => {
-    setIsComparisonModeState((prev: boolean) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(COMPARISON_MODE_KEY, String(next));
-      } catch { /* ignore */ }
-      return next;
-    });
-  }, []);
-
-  const setComparisonMode = useCallback((mode: boolean) => {
-    setIsComparisonModeState(mode);
-    try {
-      localStorage.setItem(COMPARISON_MODE_KEY, String(mode));
-    } catch { /* ignore */ }
-  }, []);
-
-  return (
-    <ComparisonContext.Provider value={{
-      selectedBranches,
-      availableBranches,
-      isLoaded,
-      isComparisonMode,
-      toggleComparisonMode,
-      setComparisonMode,
-    }}>
-      {children}
-    </ComparisonContext.Provider>
-  );
+  return {
+    selectedBranches,
+    availableBranches: availableBranches.filter((b) => b.key !== 'ALL'),
+    isLoaded,
+    isComparisonMode,
+    toggleComparisonMode,
+    setComparisonMode,
+  };
 }
 
-export function useComparison() {
-  const context = useContext(ComparisonContext);
-  if (!context) {
-    throw new Error('useComparison must be used within a ComparisonProvider');
-  }
-  return context;
+/**
+ * ComparisonProvider is now a no-op passthrough.
+ * Keep it exported so layout.tsx doesn't need to change imports immediately.
+ * Can be removed once layout.tsx is cleaned up.
+ */
+export function ComparisonProvider({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -32,35 +33,18 @@ import {
 
 export default function InventoryPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  // Data states
-  const [kpis, setKpis] = useState<InventoryKPIs | null>(null);
-  const [stockMovement, setStockMovement] = useState<StockMovement[]>([]);
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
-  const [overstockItems, setOverstockItems] = useState<OverstockItem[]>([]);
-  const [slowMovingItems, setSlowMovingItems] = useState<SlowMovingItem[]>([]);
-  const [inventoryTurnover, setInventoryTurnover] = useState<InventoryTurnover[]>([]);
-  const [stockByBranch, setStockByBranch] = useState<StockByBranch[]>([]);
-
-  useEffect(() => {
-    fetchAllData();
-  }, [dateRange]);
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['inventoryData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
 
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => {
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => {
           params.append('branch', b);
         });
       }
@@ -102,23 +86,36 @@ export default function InventoryPage() {
         branchRes.json(),
       ]);
 
-      setKpis(kpisData.data);
-      setStockMovement(movementData.data);
-      setLowStockItems(lowStockData.data);
-      setOverstockItems(overstockData.data);
-      setSlowMovingItems(slowMovingData.data);
-      setInventoryTurnover(turnoverData.data);
-      setStockByBranch(branchData.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching inventory data:', err);
-    } finally {
-      setLoading(false);
+      return {
+        kpis: kpisData.data as InventoryKPIs,
+        stockMovement: movementData.data as StockMovement[],
+        lowStockItems: lowStockData.data as LowStockItem[],
+        overstockItems: overstockData.data as OverstockItem[],
+        slowMovingItems: slowMovingData.data as SlowMovingItem[],
+        inventoryTurnover: turnoverData.data as InventoryTurnover[],
+        stockByBranch: branchData.data as StockByBranch[],
+      };
     }
-  };
+  });
 
-  // Listen for branch changes
-  useBranchChange(fetchAllData);
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+  const kpis = data?.kpis;
+  const stockMovement = data?.stockMovement || [];
+  const lowStockItems = data?.lowStockItems || [];
+  const overstockItems = data?.overstockItems || [];
+  const slowMovingItems = data?.slowMovingItems || [];
+  const inventoryTurnover = data?.inventoryTurnover || [];
+  const stockByBranch = data?.stockByBranch || [];
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -135,9 +132,14 @@ export default function InventoryPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             คลังสินค้าและสต็อก
@@ -147,22 +149,22 @@ export default function InventoryPage() {
           </p>
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
       {error && (
-        <ErrorDisplay error={error} onRetry={fetchAllData} />
+        <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>
       )}
 
       {/* KPI Cards */}
       {loading ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <KPICardSkeleton key={i} />
           ))}
-        </div>
+        </motion.div>
       ) : kpis ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="มูลค่าสินค้าคงคลัง"
             value={formatCurrency(kpis.totalInventoryValue.value)}
@@ -203,10 +205,11 @@ export default function InventoryPage() {
               format: 'JSONEachRow',
             }}
           />
-        </div>
+        </motion.div>
       ) : null}
 
       {/* Stock Movement Chart */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="การเคลื่อนไหวสต็อก"
@@ -224,11 +227,13 @@ export default function InventoryPage() {
           )}
         </DataCard>
       </ErrorBoundary>
+      </motion.div>
 
       {/* Low Stock & Overstock */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="สินค้าใกล้หมด"
             description="รายการสินค้าที่ต่ำกว่าจุด Reorder Point"
             linkTo="/reports/inventory#low-stock"
@@ -238,15 +243,16 @@ export default function InventoryPage() {
             }}
           >
             {loading ? (
-              <TableSkeleton rows={10} />
+              <TableSkeleton rows={13} />
             ) : (
-              <LowStockTable data={lowStockItems} height="500px" />
+              <LowStockTable data={lowStockItems} height="500px" itemsPerPage={13} />
             )}
           </DataCard>
         </ErrorBoundary>
 
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="สินค้าเกินคลัง"
             description="รายการสินค้าที่เกินระดับสูงสุด"
             linkTo="/reports/inventory#overstock"
@@ -262,9 +268,10 @@ export default function InventoryPage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* Slow Moving Items */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="สินค้าหมุนเวียนช้า"
@@ -282,11 +289,13 @@ export default function InventoryPage() {
           )}
         </DataCard>
       </ErrorBoundary>
+      </motion.div>
 
       {/* Inventory Turnover & Stock by Branch */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="อัตราหมุนเวียนสินค้า"
             description="การหมุนเวียนและวันขายหมดตามหมวดสินค้า"
             linkTo="/reports/inventory#turnover"
@@ -305,6 +314,7 @@ export default function InventoryPage() {
 
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="สต็อกแยกตามสาขา"
             description="มูลค่าและจำนวนรายการสินค้าในแต่ละสาขา"
             linkTo="/reports/inventory#by-branch"
@@ -320,7 +330,7 @@ export default function InventoryPage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

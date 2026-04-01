@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { motion } from 'framer-motion';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
 import { SimpleKPICard, KPIGrid } from '@/components/comparison/SimpleKPICard';
@@ -205,10 +206,26 @@ export default function PurchaseComparisonPage() {
   const bestPerformer = rankedData[0];
 
   /* ═══ Render ═══ */
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
+  /* ═══ Render ═══ */
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-widest font-semibold mb-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
@@ -218,7 +235,7 @@ export default function PurchaseComparisonPage() {
           <p className="text-sm text-muted-foreground mt-0.5">เปรียบเทียบข้อมูลการจัดซื้อและซัพพลายเออร์ระหว่างกิจการ</p>
         </div>
         <ComparisonDateFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Loading / Empty */}
       {loading ? (
@@ -241,21 +258,23 @@ export default function PurchaseComparisonPage() {
           {/* ════════════════════════════════════════
              1) KPI Summary Cards (6 cards)
              ════════════════════════════════════════ */}
-          <KPIGrid
-            columns={6}
-            cards={[
-              { icon: ShoppingBag, iconColor: 'text-indigo-600', label: 'มูลค่าการจัดซื้อรวม', value: totals.totalPurchaseValue, barColor: 'bg-indigo-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
-              { icon: FileText, iconColor: 'text-emerald-600', label: 'ใบสั่งซื้อ (PO)', value: totals.poCount, barColor: 'bg-emerald-500', format: 'number' },
-              { icon: Receipt, iconColor: 'text-amber-600', label: 'เฉลี่ยต่อ PO', value: totals.avgPOValue, barColor: 'bg-amber-500', format: 'money' },
-              { icon: Users, iconColor: 'text-violet-600', label: 'ซัพพลายเออร์', value: totals.supplierCount, barColor: 'bg-violet-500', format: 'number' },
-              { icon: CreditCard, iconColor: 'text-rose-600', label: 'เจ้าหนี้คงค้าง (AP)', value: totals.apOutstandingTotal, barColor: 'bg-rose-500', format: 'money' },
-              { icon: Package, iconColor: 'text-cyan-600', label: 'รายการสินค้า', value: totals.itemsPurchased, barColor: 'bg-cyan-500', format: 'number' },
-            ]}
-          />
+          <motion.div variants={itemVariants}>
+            <KPIGrid
+              columns={6}
+              cards={[
+                { icon: ShoppingBag, iconColor: 'text-indigo-600', label: 'มูลค่าการจัดซื้อรวม', value: totals.totalPurchaseValue, barColor: 'bg-indigo-500', subText: `จาก ${data.length} กิจการ`, format: 'money' },
+                { icon: FileText, iconColor: 'text-emerald-600', label: 'ใบสั่งซื้อ (PO)', value: totals.poCount, barColor: 'bg-emerald-500', format: 'number' },
+                { icon: Receipt, iconColor: 'text-amber-600', label: 'เฉลี่ยต่อ PO', value: totals.avgPOValue, barColor: 'bg-amber-500', format: 'money' },
+                { icon: Users, iconColor: 'text-violet-600', label: 'ซัพพลายเออร์', value: totals.supplierCount, barColor: 'bg-violet-500', format: 'number' },
+                { icon: CreditCard, iconColor: 'text-rose-600', label: 'เจ้าหนี้คงค้าง (AP)', value: totals.apOutstandingTotal, barColor: 'bg-rose-500', format: 'money' },
+                { icon: Package, iconColor: 'text-cyan-600', label: 'รายการสินค้า', value: totals.itemsPurchased, barColor: 'bg-cyan-500', format: 'number' },
+              ]}
+            />
+          </motion.div>
       {/* ════════════════════════════════════════
              8) Ranking Table
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<Trophy className="h-4 w-4 text-amber-500" />}
               title="อันดับประสิทธิภาพการจัดซื้อ"
@@ -299,7 +318,7 @@ export default function PurchaseComparisonPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
           {/* ════════════════════════════════════════
              2) Best Performer Hero Card
              ════════════════════════════════════════ 
@@ -341,7 +360,7 @@ export default function PurchaseComparisonPage() {
           {/* ════════════════════════════════════════
              3) Purchase Value Comparison (Ranked Bar Chart)
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<BarChart3 className="h-4 w-4 text-indigo-500" />}
               title="มูลค่าการจัดซื้อเปรียบเทียบ"
@@ -390,9 +409,9 @@ export default function PurchaseComparisonPage() {
                 return <ReactECharts option={option} style={{ height: 300 }} opts={{ renderer: 'svg' }} />;
               })()}
             </div>
-          </div>
+          </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* ════════════════════════════════════════
                4) PO Count & Avg PO Value (Bar + Line Combo)
                ════════════════════════════════════════ */}
@@ -615,11 +634,11 @@ export default function PurchaseComparisonPage() {
                 })()}
               </div>
             </div>
-          </div>
+          </motion.div>
 
     
         </>
       )}
-    </div>
+    </motion.div>
   );
 }

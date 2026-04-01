@@ -1,33 +1,42 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+/**
+ * SidebarContext — Compatibility shim
+ *
+ * Sidebar state (isCollapsed, toggleSidebar, setSidebarCollapsed) has been
+ * migrated to Zustand `useUIStore`. This file keeps the `useSidebar()` hook
+ * API intact for backward compatibility.
+ *
+ * `SidebarProvider` is now a no-op passthrough since no React Context is needed.
+ */
 
-interface SidebarContextType {
+import { type ReactNode } from 'react';
+import { useUIStore } from '@/store/useUIStore';
+
+export interface SidebarContextType {
   isCollapsed: boolean;
   setIsCollapsed: (value: boolean) => void;
   toggleSidebar: () => void;
 }
 
-const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
+/**
+ * Drop-in replacement for the old `useSidebar()` hook.
+ * Now reads from Zustand `useUIStore` instead of React Context.
+ */
+export function useSidebar(): SidebarContextType {
+  const { isSidebarCollapsed, setSidebarCollapsed, toggleSidebar } = useUIStore();
 
-export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  const toggleSidebar = () => {
-    setIsCollapsed(prev => !prev);
+  return {
+    isCollapsed: isSidebarCollapsed,
+    setIsCollapsed: setSidebarCollapsed,
+    toggleSidebar,
   };
-
-  return (
-    <SidebarContext.Provider value={{ isCollapsed, setIsCollapsed, toggleSidebar }}>
-      {children}
-    </SidebarContext.Provider>
-  );
 }
 
-export function useSidebar() {
-  const context = useContext(SidebarContext);
-  if (context === undefined) {
-    throw new Error('useSidebar must be used within a SidebarProvider');
-  }
-  return context;
+/**
+ * SidebarProvider is now a no-op passthrough.
+ * Kept for layout.tsx backward compatibility.
+ */
+export function SidebarProvider({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }

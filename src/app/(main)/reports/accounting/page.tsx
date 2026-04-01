@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -95,17 +98,7 @@ const reportOptions: ReportOption<ReportType>[] = [
 export default function AccountingReportPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
   const [selectedReport, setSelectedReport] = useState<ReportType>('profit-loss');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Data states
-  const [profitLossData, setProfitLossData] = useState<ProfitLossData[]>([]);
-  const [balanceSheetData, setBalanceSheetData] = useState<BalanceSheetItem[]>([]);
-  const [cashFlowData, setCashFlowData] = useState<CashFlowData[]>([]);
-  const [arAgingData, setArAgingData] = useState<AgingItem[]>([]);
-  const [apAgingData, setApAgingData] = useState<AgingItem[]>([]);
-  const [revenueBreakdown, setRevenueBreakdown] = useState<CategoryBreakdown[]>([]);
-  const [expenseBreakdown, setExpenseBreakdown] = useState<CategoryBreakdown[]>([]);
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   // Balance sheet filter
   const [balanceSheetTypeFilter, setBalanceSheetTypeFilter] = useState<string>('all');
@@ -113,27 +106,25 @@ export default function AccountingReportPage() {
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
 
-  useEffect(() => {
-    fetchReportData(selectedReport);
-  }, [dateRange, selectedReport]);
-
-  const fetchReportData = async (reportType: ReportType) => {
-    setLoading(true);
-    setError(null);
-
-    try {
+  const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['accountingReportData', selectedReport, dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
 
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
+
       let endpoint = '';
-      switch (reportType) {
+      switch (selectedReport) {
         case 'profit-loss':
           endpoint = `/api/accounting/profit-loss?${params}`;
           break;
         case 'balance-sheet':
-          endpoint = `/api/accounting/balance-sheet?start_date=${dateRange.start}&end_date=${dateRange.end}`;
+          endpoint = `/api/accounting/balance-sheet?${params}`;
           break;
         case 'cash-flow':
           endpoint = `/api/accounting/cash-flow?${params}`;
@@ -151,44 +142,24 @@ export default function AccountingReportPage() {
       }
 
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${reportType} data`);
+      if (!response.ok) throw new Error(`Failed to fetch ${selectedReport} data`);
 
       const result = await response.json();
-
-      switch (reportType) {
-        case 'profit-loss':
-          setProfitLossData(result.data);
-          break;
-        case 'balance-sheet':
-          setBalanceSheetData(result.data);
-          break;
-        case 'cash-flow':
-          setCashFlowData(result.data);
-          break;
-        case 'ar-aging':
-          setArAgingData(result.data);
-          break;
-        case 'ap-aging':
-          setApAgingData(result.data);
-          break;
-        case 'revenue-breakdown':
-          setRevenueBreakdown(result.data.revenue);
-          setExpenseBreakdown(result.data.expenses);
-          break;
-        case 'expense-breakdown':
-          if (!revenueBreakdown.length) {
-            setRevenueBreakdown(result.data.revenue);
-          }
-          setExpenseBreakdown(result.data.expenses);
-          break;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching accounting data:', err);
-    } finally {
-      setLoading(false);
+      return result.data;
     }
-  };
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+
+  const profitLossData: ProfitLossData[] = selectedReport === 'profit-loss' ? (reportData || []) : [];
+  const balanceSheetData: BalanceSheetItem[] = selectedReport === 'balance-sheet' ? (reportData || []) : [];
+  const cashFlowData: CashFlowData[] = selectedReport === 'cash-flow' ? (reportData || []) : [];
+  const arAgingData: AgingItem[] = selectedReport === 'ar-aging' ? (reportData || []) : [];
+  const apAgingData: AgingItem[] = selectedReport === 'ap-aging' ? (reportData || []) : [];
+  const revenueBreakdown: CategoryBreakdown[] = (selectedReport === 'revenue-breakdown' || selectedReport === 'expense-breakdown') ? (reportData?.revenue || []) : [];
+  const expenseBreakdown: CategoryBreakdown[] = (selectedReport === 'expense-breakdown' || selectedReport === 'revenue-breakdown') ? (reportData?.expenses || []) : [];
+
+  const fetchReportData = () => { refetch(); };
 
   const getAgingColor = (bucket: string): string => {
     switch (bucket) {
@@ -712,10 +683,25 @@ export default function AccountingReportPage() {
     }
   };
 
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header with integrated controls */}
-      <div className="flex flex-col gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
@@ -734,13 +720,14 @@ export default function AccountingReportPage() {
           options={reportOptions}
           onChange={(value) => setSelectedReport(value as ReportType)}
         />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
-      {error && <ErrorDisplay error={error} onRetry={() => fetchReportData(selectedReport)} />}
+      {error && <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>}
 
       {/* Report Content */}
-      <ErrorBoundary>
+      <motion.div variants={itemVariants}>
+        <ErrorBoundary>
         <DataCard
           id={selectedReport}
           title={currentReport?.label || ''}
@@ -791,6 +778,7 @@ export default function AccountingReportPage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

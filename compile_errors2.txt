@@ -1,0 +1,5 @@
+src/app/(main)/accounting/comparison/page.tsx(464,13): error TS17002: Expected corresponding JSX closing tag for 'motion.div'.
+src/app/(main)/accounting/comparison/page.tsx(531,13): error TS17002: Expected corresponding JSX closing tag for 'motion.div'.
+src/app/(main)/accounting/comparison/page.tsx(578,13): error TS17002: Expected corresponding JSX closing tag for 'motion.div'.
+src/app/(main)/accounting/comparison/page.tsx(743,13): error TS17002: Expected corresponding JSX closing tag for 'motion.div'.
+src/app/(main)/accounting/comparison/page.tsx(803,13): error TS17002: Expected corresponding JSX closing tag for 'motion.div'.

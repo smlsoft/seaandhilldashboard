@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -75,43 +77,29 @@ export default function PurchaseReportPage() {
   );
   const [selectedReport, setSelectedReport] = useState<ReportType>('purchase-trend');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Data states
-  const [trendData, setTrendData] = useState<PurchaseTrendData[]>([]);
-  const [topSuppliers, setTopSuppliers] = useState<TopSupplier[]>([]);
-  const [purchaseByCategory, setPurchaseByCategory] = useState<PurchaseByCategory[]>([]);
-  const [purchaseByBrand, setPurchaseByBrand] = useState<PurchaseByBrand[]>([]);
-  const [apOutstanding, setApOutstanding] = useState<APOutstanding[]>([]);
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
-
-  useEffect(() => {
-    fetchReportData(selectedReport);
-  }, [dateRange, selectedReport]);
 
   // Reset category filter when switching reports
   useEffect(() => {
     setSelectedCategory('ALL');
   }, [selectedReport]);
 
-  // Listen for branch changes
-  useBranchChange(() => fetchReportData(selectedReport));
-
-  const fetchReportData = async (reportType: ReportType) => {
-    setLoading(true);
-    setError(null);
-
-    try {
+  const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['purchaseReportData', selectedReport, dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
 
       let endpoint = '';
-      switch (reportType) {
+      switch (selectedReport) {
         case 'purchase-trend':
           endpoint = `/api/purchase/trend?${params}`;
           break;
@@ -130,36 +118,22 @@ export default function PurchaseReportPage() {
       }
 
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${reportType} data`);
+      if (!response.ok) throw new Error(`Failed to fetch ${selectedReport} data`);
 
       const result = await response.json();
-
-      switch (reportType) {
-        case 'purchase-trend':
-          setTrendData(result.data);
-          break;
-        case 'top-suppliers':
-          setTopSuppliers(result.data);
-          break;
-        case 'by-category':
-          setPurchaseByCategory(result.data);
-          break;
-        case 'by-brand':
-          setPurchaseByBrand(result.data);
-          break;
-        case 'ap-outstanding':
-          setApOutstanding(result.data);
-          break;
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล'
-      );
-      console.error('Error fetching purchase data:', err);
-    } finally {
-      setLoading(false);
+      return result.data;
     }
-  };
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+
+  const trendData: PurchaseTrendData[] = selectedReport === 'purchase-trend' ? (reportData || []) : [];
+  const topSuppliers: TopSupplier[] = selectedReport === 'top-suppliers' ? (reportData || []) : [];
+  const purchaseByCategory: PurchaseByCategory[] = selectedReport === 'by-category' ? (reportData || []) : [];
+  const purchaseByBrand: PurchaseByBrand[] = selectedReport === 'by-brand' ? (reportData || []) : [];
+  const apOutstanding: APOutstanding[] = selectedReport === 'ap-outstanding' ? (reportData || []) : [];
+
+  const fetchReportData = () => { refetch(); };
 
   // Column definitions for Purchase Trend
   const purchaseTrendColumns: ColumnDef<PurchaseTrendData>[] = [
@@ -651,10 +625,25 @@ export default function PurchaseReportPage() {
     }
   };
 
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header with integrated controls */}
-      <div className="flex flex-col gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
@@ -673,13 +662,14 @@ export default function PurchaseReportPage() {
           options={reportOptions}
           onChange={(value) => setSelectedReport(value as ReportType)}
         />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
-      {error && <ErrorDisplay error={error} onRetry={() => fetchReportData(selectedReport)} />}
+      {error && <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>}
 
       {/* Report Content */}
-      <ErrorBoundary>
+      <motion.div variants={itemVariants}>
+        <ErrorBoundary>
         <DataCard
           id={selectedReport}
           title={currentReport?.label || ''}
@@ -716,6 +706,7 @@ export default function PurchaseReportPage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

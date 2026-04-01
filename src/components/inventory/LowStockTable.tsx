@@ -7,6 +7,7 @@ import type { LowStockItem } from '@/lib/data/types';
 interface LowStockTableProps {
   data: LowStockItem[];
   height?: string;
+  itemsPerPage?: number;
 }
 
 type ExtendedLowStockItem = LowStockItem & {
@@ -14,7 +15,7 @@ type ExtendedLowStockItem = LowStockItem & {
   shortagePercent: number;
 };
 
-export function LowStockTable({ data, height = 'auto' }: LowStockTableProps) {
+export function LowStockTable({ data, height = 'auto', itemsPerPage = 10 }: LowStockTableProps) {
   // Transform data to calculate shortage
   const transformedData: ExtendedLowStockItem[] = data.map(item => ({
     ...item,
@@ -99,7 +100,7 @@ export function LowStockTable({ data, height = 'auto' }: LowStockTableProps) {
       <PaginatedTable
         data={transformedData}
         columns={columns}
-        itemsPerPage={10}
+        itemsPerPage={itemsPerPage}
         emptyMessage="ไม่มีสินค้าใกล้หมด"
         defaultSortKey="shortage"
         defaultSortOrder="desc"

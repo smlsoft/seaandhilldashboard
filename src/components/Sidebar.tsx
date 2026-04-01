@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard,
     ShoppingCart,
@@ -60,6 +61,21 @@ const secondaryItems = [
     { name: 'ตั้งค่า', icon: Settings, href: '/settings' },
 ];
 
+const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.05
+        }
+    }
+};
+
+const itemVariants = {
+    hidden: { opacity: 0, x: -20 },
+    visible: { opacity: 1, x: 0, transition: { type: 'spring' as const, bounce: 0, duration: 0.4 } }
+};
+
 export function Sidebar() {
     const pathname = usePathname();
     const { isCollapsed, toggleSidebar } = useSidebar();
@@ -111,7 +127,12 @@ export function Sidebar() {
                             Menu
                         </p>
                     )}
-                    <nav className="space-y-1">
+                    <motion.nav 
+                        className="space-y-1"
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                    >
                         {menuItems.map((item) => {
                             const actualHref = isComparisonMode
                                 ? (comparisonHrefMap[item.href] || item.href)
@@ -120,36 +141,37 @@ export function Sidebar() {
                                 ? pathname === comparisonHrefMap[item.href]
                                 : pathname === item.href;
                             return (
-                                <Link
-                                    key={item.href}
-                                    href={actualHref}
-                                    title={isCollapsed ? item.name : undefined}
-                                    className={cn(
-                                        "flex items-center gap-3 py-3 text-sm font-medium rounded-xl transition-all duration-300 group",
-                                        isCollapsed ? "px-3 justify-center" : "px-4",
-                                        isActive
-                                            ? "bg-[hsl(var(--primary))] text-white shadow-lg shadow-indigo-500/25"
-                                            : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
-                                    )}
-                                >
-                                    <item.icon className={cn(
-                                        "h-5 w-5 transition-colors flex-shrink-0",
-                                        isActive ? "text-white" : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
-                                    )} />
-                                    {!isCollapsed && (
-                                        <>
-                                            <span className="flex-1">{item.name}</span>
-                                            {isActive && (
-                                                <ChevronRight className="ml-auto h-4 w-4 text-white/50" />
-                                            )}
-                                        </>
-                                    )}
-                                </Link>
+                                <motion.div key={item.href} variants={itemVariants}>
+                                    <Link
+                                        href={actualHref}
+                                        title={isCollapsed ? item.name : undefined}
+                                        className={cn(
+                                            "flex items-center gap-3 py-3 text-sm font-medium rounded-xl transition-all duration-300 group",
+                                            isCollapsed ? "px-3 justify-center" : "px-4",
+                                            isActive
+                                                ? "bg-[hsl(var(--primary))] text-white shadow-lg shadow-indigo-500/25"
+                                                : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
+                                        )}
+                                    >
+                                        <item.icon className={cn(
+                                            "h-5 w-5 transition-colors flex-shrink-0",
+                                            isActive ? "text-white" : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
+                                        )} />
+                                        {!isCollapsed && (
+                                            <>
+                                                <span className="flex-1">{item.name}</span>
+                                                {isActive && (
+                                                    <ChevronRight className="ml-auto h-4 w-4 text-white/50" />
+                                                )}
+                                            </>
+                                        )}
+                                    </Link>
+                                </motion.div>
                             );
                         })}
 
                         {/* Report Dropdown Menu */}
-                        <div>
+                        <motion.div variants={itemVariants} className="relative">
                             <button
                                 onClick={() => setIsReportOpen(!isReportOpen)}
                                 title={isCollapsed ? reportMenu.name : undefined}
@@ -178,31 +200,40 @@ export function Sidebar() {
                             </button>
 
                             {/* Submenu */}
-                            {!isCollapsed && isReportOpen && (
-                                <div className="mt-1 ml-4 pl-4 border-l-2 border-[hsl(var(--border))] space-y-1">
-                                    {reportMenu.subItems.map((subItem) => {
-                                        const isSubActive = pathname === subItem.href;
-                                        return (
-                                            <Link
-                                                key={subItem.href}
-                                                href={subItem.href}
-                                                className={cn(
-                                                    "flex items-center gap-3 py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 group",
-                                                    isSubActive
-                                                        ? "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
-                                                        : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
-                                                )}
-                                            >
-                                                <subItem.icon className={cn(
-                                                    "h-4 w-4 transition-colors flex-shrink-0",
-                                                    isSubActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
-                                                )} />
-                                                <span>{subItem.name}</span>
-                                            </Link>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            <AnimatePresence>
+                                {!isCollapsed && isReportOpen && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="mt-1 ml-4 pl-4 border-l-2 border-[hsl(var(--border))] space-y-1">
+                                            {reportMenu.subItems.map((subItem) => {
+                                                const isSubActive = pathname === subItem.href;
+                                                return (
+                                                    <Link
+                                                        key={subItem.href}
+                                                        href={subItem.href}
+                                                        className={cn(
+                                                            "flex items-center gap-3 py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 group",
+                                                            isSubActive
+                                                                ? "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
+                                                                : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
+                                                        )}
+                                                    >
+                                                        <subItem.icon className={cn(
+                                                            "h-4 w-4 transition-colors flex-shrink-0",
+                                                            isSubActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
+                                                        )} />
+                                                        <span>{subItem.name}</span>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
                             {/* Collapsed submenu tooltip */}
                             {isCollapsed && (
@@ -219,8 +250,8 @@ export function Sidebar() {
                                     ))}
                                 </div>
                             )}
-                        </div>
-                    </nav>
+                        </motion.div>
+                    </motion.nav>
                 </div>
 
                 <div>
@@ -229,32 +260,40 @@ export function Sidebar() {
                             Other
                         </p>
                     )}
-                    <nav className="space-y-1">
+                    <motion.nav 
+                        className="space-y-1"
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                    >
                         {secondaryItems.map((item) => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                title={isCollapsed ? item.name : undefined}
+                            <motion.div key={item.href} variants={itemVariants}>
+                                <Link
+                                    href={item.href}
+                                    title={isCollapsed ? item.name : undefined}
+                                    className={cn(
+                                        "flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))] transition-all duration-200 group",
+                                        isCollapsed ? "px-3 justify-center" : "px-4"
+                                    )}
+                                >
+                                    <item.icon className="h-5 w-5 text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))] transition-colors flex-shrink-0" />
+                                    {!isCollapsed && item.name}
+                                </Link>
+                            </motion.div>
+                        ))}
+                        <motion.div variants={itemVariants}>
+                            <button
+                                title={isCollapsed ? "ออกจากระบบ" : undefined}
                                 className={cn(
-                                    "flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))] transition-all duration-200 group",
+                                    "w-full flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all duration-200 group",
                                     isCollapsed ? "px-3 justify-center" : "px-4"
                                 )}
                             >
-                                <item.icon className="h-5 w-5 text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))] transition-colors flex-shrink-0" />
-                                {!isCollapsed && item.name}
-                            </Link>
-                        ))}
-                        <button
-                            title={isCollapsed ? "ออกจากระบบ" : undefined}
-                            className={cn(
-                                "w-full flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all duration-200 group",
-                                isCollapsed ? "px-3 justify-center" : "px-4"
-                            )}
-                        >
-                            <LogOut className="h-5 w-5 group-hover:scale-110 transition-transform flex-shrink-0" />
-                            {!isCollapsed && "ออกจากระบบ"}
-                        </button>
-                    </nav>
+                                <LogOut className="h-5 w-5 group-hover:scale-110 transition-transform flex-shrink-0" />
+                                {!isCollapsed && "ออกจากระบบ"}
+                            </button>
+                        </motion.div>
+                    </motion.nav>
                 </div>
             </div>
 

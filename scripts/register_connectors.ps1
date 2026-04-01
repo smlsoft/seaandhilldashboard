@@ -9,14 +9,14 @@ $PG_PASSWORD = "seaandhill"
 
 # List of databases and their branch codes
 $databases = @(
-    @{ Code = "000"; Name = "changsiamcompany_2568"; Host = $PG_HOST; Port = $PG_PORT },
-    @{ Code = "001"; Name = "changsiamruay_2568"; Host = $PG_HOST; Port = $PG_PORT },
-    @{ Code = "002"; Name = "changsupthawee_2568"; Host = $PG_HOST; Port = $PG_PORT },
-    @{ Code = "003"; Name = "chaothalayheha_2568"; Host = $PG_HOST; Port = $PG_PORT },
-    @{ Code = "004"; Name = "deejingjung_2568"; Host = $PG_HOST; Port = $PG_PORT },
-    @{ Code = "005"; Name = "homhug_2568"; Host = $PG_HOST; Port = $PG_PORT },
+    @{ Code = "000"; Name = "changsiamcompany_2569"; Host = $PG_HOST; Port = $PG_PORT },
+    @{ Code = "001"; Name = "changsiamruay_2569"; Host = $PG_HOST; Port = $PG_PORT },
+    @{ Code = "002"; Name = "changsupthawee_2569"; Host = $PG_HOST; Port = $PG_PORT },
+    @{ Code = "003"; Name = "chaothalayheha_2569"; Host = $PG_HOST; Port = $PG_PORT },
+    @{ Code = "004"; Name = "deejingjung_2569"; Host = $PG_HOST; Port = $PG_PORT },
+    @{ Code = "005"; Name = "homhug_2569"; Host = $PG_HOST; Port = $PG_PORT },
     # Test Database
-    @{ Code = "test"; Name = "data1"; Host = "localhost"; Port = "5432" }
+    @{ Code = "test"; Name = "data1"; Host = "host.docker.internal"; Port = "5432" }
 )
 
 foreach ($db in $databases) {
@@ -34,25 +34,37 @@ foreach ($db in $databases) {
             "database.password" = $PG_PASSWORD
             "database.dbname"   = $db.Name
             
-            # Topic Prefix: branch_000, branch_001, etc.
             "topic.prefix"      = "branch_$($db.Code)"
-            
             "plugin.name"       = "pgoutput"
             "slot.name"         = "debezium_slot_$($db.Code)"
-            
-            # รวมเฉพาะ tables ที่จำเป็น (ใส่ * ถ้าเอาหมด)
-            #"table.include.list" = "public.journal_transaction_detail,public.payment_transaction"
         }
     }
 
     $json = $config | ConvertTo-Json -Depth 5
 
+    Write-Host "----------------------------------------------------"
     Write-Host "Registering connector: $connectorName for DB: $($db.Name)..."
+    
+    # 1. ลองลบของเก่าออกก่อน (ถ้ามี)
+    try {
+        Invoke-RestMethod -Uri "$DEBEZIUM_HOST/connectors/$connectorName" -Method Delete -ErrorAction SilentlyContinue
+        Write-Host "   - Old connector removed (if any)"
+    } catch {}
+
+    # 2. ส่งค่าใหม่เข้าไป
     try {
         $response = Invoke-RestMethod -Uri "$DEBEZIUM_HOST/connectors" -Method Post -Body $json -ContentType "application/json"
-        Write-Host "✅ Success: $($response.name)"
+        Write-Host "   ✅ Success: $($response.name)"
     }
     catch {
-        Write-Host "⚠️ Failed/Already Exists: $($_.Exception.Message)"
+        Write-Host "   ❌ Failed!"
+        Write-Host "   Error: $($_.Exception.Message)"
+        
+        # แสดงรายละเอียด Error จาก Debezium
+        if ($_.Exception.Response) {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $errorBody = $reader.ReadToEnd()
+            Write-Host "   Details: $errorBody"
+        }
     }
 }

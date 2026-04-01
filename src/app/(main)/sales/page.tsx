@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -36,42 +37,18 @@ import {
 } from '@/lib/data/sales-queries';
 export default function SalesPage() {
   const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  // Data states
-  const [kpis, setKpis] = useState<SalesKPIs | null>(null);
-  const [trendData, setTrendData] = useState<SalesTrendData[]>([]);
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [salesByBranch, setSalesByBranch] = useState<SalesByBranch[]>([]);
-  const [salesByCategory, setSalesByCategory] = useState<SalesByCategory[]>([]);
-  const [salesBySalesperson, setSalesBySalesperson] = useState<SalesBySalesperson[]>([]);
-  const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
-  const [arStatus, setArStatus] = useState<ARStatus[]>([]);
-
-
-  useEffect(() => {
-    fetchAllData();
-  }, [dateRange]);
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['salesData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
-
-      // Debug: Log API parameters
-      console.log('🏠 Sales Page - Date Range:', dateRange);
-      console.log('🏠 Sales Page - Branches:', branches);
-      console.log('🏠 Sales Page - API Params:', params.toString());
 
       // Fetch all data in parallel
       const [
@@ -114,24 +91,38 @@ export default function SalesPage() {
         arRes.json(),
       ]);
 
-      setKpis(kpisData.data);
-      setTrendData(trendDataRes.data);
-      setTopProducts(productsData.data);
-      setSalesByBranch(branchData.data);
-      setSalesByCategory(categoryData.data);
-      setSalesBySalesperson(salespersonData.data);
-      setTopCustomers(customersData.data);
-      setArStatus(arData.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching sales data:', err);
-    } finally {
-      setLoading(false);
+      return {
+        kpis: kpisData.data as SalesKPIs,
+        trendData: trendDataRes.data as SalesTrendData[],
+        topProducts: productsData.data as TopProduct[],
+        salesByBranch: branchData.data as SalesByBranch[],
+        salesByCategory: categoryData.data as SalesByCategory[],
+        salesBySalesperson: salespersonData.data as SalesBySalesperson[],
+        topCustomers: customersData.data as TopCustomer[],
+        arStatus: arData.data as ARStatus[],
+      };
     }
-  };
+  });
 
-  // Listen for branch changes
-  useBranchChange(fetchAllData);
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+  const kpis = data?.kpis;
+  const trendData = data?.trendData || [];
+  const topProducts = data?.topProducts || [];
+  const salesByBranch = data?.salesByBranch || [];
+  const salesByCategory = data?.salesByCategory || [];
+  const salesBySalesperson = data?.salesBySalesperson || [];
+  const topCustomers = data?.topCustomers || [];
+  const arStatus = data?.arStatus || [];
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -141,9 +132,14 @@ export default function SalesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             ยอดขายและลูกค้า
@@ -153,11 +149,11 @@ export default function SalesPage() {
           </p>
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
       {error && (
-        <ErrorDisplay error={error} onRetry={fetchAllData} />
+        <ErrorDisplay error={error} onRetry={() => refetch()} />
       )}
 
       {/* KPI Cards */}
@@ -350,6 +346,6 @@ export default function SalesPage() {
           </ErrorBoundary>
         </PermissionGuard>
       </div>
-    </div>
+    </motion.div>
   );
 }
