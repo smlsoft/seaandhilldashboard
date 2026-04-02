@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import ReactECharts from 'echarts-for-react';
 import { motion } from 'framer-motion';
 import { KPICard } from '@/components/KPICard';
@@ -45,7 +46,7 @@ const theme = {
 };
 
 export default function Dashboard() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('TODAY'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   const { data, isLoading: loading } = useQuery({
@@ -213,6 +214,11 @@ export default function Dashboard() {
           trend={data?.salesGrowth ? `${data.salesGrowth > 0 ? '+' : ''}${data.salesGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.salesGrowth > 0}
           description="เทียบกับเดือนที่แล้ว"
+          detailTitle="รายละเอียดยอดขายรวม"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.salesGrowth !== undefined ? `${data.salesGrowth.toFixed(1)}%` : '-' },
+          ]}
         />
         <KPICard
           title="คำสั่งซื้อ"
@@ -221,6 +227,11 @@ export default function Dashboard() {
           trend={data?.ordersGrowth ? `${data.ordersGrowth > 0 ? '+' : ''}${data.ordersGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.ordersGrowth > 0}
           description="เทียบกับเดือนที่แล้ว"
+          detailTitle="รายละเอียดจำนวนคำสั่งซื้อ"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.ordersGrowth !== undefined ? `${data.ordersGrowth.toFixed(1)}%` : '-' },
+          ]}
         />
         <KPICard
           title="ลูกค้า"
@@ -229,6 +240,11 @@ export default function Dashboard() {
           trend={data?.customersGrowth ? `${data.customersGrowth > 0 ? '+' : ''}${data.customersGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.customersGrowth > 0}
           description="เทียบกับเดือนที่แล้ว"
+          detailTitle="รายละเอียดจำนวนลูกค้า"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.customersGrowth !== undefined ? `${data.customersGrowth.toFixed(1)}%` : '-' },
+          ]}
         />
         <KPICard
           title="มูลค่าเฉลี่ย"
@@ -237,6 +253,11 @@ export default function Dashboard() {
           trend={data?.avgOrderGrowth ? `${data.avgOrderGrowth > 0 ? '+' : ''}${data.avgOrderGrowth.toFixed(1)}%` : undefined}
           trendUp={data?.avgOrderGrowth > 0}
           description="ต่อคำสั่งซื้อ"
+          detailTitle="รายละเอียดมูลค่าเฉลี่ยต่อออเดอร์"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.avgOrderGrowth !== undefined ? `${data.avgOrderGrowth.toFixed(1)}%` : '-' },
+          ]}
         />
       </motion.div>
 

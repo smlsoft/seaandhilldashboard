@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { useBranchStore } from '@/store/useBranchStore';
+import { formatSelectedBranchNames, useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
+import { exportStyledPdfReport } from '@/lib/exportPdf';
 import { formatCurrency, formatNumber, formatDate, formatPercent } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -90,12 +92,13 @@ const reportOptions: ReportOption<ReportType>[] = [
 ];
 
 export default function SalesReportPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(
-    getDateRange('THIS_MONTH')
-  );
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('sales-trend');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
+  const withBranchSubtitle = (detail: string) => `กิจการ: ${selectedBranchLabel} | ${detail}`;
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
@@ -876,7 +879,7 @@ export default function SalesReportPage() {
             filename: 'แนวโน้มยอดขาย',
             sheetName: 'Sales Trend',
             title: 'รายงานแนวโน้มยอดขาย',
-            subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
             currencyColumns: ['sales', 'avgOrderValue'],
             numberColumns: ['orderCount'],
             summaryConfig: {
@@ -896,7 +899,7 @@ export default function SalesReportPage() {
           filename: 'สินค้าขายดี',
           sheetName: 'Top Products',
           title: 'รายงานสินค้าขายดี',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['totalQtySold'],
           currencyColumns: ['totalSales', 'totalProfit'],
           percentColumns: ['profitMarginPct'],
@@ -916,7 +919,7 @@ export default function SalesReportPage() {
           filename: 'ยอดขายตามสาขา',
           sheetName: 'Sales by Branch',
           title: 'รายงานยอดขายตามสาขา',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['orderCount'],
           currencyColumns: ['totalSales'],
           summaryConfig: {
@@ -939,7 +942,7 @@ export default function SalesReportPage() {
             filename: `ยอดขายตามหมวดหมู่_${categoryName}`,
             sheetName: 'Sales by Category',
             title: `รายงานยอดขายตามหมวดหมู่ - ${categoryName}`,
-            subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
             numberColumns: ['orderCount', 'totalQtySold'],
             currencyColumns: ['totalSales', 'totalProfit'],
             percentColumns: ['profitMarginPct'],
@@ -961,7 +964,7 @@ export default function SalesReportPage() {
           filename: 'ยอดขายตามพนักงาน',
           sheetName: 'Sales by Salesperson',
           title: 'รายงานยอดขายตามพนักงาน',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['customerCount', 'orderCount'],
           currencyColumns: ['totalSales', 'avgOrderValue'],
           summaryConfig: {
@@ -980,7 +983,7 @@ export default function SalesReportPage() {
           filename: 'ลูกค้ารายสำคัญ',
           sheetName: 'Top Customers',
           title: 'รายงานลูกค้ารายสำคัญ',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['orderCount', 'daysSinceLastOrder'],
           currencyColumns: ['totalSpent', 'avgOrderValue'],
           summaryConfig: {
@@ -999,7 +1002,155 @@ export default function SalesReportPage() {
           filename: 'สถานะลูกหนี้การค้า',
           sheetName: 'AR Status',
           title: 'รายงานสถานะลูกหนี้การค้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['invoiceCount'],
+          currencyColumns: ['totalInvoiceAmount', 'totalPaid', 'totalOutstanding'],
+          summaryConfig: {
+            columns: {
+              invoiceCount: 'sum',
+              totalInvoiceAmount: 'sum',
+              totalPaid: 'sum',
+              totalOutstanding: 'sum',
+            }
+          }
+        });
+
+      default:
+        return undefined;
+    }
+  };
+
+  const getExportPdfFunction = () => {
+    switch (selectedReport) {
+      case 'sales-trend':
+        return () => {
+          const dataWithAvg = trendData.map(item => ({
+            ...item,
+            avgOrderValue: item.orderCount > 0 ? item.sales / item.orderCount : 0
+          }));
+          exportStyledPdfReport({
+            data: dataWithAvg,
+            headers: { date: 'วันที่', sales: 'ยอดขาย', orderCount: 'จำนวนออเดอร์', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
+            filename: 'แนวโน้มยอดขาย',
+            title: 'รายงานแนวโน้มยอดขาย',
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            currencyColumns: ['sales', 'avgOrderValue'],
+            numberColumns: ['orderCount'],
+            summaryConfig: {
+              columns: {
+                sales: 'sum',
+                orderCount: 'sum',
+                avgOrderValue: 'sum'
+              }
+            }
+          });
+        };
+
+      case 'top-products':
+        return () => exportStyledPdfReport({
+          data: topProducts,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', categoryName: 'หมวดหมู่', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย', totalProfit: 'กำไร', profitMarginPct: 'อัตรากำไร (%)' },
+          filename: 'สินค้าขายดี',
+          title: 'รายงานสินค้าขายดี',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['totalQtySold'],
+          currencyColumns: ['totalSales', 'totalProfit'],
+          percentColumns: ['profitMarginPct'],
+          summaryConfig: {
+            columns: {
+              totalQtySold: 'sum',
+              totalSales: 'sum',
+              totalProfit: 'sum',
+            }
+          }
+        });
+
+      case 'by-branch':
+        return () => exportStyledPdfReport({
+          data: salesByBranch,
+          headers: { branchCode: 'รหัสสาขา', branchName: 'ชื่อสาขา', orderCount: 'จำนวนออเดอร์', totalSales: 'ยอดขาย' },
+          filename: 'ยอดขายตามสาขา',
+          title: 'รายงานยอดขายตามสาขา',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['orderCount'],
+          currencyColumns: ['totalSales'],
+          summaryConfig: {
+            columns: {
+              orderCount: 'sum',
+              totalSales: 'sum',
+            }
+          }
+        });
+
+      case 'by-category':
+        return () => {
+          const categoryName = selectedCategory === 'ALL'
+            ? 'ทั้งหมด'
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+
+          return exportStyledPdfReport({
+            data: filteredSalesByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', orderCount: 'จำนวนออเดอร์', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย', totalProfit: 'กำไร', profitMarginPct: 'อัตรากำไร (%)' },
+            filename: `ยอดขายตามหมวดหมู่_${categoryName}`,
+            title: `รายงานยอดขายตามหมวดหมู่ - ${categoryName}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['orderCount', 'totalQtySold'],
+            currencyColumns: ['totalSales', 'totalProfit'],
+            percentColumns: ['profitMarginPct'],
+            summaryConfig: {
+              columns: {
+                orderCount: 'sum',
+                totalQtySold: 'sum',
+                totalSales: 'sum',
+                totalProfit: 'sum',
+              }
+            }
+          });
+        };
+
+      case 'by-salesperson':
+        return () => exportStyledPdfReport({
+          data: salesBySalesperson,
+          headers: { saleCode: 'รหัสพนักงาน', saleName: 'ชื่อพนักงาน', customerCount: 'ลูกค้า', orderCount: 'ออเดอร์', totalSales: 'ยอดขาย', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
+          filename: 'ยอดขายตามพนักงาน',
+          title: 'รายงานยอดขายตามพนักงาน',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['customerCount', 'orderCount'],
+          currencyColumns: ['totalSales', 'avgOrderValue'],
+          summaryConfig: {
+            columns: {
+              customerCount: 'sum',
+              orderCount: 'sum',
+              totalSales: 'sum',
+            }
+          }
+        });
+
+      case 'top-customers':
+        return () => exportStyledPdfReport({
+          data: topCustomers,
+          headers: { customerCode: 'รหัสลูกค้า', customerName: 'ชื่อลูกค้า', orderCount: 'จำนวนออเดอร์', totalSpent: 'ยอดซื้อรวม', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์', lastOrderDate: 'ซื้อล่าสุด', daysSinceLastOrder: 'วันที่ผ่านมา' },
+          filename: 'ลูกค้ารายสำคัญ',
+          title: 'รายงานลูกค้ารายสำคัญ',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['orderCount', 'daysSinceLastOrder'],
+          currencyColumns: ['totalSpent', 'avgOrderValue'],
+          summaryConfig: {
+            columns: {
+              orderCount: 'sum',
+              totalSpent: 'sum',
+              avgOrderValue: 'avg',
+            }
+          }
+        });
+
+      case 'ar-status':
+        return () => exportStyledPdfReport({
+          data: arStatus,
+          headers: { statusPayment: 'สถานะชำระ', invoiceCount: 'จำนวนใบแจ้งหนี้', totalInvoiceAmount: 'ยอดรวม', totalPaid: 'ชำระแล้ว', totalOutstanding: 'ค้างชำระ' },
+          filename: 'สถานะลูกหนี้การค้า',
+          title: 'รายงานสถานะลูกหนี้การค้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['invoiceCount'],
           currencyColumns: ['totalInvoiceAmount', 'totalPaid', 'totalOutstanding'],
           summaryConfig: {
@@ -1067,6 +1218,7 @@ export default function SalesReportPage() {
           title={currentReport?.label || ''}
           description={currentReport?.description || ''}
           onExportExcel={getExportFunction()}
+          onExportPDF={getExportPdfFunction()}
           headerExtra={
             selectedReport === 'by-category' ? (
               <div className="flex items-center gap-2">

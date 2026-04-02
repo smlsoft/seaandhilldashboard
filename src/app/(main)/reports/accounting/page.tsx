@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { useBranchStore } from '@/store/useBranchStore';
+import { formatSelectedBranchNames, useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -20,6 +22,7 @@ import {
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
+import { exportStyledPdfReport } from '@/lib/exportPdf';
 import { formatCurrency, formatDate, formatMonth } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -96,12 +99,37 @@ const reportOptions: ReportOption<ReportType>[] = [
 ];
 
 export default function AccountingReportPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [selectedReport, setSelectedReport] = useState<ReportType>('profit-loss');
+  const { dateRange, setDateRange } = useDateRangeStore();
+  const searchParams = useSearchParams();
+  
+  // Initialize report type from URL params, fallback to 'profit-loss'
+  const [selectedReport, setSelectedReport] = useState<ReportType>(() => {
+    const reportFromUrl = searchParams.get('report');
+    return (reportFromUrl as ReportType) || 'profit-loss';
+  });
+  
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
+  const withBranchSubtitle = (detail: string) => `กิจการ: ${selectedBranchLabel} | ${detail}`;
 
-  // Balance sheet filter
-  const [balanceSheetTypeFilter, setBalanceSheetTypeFilter] = useState<string>('all');
+  // Balance sheet filter - initialize from URL params
+  const [balanceSheetTypeFilter, setBalanceSheetTypeFilter] = useState<string>(() => {
+    const filterFromUrl = searchParams.get('accountType');
+    return filterFromUrl || 'all';
+  });
+
+  // Effect to update report from URL after initial load
+  useEffect(() => {
+    const reportFromUrl = searchParams.get('report');
+    if (reportFromUrl) {
+      setSelectedReport(reportFromUrl as ReportType);
+    }
+    const filterFromUrl = searchParams.get('accountType');
+    if (filterFromUrl) {
+      setBalanceSheetTypeFilter(filterFromUrl);
+    }
+  }, [searchParams]);
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
@@ -565,7 +593,7 @@ export default function AccountingReportPage() {
           filename: 'รายงานงบกำไรขาดทุน',
           sheetName: 'Profit & Loss',
           title: 'รายงานงบกำไรขาดทุน',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['revenue', 'expenses', 'netProfit'],
           summaryConfig: {
             columns: {
@@ -585,7 +613,7 @@ export default function AccountingReportPage() {
           filename: 'รายงานงบดุล',
           sheetName: 'Balance Sheet',
           title: 'รายงานงบดุล',
-          subtitle: `ณ วันที่ ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${dateRange.end}`),
           currencyColumns: ['balance'],
           summaryConfig: {
             columns: {
@@ -601,7 +629,7 @@ export default function AccountingReportPage() {
           filename: 'รายงานงบกระแสเงินสด',
           sheetName: 'Cash Flow',
           title: 'รายงานงบกระแสเงินสด',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['revenue', 'expenses', 'netCashFlow'],
           summaryConfig: {
             columns: {
@@ -619,7 +647,7 @@ export default function AccountingReportPage() {
           filename: 'รายงานอายุลูกหนี้',
           sheetName: 'AR Aging',
           title: 'รายงานอายุลูกหนี้ (AR Aging)',
-          subtitle: `ณ วันที่ ${new Date().toLocaleDateString('th-TH')}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${new Date().toLocaleDateString('th-TH')}`),
           currencyColumns: ['outstanding'],
           summaryConfig: {
             columns: {
@@ -635,7 +663,7 @@ export default function AccountingReportPage() {
           filename: 'รายงานอายุเจ้าหนี้',
           sheetName: 'AP Aging',
           title: 'รายงานอายุเจ้าหนี้ (AP Aging)',
-          subtitle: `ณ วันที่ ${new Date().toLocaleDateString('th-TH')}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${new Date().toLocaleDateString('th-TH')}`),
           currencyColumns: ['outstanding'],
           summaryConfig: {
             columns: {
@@ -651,7 +679,7 @@ export default function AccountingReportPage() {
           filename: 'รายงานรายได้ตามหมวด',
           sheetName: 'Revenue Breakdown',
           title: 'รายงานรายได้ตามหมวด',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['amount'],
           percentColumns: ['percentage'],
           summaryConfig: {
@@ -668,7 +696,127 @@ export default function AccountingReportPage() {
           filename: 'รายงานค่าใช้จ่ายตามหมวด',
           sheetName: 'Expense Breakdown',
           title: 'รายงานค่าใช้จ่ายตามหมวด',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['amount'],
+          percentColumns: ['percentage'],
+          summaryConfig: {
+            columns: {
+              amount: 'sum',
+            }
+          }
+        });
+
+      default:
+        return undefined;
+    }
+  };
+
+  const getExportPdfFunction = () => {
+    switch (selectedReport) {
+      case 'profit-loss':
+        return () => exportStyledPdfReport({
+          data: profitLossData,
+          headers: { month: 'เดือน', revenue: 'รายได้', expenses: 'ค่าใช้จ่าย', netProfit: 'กำไรสุทธิ' },
+          filename: 'รายงานงบกำไรขาดทุน',
+          title: 'รายงานงบกำไรขาดทุน',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['revenue', 'expenses', 'netProfit'],
+          summaryConfig: {
+            columns: {
+              revenue: 'sum',
+              expenses: 'sum',
+              netProfit: 'sum',
+            }
+          }
+        });
+
+      case 'balance-sheet':
+        return () => exportStyledPdfReport({
+          data: balanceSheetTypeFilter === 'all'
+            ? balanceSheetData
+            : balanceSheetData.filter(item => item.typeName === balanceSheetTypeFilter),
+          headers: { accountCode: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', typeName: 'ประเภท', balance: 'ยอดคงเหลือ' },
+          filename: 'รายงานงบดุล',
+          title: 'รายงานงบดุล',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${dateRange.end}`),
+          currencyColumns: ['balance'],
+          summaryConfig: {
+            columns: {
+              balance: 'sum',
+            }
+          }
+        });
+
+      case 'cash-flow':
+        return () => exportStyledPdfReport({
+          data: cashFlowData,
+          headers: { activityType: 'ประเภทกิจกรรม', revenue: 'เงินสดรับ', expenses: 'เงินสดจ่าย', netCashFlow: 'กระแสเงินสดสุทธิ' },
+          filename: 'รายงานงบกระแสเงินสด',
+          title: 'รายงานงบกระแสเงินสด',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['revenue', 'expenses', 'netCashFlow'],
+          summaryConfig: {
+            columns: {
+              revenue: 'sum',
+              expenses: 'sum',
+              netCashFlow: 'sum',
+            }
+          }
+        });
+
+      case 'ar-aging':
+        return () => exportStyledPdfReport({
+          data: arAgingData,
+          headers: { docNo: 'เลขที่เอกสาร', code: 'รหัส', name: 'ลูกค้า', dueDate: 'วันครบกำหนด', outstanding: 'ยอดค้างชำระ', agingBucket: 'อายุหนี้' },
+          filename: 'รายงานอายุลูกหนี้',
+          title: 'รายงานอายุลูกหนี้ (AR Aging)',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${new Date().toLocaleDateString('th-TH')}`),
+          currencyColumns: ['outstanding'],
+          summaryConfig: {
+            columns: {
+              outstanding: 'sum',
+            }
+          }
+        });
+
+      case 'ap-aging':
+        return () => exportStyledPdfReport({
+          data: apAgingData,
+          headers: { docNo: 'เลขที่เอกสาร', code: 'รหัส', name: 'ซัพพลายเออร์', dueDate: 'วันครบกำหนด', outstanding: 'ยอดค้างชำระ', agingBucket: 'อายุหนี้' },
+          filename: 'รายงานอายุเจ้าหนี้',
+          title: 'รายงานอายุเจ้าหนี้ (AP Aging)',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${new Date().toLocaleDateString('th-TH')}`),
+          currencyColumns: ['outstanding'],
+          summaryConfig: {
+            columns: {
+              outstanding: 'sum',
+            }
+          }
+        });
+
+      case 'revenue-breakdown':
+        return () => exportStyledPdfReport({
+          data: revenueBreakdown,
+          headers: { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
+          filename: 'รายงานรายได้ตามหมวด',
+          title: 'รายงานรายได้ตามหมวด',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['amount'],
+          percentColumns: ['percentage'],
+          summaryConfig: {
+            columns: {
+              amount: 'sum',
+            }
+          }
+        });
+
+      case 'expense-breakdown':
+        return () => exportStyledPdfReport({
+          data: expenseBreakdown,
+          headers: { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
+          filename: 'รายงานค่าใช้จ่ายตามหมวด',
+          title: 'รายงานค่าใช้จ่ายตามหมวด',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['amount'],
           percentColumns: ['percentage'],
           summaryConfig: {
@@ -770,6 +918,7 @@ export default function AccountingReportPage() {
             format: 'JSONEachRow'
           } : undefined}
           onExportExcel={getExportFunction()}
+          onExportPDF={getExportPdfFunction()}
         >
           {loading ? (
             <TableSkeleton rows={10} />

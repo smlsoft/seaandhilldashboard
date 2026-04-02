@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useBranchStore } from '@/store/useBranchStore';
@@ -31,7 +32,7 @@ import {
 } from '@/lib/data/purchase-queries';
 
 export default function PurchasePage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
@@ -235,6 +236,12 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.totalPurchases.growthPercentage || 0)}
             trendUp={kpis.totalPurchases.trend === 'down'} // Down is good for purchases (cost reduction)
             icon={ShoppingBag}
+            detailTitle="รายละเอียดยอดซื้อรวม"
+            detailNote="ใช้ประเมินภาพรวมต้นทุนการจัดซื้อในช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มต้นทุน', value: kpis.totalPurchases.trend === 'down' ? 'ลดลง (ดี)' : 'เพิ่มขึ้น' },
+            ]}
             queryInfo={{
               query: getTotalPurchasesQuery(dateRange),
               format: 'JSONEachRow'
@@ -246,6 +253,12 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.totalItemsPurchased.growthPercentage || 0)}
             trendUp={kpis.totalItemsPurchased.trend === 'up'}
             icon={Package}
+            detailTitle="รายละเอียดจำนวนสินค้าที่ซื้อ"
+            detailNote="แสดงปริมาณสินค้าที่รับเข้าจากการจัดซื้อทั้งหมด"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มจำนวนรับเข้า', value: kpis.totalItemsPurchased.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
             queryInfo={{
               query: getTotalItemsPurchasedQuery(dateRange),
               format: 'JSONEachRow'
@@ -257,6 +270,12 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.totalOrders.growthPercentage || 0)}
             trendUp={kpis.totalOrders.trend === 'up'}
             icon={FileText}
+            detailTitle="รายละเอียดจำนวนออเดอร์ซื้อ"
+            detailNote="นับจำนวนใบสั่งซื้อทั้งหมดในช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มจำนวนใบสั่งซื้อ', value: kpis.totalOrders.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
             queryInfo={{
               query: getTotalOrdersQuery(dateRange),
               format: 'JSONEachRow'
@@ -268,6 +287,12 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.avgOrderValue.growthPercentage || 0)}
             trendUp={kpis.avgOrderValue.trend === 'down'} // Down is good for avg order (efficiency)
             icon={TrendingDown}
+            detailTitle="รายละเอียดค่าเฉลี่ยต่อออเดอร์ซื้อ"
+            detailNote="ใช้ติดตามประสิทธิภาพมูลค่าต่อใบสั่งซื้อ"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มต่อออเดอร์', value: kpis.avgOrderValue.trend === 'down' ? 'ลดลง (ดี)' : 'เพิ่มขึ้น' },
+            ]}
             queryInfo={{
               query: getAvgOrderValueQuery(dateRange),
               format: 'JSONEachRow'

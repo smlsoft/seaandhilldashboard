@@ -95,8 +95,8 @@ export function Header() {
             {/* Left: Breadcrumbs or Page Title */}
             <div className="flex items-center gap-4">
                 <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))]">
-                    <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
-                    <span className="mx-2">/</span>
+                    {/* <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
+                    <span className="mx-2">/</span>*/}
                     <span className="font-medium text-[hsl(var(--foreground))]">{pageName}</span>
                 </div>
             </div>

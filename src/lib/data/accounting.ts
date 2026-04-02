@@ -150,6 +150,7 @@ export async function getBalanceSheetData(dateRange: DateRange, branchSync?: str
     const data = await result.json();
     return data.map((row: any) => ({
       accountType: row.accountType,
+      account_type: row.account_type, // Map the full account type (ASSETS, LIABILITIES, EQUITY)
       typeName: row.typeName,
       accountCode: row.account_code,
       accountName: row.account_name,

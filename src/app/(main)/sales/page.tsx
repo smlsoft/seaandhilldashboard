@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useState } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
+import { KPIRecordsDetailContent, type KPIRecordsColumn, type KPIRecordsRow } from '@/components/KPIRecordsDetailContent';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -36,7 +37,7 @@ import {
   getARStatusQuery,
 } from '@/lib/data/sales-queries';
 export default function SalesPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   const { data, isLoading: loading, error: queryError, refetch } = useQuery({
@@ -57,6 +58,7 @@ export default function SalesPage() {
         productsRes,
         branchRes,
         categoryRes,
+        categorySummaryRes,
         salespersonRes,
         customersRes,
         arRes,
@@ -66,6 +68,7 @@ export default function SalesPage() {
         fetch(`/api/sales/top-products?${params}`),
         fetch(`/api/sales/by-branch?${params}`),
         fetch(`/api/sales/by-category?${params}`),
+        fetch(`/api/sales/by-category-summary?${params}`),
         fetch(`/api/sales/by-salesperson?${params}`),
         fetch(`/api/sales/top-customers?${params}`),
         fetch(`/api/sales/ar-status?${params}`),
@@ -76,16 +79,18 @@ export default function SalesPage() {
       if (!productsRes.ok) throw new Error('Failed to fetch top products');
       if (!branchRes.ok) throw new Error('Failed to fetch sales by branch');
       if (!categoryRes.ok) throw new Error('Failed to fetch sales by category');
+      if (!categorySummaryRes.ok) throw new Error('Failed to fetch sales by category summary');
       if (!salespersonRes.ok) throw new Error('Failed to fetch sales by salesperson');
       if (!customersRes.ok) throw new Error('Failed to fetch top customers');
       if (!arRes.ok) throw new Error('Failed to fetch AR status');
 
-      const [kpisData, trendDataRes, productsData, branchData, categoryData, salespersonData, customersData, arData] = await Promise.all([
+      const [kpisData, trendDataRes, productsData, branchData, categoryData, categorySummaryData, salespersonData, customersData, arData] = await Promise.all([
         kpisRes.json(),
         trendRes.json(),
         productsRes.json(),
         branchRes.json(),
         categoryRes.json(),
+        categorySummaryRes.json(),
         salespersonRes.json(),
         customersRes.json(),
         arRes.json(),
@@ -97,6 +102,7 @@ export default function SalesPage() {
         topProducts: productsData.data as TopProduct[],
         salesByBranch: branchData.data as SalesByBranch[],
         salesByCategory: categoryData.data as SalesByCategory[],
+        salesByCategorySummary: categorySummaryData.data as SalesByCategory[],
         salesBySalesperson: salespersonData.data as SalesBySalesperson[],
         topCustomers: customersData.data as TopCustomer[],
         arStatus: arData.data as ARStatus[],
@@ -110,6 +116,7 @@ export default function SalesPage() {
   const topProducts = data?.topProducts || [];
   const salesByBranch = data?.salesByBranch || [];
   const salesByCategory = data?.salesByCategory || [];
+  const salesByCategorySummaryData = data?.salesByCategorySummary || [];
   const salesBySalesperson = data?.salesBySalesperson || [];
   const topCustomers = data?.topCustomers || [];
   const arStatus = data?.arStatus || [];
@@ -130,6 +137,50 @@ export default function SalesPage() {
       maximumFractionDigits: 0,
     })}`;
   };
+
+  const salesCategoryColumns: KPIRecordsColumn[] = [
+    { key: 'categoryName', label: 'หมวดหมู่' },
+    { key: 'totalQtySold', label: 'จำนวนขาย', align: 'right' },
+    { key: 'totalSales', label: 'ยอดขายรวม', align: 'right' },
+  ];
+
+  const salesByCategorySummary = Array.from(
+    salesByCategory.reduce((map, item) => {
+      const existing = map.get(item.categoryName) || {
+        categoryName: item.categoryName,
+        totalQtySold: 0,
+        totalSales: 0,
+      };
+
+      existing.totalQtySold += item.totalQtySold;
+      existing.totalSales += item.totalSales;
+      map.set(item.categoryName, existing);
+      return map;
+    }, new Map<string, { categoryName: string; totalQtySold: number; totalSales: number }>())
+      .values()
+  ).sort((a, b) => b.totalSales - a.totalSales);
+
+  const salesCategoryRows: KPIRecordsRow[] = salesByCategorySummary.map((item) => ({
+    id: item.categoryName,
+    cells: {
+      categoryName: item.categoryName,
+      totalQtySold: item.totalQtySold.toLocaleString('th-TH'),
+      totalSales: formatCurrency(item.totalSales),
+    },
+  }));
+
+  const salesOrderColumns: KPIRecordsColumn[] = [
+    { key: 'categoryName', label: 'หมวดหมู่' },
+    { key: 'orderCount', label: 'จำนวนออเดอร์', align: 'right' },
+  ];
+
+  const salesOrderRows: KPIRecordsRow[] = salesByCategorySummaryData.map((item) => ({
+    id: item.categoryName,
+    cells: {
+      categoryName: item.categoryName,
+      orderCount: item.orderCount.toLocaleString('th-TH'),
+    },
+  }));
 
   return (
     <motion.div 
@@ -172,6 +223,21 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.totalSales.growthPercentage || 0)}
               trendUp={kpis.totalSales.trend === 'up'}
               icon={DollarSign}
+              detailTitle="รายละเอียดยอดขายรวม"
+              detailNote="สะท้อนยอดขายสุทธิรวมของช่วงเวลาที่เลือก"
+              detailItems={[
+                { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+                { label: 'สถานะแนวโน้ม', value: kpis.totalSales.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+              ]}
+              detailContent={
+                <KPIRecordsDetailContent
+                  title="ยอดขายรวมตามหมวด"
+                  columns={salesCategoryColumns}
+                  rows={salesCategoryRows}
+                  reportHref="/reports/sales#by-category"
+                  headerPrefix=""
+                />
+              }
               queryInfo={{
                 query: getTotalSalesQuery(dateRange),
                 format: 'JSONEachRow',
@@ -184,6 +250,12 @@ export default function SalesPage() {
               trendUp={kpis.grossProfit.trend === 'up'}
               icon={TrendingUp}
               subtitle={`Margin: ${(kpis.grossMarginPct ?? 0).toFixed(1)}%`}
+              detailTitle="รายละเอียดกำไรขั้นต้น"
+              detailNote="คำนวณจากยอดขายหักต้นทุนขาย"
+              detailItems={[
+                { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+                { label: 'Gross Margin', value: `${(kpis.grossMarginPct ?? 0).toFixed(1)}%` },
+              ]}
               queryInfo={{
                 query: getGrossProfitQuery(dateRange),
                 format: 'JSONEachRow',
@@ -195,6 +267,21 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.totalOrders.growthPercentage || 0)}
               trendUp={kpis.totalOrders.trend === 'up'}
               icon={ShoppingCart}
+              detailTitle="รายละเอียดจำนวนออเดอร์"
+              detailNote="นับจำนวนใบสั่งขายทั้งหมดในช่วงเวลาที่เลือก"
+              detailItems={[
+                { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+                { label: 'แนวโน้มคำสั่งซื้อ', value: kpis.totalOrders.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+              ]}
+              detailContent={
+                <KPIRecordsDetailContent
+                  title="จำนวนออเดอร์ตามหมวด"
+                  columns={salesOrderColumns}
+                  rows={salesOrderRows}
+                  reportHref="/reports/sales#by-category"
+                  headerPrefix=""
+                />
+              }
               queryInfo={{
                 query: getTotalOrdersQuery(dateRange),
                 format: 'JSONEachRow',
@@ -206,6 +293,12 @@ export default function SalesPage() {
               trend={formatGrowthPercentage(kpis.avgOrderValue.growthPercentage || 0)}
               trendUp={kpis.avgOrderValue.trend === 'up'}
               icon={Package}
+              detailTitle="รายละเอียดค่าเฉลี่ยต่อออเดอร์"
+              detailNote="วัดมูลค่าซื้อเฉลี่ยต่อหนึ่งคำสั่งขาย"
+              detailItems={[
+                { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+                { label: 'แนวโน้มมูลค่าต่อออเดอร์', value: kpis.avgOrderValue.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+              ]}
               queryInfo={{
                 query: getAvgOrderValueQuery(dateRange),
                 format: 'JSONEachRow',

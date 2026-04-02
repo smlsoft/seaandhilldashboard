@@ -44,6 +44,7 @@ export interface ProfitLossData {
 
 export interface BalanceSheetItem {
   accountType: string;
+  account_type?: string; // For filtering (ASSETS, LIABILITIES, EQUITY)
   typeName: string;
   accountCode: string;
   accountName: string;

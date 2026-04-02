@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { useBranchStore } from '@/store/useBranchStore';
+import { formatSelectedBranchNames, useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
+import { exportStyledPdfReport } from '@/lib/exportPdf';
 import { formatCurrency, formatNumber, formatDate } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -89,10 +91,13 @@ const reportOptions: ReportOption<ReportType>[] = [
 ];
 
 export default function InventoryReportPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('stock-movement');
   const asOfDate = new Date().toISOString().split('T')[0];
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
+  const withBranchSubtitle = (detail: string) => `กิจการ: ${selectedBranchLabel} | ${detail}`;
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
@@ -671,7 +676,7 @@ export default function InventoryReportPage() {
           filename: 'การเคลื่อนไหวสต็อก',
           sheetName: 'Stock Movement',
           title: 'รายงานการเคลื่อนไหวสต็อก',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['qtyIn', 'qtyOut'],
           summaryConfig: {
             columns: {
@@ -688,7 +693,7 @@ export default function InventoryReportPage() {
           filename: 'สินค้าใกล้หมด',
           sheetName: 'Low Stock',
           title: 'รายงานสินค้าใกล้หมด',
-          subtitle: `ณ วันที่ ${asOfDate}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
           numberColumns: ['qtyOnHand', 'reorderPoint'],
           currencyColumns: ['stockValue'],
           summaryConfig: {
@@ -706,7 +711,7 @@ export default function InventoryReportPage() {
           filename: 'สินค้าเกินคลัง',
           sheetName: 'Overstock',
           title: 'รายงานสินค้าเกินคลัง',
-          subtitle: `ณ วันที่ ${asOfDate}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
           numberColumns: ['qtyOnHand', 'maxStockLevel'],
           currencyColumns: ['valueExcess'],
           summaryConfig: {
@@ -724,7 +729,7 @@ export default function InventoryReportPage() {
           filename: 'สินค้าขายช้า',
           sheetName: 'Slow Moving',
           title: 'รายงานสินค้าขายช้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['qtyOnHand', 'qtySold', 'daysOfStock'],
           currencyColumns: ['stockValue'],
           summaryConfig: {
@@ -743,7 +748,7 @@ export default function InventoryReportPage() {
           filename: 'อัตราหมุนเวียนสินค้า',
           sheetName: 'Inventory Turnover',
           title: 'รายงานอัตราหมุนเวียนสินค้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['avgInventoryValue', 'totalCOGS'],
           numberColumns: ['turnoverRatio', 'daysToSell'],
         });
@@ -755,7 +760,111 @@ export default function InventoryReportPage() {
           filename: 'สต็อกตามสาขา',
           sheetName: 'Stock by Branch',
           title: 'รายงานสต็อกตามสาขา',
-          subtitle: `ณ วันที่ ${asOfDate}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
+          numberColumns: ['itemCount', 'qtyOnHand'],
+          currencyColumns: ['inventoryValue'],
+          summaryConfig: {
+            columns: {
+              itemCount: 'sum',
+              qtyOnHand: 'sum',
+              inventoryValue: 'sum',
+            }
+          }
+        });
+
+      default:
+        return undefined;
+    }
+  };
+
+  const getExportPdfFunction = () => {
+    switch (selectedReport) {
+      case 'stock-movement':
+        return () => exportStyledPdfReport({
+          data: stockMovement,
+          headers: { date: 'วันที่', qtyIn: 'รับเข้า', qtyOut: 'จ่ายออก' },
+          filename: 'การเคลื่อนไหวสต็อก',
+          title: 'รายงานการเคลื่อนไหวสต็อก',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyIn', 'qtyOut'],
+          summaryConfig: {
+            columns: {
+              qtyIn: 'sum',
+              qtyOut: 'sum',
+            }
+          }
+        });
+
+      case 'low-stock':
+        return () => exportStyledPdfReport({
+          data: lowStockItems,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', branchName: 'สาขา', qtyOnHand: 'คงเหลือ', reorderPoint: 'จุดสั่งซื้อ', stockValue: 'มูลค่า' },
+          filename: 'สินค้าใกล้หมด',
+          title: 'รายงานสินค้าใกล้หมด',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
+          numberColumns: ['qtyOnHand', 'reorderPoint'],
+          currencyColumns: ['stockValue'],
+          summaryConfig: {
+            columns: {
+              qtyOnHand: 'sum',
+              stockValue: 'sum',
+            }
+          }
+        });
+
+      case 'overstock':
+        return () => exportStyledPdfReport({
+          data: overstockItems,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', qtyOnHand: 'คงเหลือ', maxStockLevel: 'ระดับสูงสุด', valueExcess: 'มูลค่าส่วนเกิน' },
+          filename: 'สินค้าเกินคลัง',
+          title: 'รายงานสินค้าเกินคลัง',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
+          numberColumns: ['qtyOnHand', 'maxStockLevel'],
+          currencyColumns: ['valueExcess'],
+          summaryConfig: {
+            columns: {
+              qtyOnHand: 'sum',
+              valueExcess: 'sum',
+            }
+          }
+        });
+
+      case 'slow-moving':
+        return () => exportStyledPdfReport({
+          data: slowMovingItems,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', categoryName: 'หมวดหมู่', qtyOnHand: 'คงเหลือ', qtySold: 'ขายได้', daysOfStock: 'วันสต็อก', stockValue: 'มูลค่า' },
+          filename: 'สินค้าขายช้า',
+          title: 'รายงานสินค้าขายช้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyOnHand', 'qtySold', 'daysOfStock'],
+          currencyColumns: ['stockValue'],
+          summaryConfig: {
+            columns: {
+              qtyOnHand: 'sum',
+              qtySold: 'sum',
+              stockValue: 'sum',
+            }
+          }
+        });
+
+      case 'turnover':
+        return () => exportStyledPdfReport({
+          data: inventoryTurnover,
+          headers: { itemName: 'หมวดหมู่', avgInventoryValue: 'มูลค่าสต็อกเฉลี่ย', totalCOGS: 'ต้นทุนขาย', turnoverRatio: 'อัตราหมุนเวียน', daysToSell: 'วันขายหมด' },
+          filename: 'อัตราหมุนเวียนสินค้า',
+          title: 'รายงานอัตราหมุนเวียนสินค้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['avgInventoryValue', 'totalCOGS'],
+          numberColumns: ['turnoverRatio', 'daysToSell'],
+        });
+
+      case 'by-branch':
+        return () => exportStyledPdfReport({
+          data: stockByBranch,
+          headers: { branchCode: 'รหัสสาขา', branchName: 'ชื่อสาขา', itemCount: 'จำนวนรายการ', qtyOnHand: 'จำนวนสินค้า', inventoryValue: 'มูลค่าสินค้า' },
+          filename: 'สต็อกตามสาขา',
+          title: 'รายงานสต็อกตามสาขา',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
           numberColumns: ['itemCount', 'qtyOnHand'],
           currencyColumns: ['inventoryValue'],
           summaryConfig: {
@@ -841,6 +950,7 @@ export default function InventoryReportPage() {
             format: 'JSONEachRow'
           } : undefined}
           onExportExcel={getExportFunction()}
+          onExportPDF={getExportPdfFunction()}
         >
           {loading ? (
             <TableSkeleton rows={10} />

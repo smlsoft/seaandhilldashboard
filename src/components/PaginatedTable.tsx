@@ -299,7 +299,7 @@ export function PaginatedTable<T = any>({
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-                className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
+                className={`min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                   }`}

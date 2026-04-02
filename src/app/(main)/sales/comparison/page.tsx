@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import ReactECharts from 'echarts-for-react';
 import { motion } from 'framer-motion';
 import { useComparison } from '@/lib/ComparisonContext';
@@ -86,10 +87,12 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 export default function SalesComparisonPage() {
   const { selectedBranches, availableBranches, isLoaded } = useComparison();
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BranchSalesData[]>([]);
 
+  // Stable key to prevent infinite re-fetch from array reference changes
+  const branchesKey = useMemo(() => selectedBranches.join(','), [selectedBranches]);
   /* ─── Fetch ALL endpoints per branch ─── */
   const fetchData = useCallback(async () => {
     if (!isLoaded || selectedBranches.length === 0) return;
@@ -157,7 +160,7 @@ export default function SalesComparisonPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedBranches, availableBranches, dateRange, isLoaded]);
+  }, [branchesKey, dateRange, isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -720,17 +723,6 @@ export default function SalesComparisonPage() {
             </div>
           </motion.div>
 
-          {/* ════════════════════════════════════════
-             12) Branch Legend
-             ════════════════════════════════════════ */}
-          <motion.div variants={itemVariants} className="rounded-xl border bg-card p-4 shadow-sm">
-            <p className="text-xs font-semibold text-muted-foreground mb-2">กิจการที่แสดง</p>
-            <div className="flex flex-wrap gap-4">
-              {rankedData.map((b, i) => (
-                <LegendDot key={b.branchKey} color={BRANCH_PALETTE[i % BRANCH_PALETTE.length].hex} label={b.branchName} />
-              ))}
-            </div>
-          </motion.div>
         </>
       )}
     </motion.div>

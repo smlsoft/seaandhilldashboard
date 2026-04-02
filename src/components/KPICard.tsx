@@ -2,8 +2,9 @@
 
 import { LucideIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { KPIDetailModal, type KPIDetailActionButton, type KPIDetailItem } from '@/components/KPIDetailModal';
 
 interface QueryInfo {
     query: string;
@@ -20,6 +21,11 @@ interface KPICardProps {
     subtitle?: string;
     className?: string;
     queryInfo?: QueryInfo;
+    detailTitle?: string;
+    detailNote?: string;
+    detailItems?: KPIDetailItem[];
+    detailContent?: ReactNode;
+    detailActionButton?: KPIDetailActionButton;
 }
 
 
@@ -74,7 +80,7 @@ function QueryModal({
                 onClick={onClose}
             />
             {/* Popup */}
-            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] max-w-2xl p-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--popover))] shadow-2xl">
+            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] sm:w-[90vw] max-w-2xl mx-4 p-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--popover))] shadow-2xl">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <svg 
@@ -150,7 +156,7 @@ function QueryModal({
                             </>
                         )}
                     </button>
-                    <pre className="text-xs bg-[hsl(var(--muted))] p-4  ยrounded-md overflow-x-auto max-h-[60vh] overflow-y-auto">
+                    <pre className="text-xs bg-[hsl(var(--muted))] p-4 rounded-md overflow-x-auto max-h-[60vh] overflow-y-auto">
                         <code className="text-[hsl(var(--foreground))] whitespace-pre-wrap break-words font-mono">
                             {queryInfo.query.trim()}
                         </code>
@@ -163,8 +169,26 @@ function QueryModal({
     );
 }
 
-export function KPICard({ title, value, icon: Icon, trend, trendUp, description, subtitle, className, queryInfo }: KPICardProps) {
+export function KPICard({
+    title,
+    value,
+    icon: Icon,
+    trend,
+    trendUp,
+    description,
+    subtitle,
+    className,
+    queryInfo,
+    detailTitle,
+    detailNote,
+    detailItems,
+    detailContent,
+    detailActionButton,
+}: KPICardProps) {
     const [showQueryPopup, setShowQueryPopup] = useState(false);
+    const [showDetailPopup, setShowDetailPopup] = useState(false);
+
+    const isCardClickable = true;
 
     const openPopup = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -178,18 +202,42 @@ export function KPICard({ title, value, icon: Icon, trend, trendUp, description,
         setShowQueryPopup(false);
     };
 
+    const openDetailPopup = () => {
+        if (!isCardClickable) return;
+        setShowDetailPopup(true);
+    };
+
+    const closeDetailPopup = () => {
+        setShowDetailPopup(false);
+    };
+
+    const handleCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!isCardClickable) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openDetailPopup();
+        }
+    };
+
     return (
         <>
             <div 
                 className={cn(
                     "group relative overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 transition-all duration-300 hover:shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-1",
+                    isCardClickable ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]' : '',
                     className
                 )}
+                role={isCardClickable ? 'button' : undefined}
+                tabIndex={isCardClickable ? 0 : undefined}
+                onClick={openDetailPopup}
+                onKeyDown={handleCardKeyDown}
+                aria-label={`ดูรายละเอียด ${title}`}
             >
                 {/* Query Info Button - Top Right Corner */}
                 {queryInfo && (
                     <button
-                        className="absolute top-26 right-3 p-2 rounded-lg bg-[hsl(var(--muted))]/50 hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer z-10"
+                        type="button"
+                        className="absolute bottom-3 right-3 p-2 rounded-lg bg-[hsl(var(--muted))]/50 hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer z-10"
                         title="View SQL Query"
                         onClick={openPopup}
                     >
@@ -258,6 +306,22 @@ export function KPICard({ title, value, icon: Icon, trend, trendUp, description,
                     queryInfo={queryInfo}
                 />
             )}
+
+            <KPIDetailModal
+                isOpen={showDetailPopup}
+                onClose={closeDetailPopup}
+                title={title}
+                value={value}
+                trend={trend}
+                trendUp={trendUp}
+                description={description}
+                subtitle={subtitle}
+                detailTitle={detailTitle}
+                detailNote={detailNote}
+                detailItems={detailItems}
+                detailContent={detailContent}
+                detailActionButton={detailActionButton}
+            />
         </>
     );
 }

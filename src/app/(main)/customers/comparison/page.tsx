@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import ReactECharts from 'echarts-for-react';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
@@ -82,9 +83,12 @@ function BranchDot({ idx }: { idx: number }) {
 
 export default function CustomersComparisonPage() {
   const { selectedBranches, availableBranches, isLoaded } = useComparison();
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BranchCustomerData[]>([]);
+
+  // Stable key to prevent infinite re-fetch from array reference changes
+  const branchesKey = useMemo(() => selectedBranches.join(','), [selectedBranches]);
 
   /* ─── Fetch ALL endpoints per branch ─── */
   const fetchData = useCallback(async () => {
@@ -174,7 +178,8 @@ export default function CustomersComparisonPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedBranches, availableBranches, dateRange, isLoaded]);
+  }, [branchesKey, dateRange, isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

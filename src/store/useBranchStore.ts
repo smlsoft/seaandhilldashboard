@@ -71,3 +71,21 @@ export function useBranchDisplayText(): string {
   }
   return `${selectedBranches.length} กิจการ`;
 }
+
+/**
+ * Pure helper for report/export contexts where we already have branch state.
+ */
+export function formatSelectedBranchNames(
+  selectedBranches: string[],
+  availableBranches: BranchInfo[]
+): string {
+  if (selectedBranches.includes('ALL')) return 'ทุกกิจการ';
+  if (selectedBranches.length === 0) return 'ไม่ระบุกิจการ';
+
+  const names = selectedBranches.map((key) => {
+    const branch = availableBranches.find((b) => b.key === key);
+    return branch?.name || key;
+  });
+
+  return names.join(', ');
+}

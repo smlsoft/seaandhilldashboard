@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useBranchStore } from '@/store/useBranchStore';
@@ -32,7 +32,7 @@ import {
 } from '@/lib/data/inventory-queries';
 
 export default function InventoryPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
   const { data, isLoading: loading, error: queryError, refetch } = useQuery({
@@ -169,6 +169,12 @@ export default function InventoryPage() {
             title="มูลค่าสินค้าคงคลัง"
             value={formatCurrency(kpis.totalInventoryValue.value)}
             icon={Package}
+            detailTitle="รายละเอียดมูลค่าสินค้าคงคลัง"
+            detailNote="แสดงมูลค่ารวมของสินค้าคงคลังตามช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'สถานะภาพรวม', value: 'ใช้ติดตามมูลค่าคงเหลือของคลัง' },
+            ]}
             queryInfo={{
               query: getInventoryValueQuery(dateRange),
               format: 'JSONEachRow',
@@ -178,6 +184,12 @@ export default function InventoryPage() {
             title="จำนวนรายการสินค้า"
             value={formatNumber(kpis.totalItemsInStock.value)}
             icon={Package}
+            detailTitle="รายละเอียดจำนวนรายการสินค้า"
+            detailNote="จำนวนรายการสินค้าที่มีอยู่ในคลังปัจจุบัน"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'การใช้งาน', value: 'ใช้ตรวจความครอบคลุมของ SKU ในคลัง' },
+            ]}
             queryInfo={{
               query: getTotalItemsQuery(dateRange),
               format: 'JSONEachRow',
@@ -189,6 +201,12 @@ export default function InventoryPage() {
             icon={AlertTriangle}
             trendUp={false}
             className={kpis.lowStockAlerts.value > 0 ? 'border-yellow-500/50' : ''}
+            detailTitle="รายละเอียดสินค้าใกล้หมด"
+            detailNote="จำนวนรายการที่ต่ำกว่าระดับ Reorder Point และควรเติมสต็อก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'ความเร่งด่วน', value: kpis.lowStockAlerts.value > 0 ? 'ควรวางแผนสั่งซื้อ' : 'ปกติ' },
+            ]}
             queryInfo={{
               query: getLowStockCountQuery(dateRange),
               format: 'JSONEachRow',
@@ -200,6 +218,12 @@ export default function InventoryPage() {
             icon={AlertCircle}
             trendUp={false}
             className={kpis.overstockAlerts.value > 0 ? 'border-orange-500/50' : ''}
+            detailTitle="รายละเอียดสินค้าเกินคลัง"
+            detailNote="จำนวนรายการที่เกินระดับสูงสุดและมีความเสี่ยงสต็อกค้าง"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'ความเสี่ยง', value: kpis.overstockAlerts.value > 0 ? 'ต้นทุนจมสูงขึ้น' : 'ปกติ' },
+            ]}
             queryInfo={{
               query: getOverstockCountQuery(dateRange),
               format: 'JSONEachRow',
