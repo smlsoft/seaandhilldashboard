@@ -8,4 +8,4 @@ ALTER USER web_dashboard WITH REPLICATION;
 SELECT usename, usesuper, userepl FROM pg_shadow WHERE usename = 'web_dashboard';
 
 -- หมายเหตุ: ต้องตรวจสอบด้วยว่า user 'web_dashboard' มีสิทธิ์ Login ด้วยรหัสผ่านที่ตั้งไว้
--- ALTER USER web_dashboard WITH PASSWORD 'Web2026!';
+-- ALTER USER web_dashboard WITH PASSWORD 'seaandhill';

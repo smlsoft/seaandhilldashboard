@@ -291,6 +291,29 @@ function getSummaryTypeLabel(type: SummaryType): string {
   }
 }
 
+function formatThaiDateInText(text: string): string {
+  return text.replace(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g, (_, y, m, d) => {
+    const year = Number(y);
+    const month = Number(m);
+    const day = Number(d);
+
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+      return `${day}-${month}-${year}`;
+    }
+
+    const date = new Date(year, month - 1, day);
+    if (Number.isNaN(date.getTime())) {
+      return `${day}-${month}-${year}`;
+    }
+
+    return date.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  });
+}
+
 /**
  * Export styled report with title, date, and summary
  * @param options - Report options
@@ -354,7 +377,7 @@ export async function exportStyledReport<T extends Record<string, any>>(
   if (subtitle) {
     worksheet.mergeCells(currentRow, 1, currentRow, colCount);
     const subtitleCell = worksheet.getCell(currentRow, 1);
-    subtitleCell.value = subtitle;
+    subtitleCell.value = formatThaiDateInText(subtitle);
     subtitleCell.font = { size: 11, color: { argb: 'FF666666' } };
     subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     currentRow++;

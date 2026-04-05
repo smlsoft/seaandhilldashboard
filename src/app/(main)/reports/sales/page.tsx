@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useState, useEffect } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { formatSelectedBranchNames, useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -19,9 +21,11 @@ import {
   MapPin,
   UserCheck,
   CreditCard,
+  FolderTree,
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
+import { exportStyledPdfReport } from '@/lib/exportPdf';
 import { formatCurrency, formatNumber, formatDate, formatPercent } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -30,6 +34,7 @@ import type {
   SalesTrendData,
   TopProduct,
   SalesByBranch,
+  SalesByCategory,
   SalesBySalesperson,
   TopCustomer,
   ARStatus,
@@ -40,6 +45,7 @@ type ReportType =
   | 'sales-trend'
   | 'top-products'
   | 'by-branch'
+  | 'by-category'
   | 'by-salesperson'
   | 'top-customers'
   | 'ar-status';
@@ -64,6 +70,12 @@ const reportOptions: ReportOption<ReportType>[] = [
     description: 'ยอดขายแยกตามสาขา/คลัง',
   },
   {
+    value: 'by-category',
+    label: 'ยอดขายตามหมวดหมู่',
+    icon: FolderTree,
+    description: 'ยอดขายแยกตามหมวดหมู่สินค้า',
+  },
+  {
     value: 'by-salesperson',
     label: 'ยอดขายตามพนักงาน',
     icon: UserCheck,
@@ -84,103 +96,38 @@ const reportOptions: ReportOption<ReportType>[] = [
 ];
 
 export default function SalesReportPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(
-    getDateRange('THIS_MONTH')
-  );
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('sales-trend');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { isComparisonMode } = useComparison();
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
-  const [branchInfos, setBranchInfos] = useState<BranchInfo[]>([]);
-
-  // Data states
-  const [salesAnalysis, setSalesAnalysis] = useState<SalesAnalysisData[]>([]);
-  const [trendData, setTrendData] = useState<SalesTrendData[]>([]);
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [salesByBranch, setSalesByBranch] = useState<SalesByBranch[]>([]);
-  const [salesBySalesperson, setSalesBySalesperson] = useState<
-    SalesBySalesperson[]
-  >([]);
-  const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
-  const [arStatus, setArStatus] = useState<ARStatus[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
+  const withBranchSubtitle = (detail: string) => `กิจการ: ${selectedBranchLabel} | ${detail}`;
 
   // Category filter for Sales Analysis report
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-  // Add state for allBranches
-  const [allBranches, setAllBranches] = useState<BranchInfo[]>([]);
-
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
 
-  // Fetch branch list on mount to get names
+  // Reset category filter when switching reports
   useEffect(() => {
-    const fetchBranches = async () => {
-      try {
-        const res = await fetch('/api/branches');
-        if (res.ok) {
-          const data = await res.json();
-          setAllBranches(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch branches:', error);
-      }
-    };
-    fetchBranches();
-  }, []);
+    setSelectedCategory('ALL');
+  }, [selectedReport]);
 
-  useEffect(() => {
-    fetchReportData(selectedReport);
-    loadBranchInfo();
-  }, [dateRange, selectedReport, allBranches]); // Add allBranches dependency
-
-  // Listen for branch changes
-  useBranchChange(() => {
-    fetchReportData(selectedReport);
-    loadBranchInfo();
-  });
-
-  const loadBranchInfo = async () => {
-    const branches = await getSelectedBranch();
-    setSelectedBranches(branches);
-
-    if (branches.length > 0 && !branches.includes('ALL')) {
-      // Lookup names from already fetched allBranches
-      // If allBranches is empty (still loading), this might be empty, but it will update when allBranches updates due to dependency
-      const infos = branches.map(key => {
-        const branch = allBranches.find(b => b.key === key);
-        return { key, name: branch ? branch.name : key };
-      });
-      setBranchInfos(infos);
-    } else {
-      setBranchInfos([]);
-    }
-  };
-
-  const fetchReportData = async (reportType: ReportType) => {
-    // If in comparison mode, we don't fetch aggregated data here
-    // The UnifiedComparisonTable handles its own fetching
-    if (isComparisonMode && selectedBranches.length > 1 && !selectedBranches.includes('ALL')) {
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['salesReportData', selectedReport, dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
-
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
 
       let endpoint = '';
-      switch (reportType) {
+      switch (selectedReport) {
         case 'sales-trend':
           endpoint = `/api/sales/analysis?${params}`;
           break;
@@ -189,6 +136,9 @@ export default function SalesReportPage() {
           break;
         case 'by-branch':
           endpoint = `/api/sales/by-branch?${params}`;
+          break;
+        case 'by-category':
+          endpoint = `/api/sales/by-category?${params}`;
           break;
         case 'by-salesperson':
           endpoint = `/api/sales/by-salesperson?${params}`;
@@ -202,39 +152,25 @@ export default function SalesReportPage() {
       }
 
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${reportType} data`);
+      if (!response.ok) throw new Error(`Failed to fetch ${selectedReport} data`);
 
       const result = await response.json();
-
-      switch (reportType) {
-        case 'sales-trend':
-          setSalesAnalysis(result.data);
-          break;
-        case 'top-products':
-          setTopProducts(result.data);
-          break;
-        case 'by-branch':
-          setSalesByBranch(result.data);
-          break;
-        case 'by-salesperson':
-          setSalesBySalesperson(result.data);
-          break;
-        case 'top-customers':
-          setTopCustomers(result.data);
-          break;
-        case 'ar-status':
-          setArStatus(result.data);
-          break;
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล'
-      );
-      console.error('Error fetching sales data:', err);
-    } finally {
-      setLoading(false);
+      return result.data;
     }
-  };
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+
+  const trendData: SalesTrendData[] = selectedReport === 'sales-trend' ? (reportData || []) : [];
+  const salesAnalysis: SalesAnalysisData[] = selectedReport === 'sales-trend' ? (reportData || []) : [];
+  const topProducts: TopProduct[] = selectedReport === 'top-products' ? (reportData || []) : [];
+  const salesByBranch: SalesByBranch[] = selectedReport === 'by-branch' ? (reportData || []) : [];
+  const salesByCategory: SalesByCategory[] = selectedReport === 'by-category' ? (reportData || []) : [];
+  const salesBySalesperson: SalesBySalesperson[] = selectedReport === 'by-salesperson' ? (reportData || []) : [];
+  const topCustomers: TopCustomer[] = selectedReport === 'top-customers' ? (reportData || []) : [];
+  const arStatus: ARStatus[] = selectedReport === 'ar-status' ? (reportData || []) : [];
+
+  const fetchReportData = () => { refetch(); };
 
   // Column definitions for Sales Analysis
   const salesAnalysisColumns: ColumnDef<SalesAnalysisData>[] = [
@@ -450,6 +386,83 @@ export default function SalesReportPage() {
     },
   ];
 
+  // Column definitions for Sales by Category
+  const salesByCategoryColumns: ColumnDef<SalesByCategory>[] = [
+    {
+      key: 'itemCode',
+      header: 'รหัสสินค้า',
+      sortable: true,
+      align: 'left',
+      render: (item: SalesByCategory) => (
+        <span className="font-mono text-xs">{item.itemCode}</span>
+      ),
+    },
+    {
+      key: 'itemName',
+      header: 'ชื่ตสินค้า',
+      sortable: true,
+      align: 'left',
+      render: (item: SalesByCategory) => (
+        <span className="font-medium">{item.itemName}</span>
+      ),
+    },
+    {
+      key: 'orderCount',
+      header: 'ออเดอร์ (ต่อสินค้า)',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => formatNumber(item.orderCount),
+    },
+    {
+      key: 'totalQtySold',
+      header: 'จำนวนขาย',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => formatNumber(item.totalQtySold),
+    },
+    {
+      key: 'totalSales',
+      header: 'ยอดขาย',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => (
+        <span className="font-medium text-green-600">
+          ฿{formatCurrency(item.totalSales)}
+        </span>
+      ),
+    },
+    {
+      key: 'totalProfit',
+      header: 'กำไร',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => (
+        <span className="font-medium text-blue-600">
+          ฿{formatCurrency(item.totalProfit)}
+        </span>
+      ),
+    },
+    {
+      key: 'profitMarginPct',
+      header: 'อัตรากำไร',
+      sortable: true,
+      align: 'right',
+      render: (item: SalesByCategory) => {
+        const color =
+          item.profitMarginPct >= 30
+            ? 'text-green-600'
+            : item.profitMarginPct >= 15
+              ? 'text-yellow-600'
+              : 'text-red-600';
+        return (
+          <span className={`font-medium ${color}`}>
+            {formatPercent(item.profitMarginPct)}
+          </span>
+        );
+      },
+    },
+  ];
+
   // Column definitions for Sales by Salesperson
   const salesBySalespersonColumns: ColumnDef<SalesBySalesperson>[] = [
     {
@@ -661,174 +674,35 @@ export default function SalesReportPage() {
   // Get current report option
   const currentReport = reportOptions.find(opt => opt.value === selectedReport);
 
-  // Comparison Logic
-  const canCompare = selectedBranches.length > 1 && !selectedBranches.includes('ALL') && selectedReport !== 'by-branch';
+  // Get unique categories from salesByCategory
+  const uniqueCategories = Array.from(
+    new Set(salesByCategory.map(item => JSON.stringify({ 
+      code: item.categoryCode, 
+      name: item.categoryName 
+    })))
+  ).map(str => JSON.parse(str));
 
-  const renderComparisonContent = () => {
-    if (!canCompare) return null;
+  // Filter salesByCategory by selected category
+  const filteredSalesByCategory = selectedCategory === 'ALL' 
+    ? salesByCategory 
+    : salesByCategory.filter(item => item.categoryCode === selectedCategory);
 
-    // Helper to build endpoint
-    const buildEndpoint = (branchKey: string, dr: { start: string; end: string }) => {
-      const params = new URLSearchParams({
-        start_date: dr.start,
-        end_date: dr.end,
-        branch: branchKey
-      });
-
-      switch (selectedReport) {
-        case 'sales-trend': return `/api/sales/analysis?${params}`;
-        case 'top-products': return `/api/sales/top-products?${params}`;
-        case 'by-salesperson': return `/api/sales/by-salesperson?${params}`;
-        case 'top-customers': return `/api/sales/top-customers?${params}`;
-        case 'ar-status': return `/api/sales/ar-status?${params}`;
-        default: return '';
-      }
-    };
-
-    switch (selectedReport) {
-      case 'top-products':
-        return (
-          <UnifiedComparisonTable<TopProduct>
-            branches={branchInfos}
-            dateRange={dateRange}
-            buildEndpoint={buildEndpoint}
-            keyExtractor={(item) => item.itemCode}
-            baseColumns={[
-              { key: 'rank', header: '#', align: 'center', width: '50px', render: (_, __, index) => <span className="text-muted-foreground">{index}</span> },
-              { key: 'itemCode', header: 'รหัสสินค้า', align: 'left' },
-              { key: 'itemName', header: 'ชื่อสินค้า', align: 'left', render: (item) => <div className="font-medium">{item.itemName}</div> }
-            ]}
-            compareColumns={[
-              { key: 'totalQtySold', header: 'จำนวน', align: 'right', render: (item) => formatNumber(item.totalQtySold) },
-              { key: 'totalSales', header: 'ยอดขาย', align: 'right', render: (item) => <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span> }
-            ]}
-            defaultSortKey="rank"
-          />
-        );
-      case 'sales-trend':
-        return (
-          <UnifiedComparisonTable<SalesAnalysisData>
-            branches={branchInfos}
-            dateRange={dateRange}
-            buildEndpoint={buildEndpoint}
-            keyExtractor={(item) => item.itemCode}
-            groupByKey="categoryName"
-            filterKey="categoryName"
-            filterValue={categoryFilter}
-            baseColumns={[
-              {
-                key: 'itemName',
-                header: 'ชื่อสินค้า / รหัส',
-                align: 'left',
-                sortable: true,
-                width: '280px',
-                render: (item) => (
-                  <div>
-                    <div className="font-medium text-sm leading-snug">{item.itemName}</div>
-                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.itemCode}</div>
-                  </div>
-                )
-              }
-            ]}
-            compareColumns={[
-              {
-                key: 'qty',
-                header: 'จำนวน',
-                align: 'right',
-                render: (item) => item ? <span>{formatNumber(item.qty)} <span className="text-xs text-muted-foreground">{item.unitCode}</span></span> : '-'
-              },
-              {
-                key: 'price',
-                header: 'ราคา',
-                align: 'right',
-                render: (item) => item ? <span>{formatCurrency(item.price)}</span> : '-'
-              },
-              {
-                key: 'totalAmount',
-                header: 'รวมมูลค่า',
-                align: 'right',
-                render: (item) => item ? <span className="text-green-600 font-medium">฿{formatCurrency(item.totalAmount)}</span> : '-'
-              }
-            ]}
-            defaultSortKey="categoryName"
-            defaultSortOrder="asc"
-          />
-        );
-      case 'by-salesperson':
-        return (
-          <UnifiedComparisonTable<SalesBySalesperson>
-            branches={branchInfos}
-            dateRange={dateRange}
-            buildEndpoint={buildEndpoint}
-            keyExtractor={(item) => item.saleCode}
-            baseColumns={[
-              { key: 'saleCode', header: 'รหัส', align: 'left' },
-              { key: 'saleName', header: 'ชื่อพนักงาน', align: 'left', render: (item) => <div className="font-medium">{item.saleName}</div> }
-            ]}
-            compareColumns={[
-              { key: 'orderCount', header: 'ออเดอร์', align: 'right', render: (item) => formatNumber(item.orderCount) },
-              { key: 'totalSales', header: 'ยอดขาย', align: 'right', render: (item) => <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span> }
-            ]}
-            defaultSortKey="totalSales"
-          />
-        );
-      case 'top-customers':
-        return (
-          <UnifiedComparisonTable<TopCustomer>
-            branches={branchInfos}
-            dateRange={dateRange}
-            buildEndpoint={buildEndpoint}
-            keyExtractor={(item) => item.customerCode}
-            baseColumns={[
-              { key: 'customerCode', header: 'รหัส', align: 'left' },
-              { key: 'customerName', header: 'ชื่อลูกค้า', align: 'left', render: (item) => <div className="font-medium">{item.customerName}</div> }
-            ]}
-            compareColumns={[
-              { key: 'orderCount', header: 'ออเดอร์', align: 'right', render: (item) => formatNumber(item.orderCount) },
-              { key: 'totalSpent', header: 'ยอดซื้อ', align: 'right', render: (item) => <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSpent)}</span> }
-            ]}
-            defaultSortKey="totalSpent"
-          />
-        );
-      case 'ar-status':
-        return (
-          <UnifiedComparisonTable<ARStatus>
-            branches={branchInfos}
-            dateRange={dateRange}
-            buildEndpoint={buildEndpoint}
-            keyExtractor={(item) => item.statusPayment}
-            baseColumns={[
-              {
-                key: 'statusPayment', header: 'สถานะ', align: 'left', render: (item) => {
-                  const statusMap: { [key: string]: { label: string; color: string } } = {
-                    Paid: { label: 'ชำระแล้ว', color: 'text-green-600' },
-                    Partial: { label: 'ชำระบางส่วน', color: 'text-yellow-600' },
-                    Unpaid: { label: 'ยังไม่ชำระ', color: 'text-red-600' },
-                  };
-                  const status = statusMap[item.statusPayment] || { label: item.statusPayment, color: 'text-gray-600' };
-                  return <span className={`font-medium ${status.color}`}>{status.label}</span>;
-                }
-              }
-            ]}
-            compareColumns={[
-              { key: 'invoiceCount', header: 'ใบแจ้งหนี้', align: 'right', render: (item) => formatNumber(item.invoiceCount) },
-              { key: 'totalOutstanding', header: 'ค้างชำระ', align: 'right', render: (item) => <span className="text-red-600 font-medium">฿{formatCurrency(item.totalOutstanding)}</span> }
-            ]}
-            defaultSortKey="totalOutstanding"
-          />
-        );
-      default:
-        return <div className="p-10 text-center text-muted-foreground">ไม่มีโหมดเปรียบเทียบสำหรับรายงานนี้</div>
+  // Debug: Log filtered data
+  if (selectedReport === 'by-category') {
+    console.log('📊 Report Selected Category:', selectedCategory);
+    console.log('📊 Report Total Data Count:', salesByCategory.length);
+    console.log('📊 Report Unique Categories:', uniqueCategories);
+    if (selectedCategory !== 'ALL') {
+      console.log('📊 Report Filtered Items Count:', filteredSalesByCategory.length);
+      console.log('📊 Report Total Sales (filtered):', filteredSalesByCategory.reduce((sum, item) => sum + item.totalSales, 0));
+      console.log('📊 First 3 filtered items:', filteredSalesByCategory.slice(0, 3));
+    } else {
+      console.log('📊 Report Total Sales (all):', salesByCategory.reduce((sum, item) => sum + item.totalSales, 0));
     }
-  };
+  }
 
   // Render report content based on selected type
   const renderReportContent = () => {
-    // Check if we should render comparison view
-    if (isComparisonMode && canCompare) {
-      return renderComparisonContent();
-    }
-
     switch (selectedReport) {
       case 'sales-trend':
         // Filter data
@@ -925,6 +799,38 @@ export default function SalesReportPage() {
           />
         );
 
+      case 'by-category':
+        return (
+          <PaginatedTable
+            data={filteredSalesByCategory}
+            columns={salesByCategoryColumns}
+            itemsPerPage={15}
+            emptyMessage="ไม่มีข้อมูลหมวดหมู่"
+            defaultSortKey="categoryName"
+            defaultSortOrder="asc"
+            keyExtractor={(item: SalesByCategory, index?: number) => `${item.categoryCode}-${item.itemCode}-${index}`}
+            showSummary={true}
+            summaryConfig={{
+              labelColSpan: 2,
+              values: {
+                orderCount: () => <span className="text-muted-foreground">-</span>,
+                totalQtySold: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.totalQtySold, 0);
+                  return <span className="font-medium text-black">{formatNumber(total)}</span>;
+                },
+                totalSales: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.totalSales, 0);
+                  return <span className="font-medium text-green-600">฿{formatCurrency(total)}</span>;
+                },
+                totalProfit: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.totalProfit, 0);
+                  return <span className="font-medium text-blue-600">฿{formatCurrency(total)}</span>;
+                }
+              }
+            }}
+          />
+        );
+
       case 'by-salesperson':
         return (
           <PaginatedTable
@@ -1009,36 +915,24 @@ export default function SalesReportPage() {
     switch (selectedReport) {
       case 'sales-trend':
         return () => {
-          // Filter data if category is selected
-          const dataToExport = categoryFilter === 'all'
-            ? salesAnalysis
-            : salesAnalysis.filter(item => item.categoryName === categoryFilter);
-
+          const dataWithAvg = trendData.map(item => ({
+            ...item,
+            avgOrderValue: item.orderCount > 0 ? item.sales / item.orderCount : 0
+          }));
           exportStyledReport({
-            data: dataToExport,
-            headers: {
-              categoryName: 'หมวดสินค้า',
-              docDate: 'เอกสารวันที่',
-              docNo: 'เอกสารเลขที่',
-              itemCode: 'รหัสสินค้า',
-              itemName: 'ชื่อสินค้า',
-              unitCode: 'หน่วยนับ',
-              qty: 'จำนวน',
-              price: 'ราคา',
-              discountAmount: 'มูลค่าส่วนลด',
-              totalAmount: 'รวมมูลค่า'
-            },
-            filename: 'รายงานวิเคราะห์ยอดขาย',
-            sheetName: 'Sales Analysis',
-            title: 'รายงานวิเคราะห์ยอดขายสินค้าแบบแจกแจง-เรียงตามหมวดสินค้า',
-            subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end} ${categoryFilter !== 'all' ? `(หมวด: ${categoryFilter})` : ''}`,
-            currencyColumns: ['price', 'discountAmount', 'totalAmount'],
-            numberColumns: ['qty'],
+            data: dataWithAvg,
+            headers: { date: 'วันที่', sales: 'ยอดขาย', orderCount: 'จำนวนออเดอร์', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
+            filename: 'แนวโน้มยอดขาย',
+            sheetName: 'Sales Trend',
+            title: 'รายงานแนวโน้มยอดขาย',
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            currencyColumns: ['sales', 'avgOrderValue'],
+            numberColumns: ['orderCount'],
             summaryConfig: {
               columns: {
-                qty: 'sum',
-                discountAmount: 'sum',
-                totalAmount: 'sum'
+                sales: 'sum',
+                orderCount: 'sum',
+                avgOrderValue: 'sum'
               }
             }
           });
@@ -1051,7 +945,7 @@ export default function SalesReportPage() {
           filename: 'สินค้าขายดี',
           sheetName: 'Top Products',
           title: 'รายงานสินค้าขายดี',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['totalQtySold'],
           currencyColumns: ['totalSales', 'totalProfit'],
           percentColumns: ['profitMarginPct'],
@@ -1071,7 +965,7 @@ export default function SalesReportPage() {
           filename: 'ยอดขายตามสาขา',
           sheetName: 'Sales by Branch',
           title: 'รายงานยอดขายตามสาขา',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['orderCount'],
           currencyColumns: ['totalSales'],
           summaryConfig: {
@@ -1082,6 +976,33 @@ export default function SalesReportPage() {
           }
         });
 
+      case 'by-category':
+        return () => {
+          const categoryName = selectedCategory === 'ALL' 
+            ? 'ทั้งหมด' 
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+          
+          return exportStyledReport({
+            data: filteredSalesByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', orderCount: 'จำนวนออเดอร์', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย', totalProfit: 'กำไร', profitMarginPct: 'อัตรากำไร (%)' },
+            filename: `ยอดขายตามหมวดหมู่_${categoryName}`,
+            sheetName: 'Sales by Category',
+            title: `รายงานยอดขายตามหมวดหมู่ - ${categoryName}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['orderCount', 'totalQtySold'],
+            currencyColumns: ['totalSales', 'totalProfit'],
+            percentColumns: ['profitMarginPct'],
+            summaryConfig: {
+              columns: {
+                orderCount: 'sum',
+                totalQtySold: 'sum',
+                totalSales: 'sum',
+                totalProfit: 'sum',
+              }
+            }
+          });
+        };
+
       case 'by-salesperson':
         return () => exportStyledReport({
           data: salesBySalesperson,
@@ -1089,7 +1010,7 @@ export default function SalesReportPage() {
           filename: 'ยอดขายตามพนักงาน',
           sheetName: 'Sales by Salesperson',
           title: 'รายงานยอดขายตามพนักงาน',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['customerCount', 'orderCount'],
           currencyColumns: ['totalSales', 'avgOrderValue'],
           summaryConfig: {
@@ -1108,7 +1029,7 @@ export default function SalesReportPage() {
           filename: 'ลูกค้ารายสำคัญ',
           sheetName: 'Top Customers',
           title: 'รายงานลูกค้ารายสำคัญ',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['orderCount', 'daysSinceLastOrder'],
           currencyColumns: ['totalSpent', 'avgOrderValue'],
           summaryConfig: {
@@ -1127,7 +1048,7 @@ export default function SalesReportPage() {
           filename: 'สถานะลูกหนี้การค้า',
           sheetName: 'AR Status',
           title: 'รายงานสถานะลูกหนี้การค้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['invoiceCount'],
           currencyColumns: ['totalInvoiceAmount', 'totalPaid', 'totalOutstanding'],
           summaryConfig: {
@@ -1145,11 +1066,174 @@ export default function SalesReportPage() {
     }
   };
 
+  const getExportPdfFunction = () => {
+    switch (selectedReport) {
+      case 'sales-trend':
+        return () => {
+          const dataWithAvg = trendData.map(item => ({
+            ...item,
+            avgOrderValue: item.orderCount > 0 ? item.sales / item.orderCount : 0
+          }));
+          exportStyledPdfReport({
+            data: dataWithAvg,
+            headers: { date: 'วันที่', sales: 'ยอดขาย', orderCount: 'จำนวนออเดอร์', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
+            filename: 'แนวโน้มยอดขาย',
+            title: 'รายงานแนวโน้มยอดขาย',
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            currencyColumns: ['sales', 'avgOrderValue'],
+            numberColumns: ['orderCount'],
+            summaryConfig: {
+              columns: {
+                sales: 'sum',
+                orderCount: 'sum',
+                avgOrderValue: 'sum'
+              }
+            }
+          });
+        };
+
+      case 'top-products':
+        return () => exportStyledPdfReport({
+          data: topProducts,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', categoryName: 'หมวดหมู่', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย', totalProfit: 'กำไร', profitMarginPct: 'อัตรากำไร (%)' },
+          filename: 'สินค้าขายดี',
+          title: 'รายงานสินค้าขายดี',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['totalQtySold'],
+          currencyColumns: ['totalSales', 'totalProfit'],
+          percentColumns: ['profitMarginPct'],
+          summaryConfig: {
+            columns: {
+              totalQtySold: 'sum',
+              totalSales: 'sum',
+              totalProfit: 'sum',
+            }
+          }
+        });
+
+      case 'by-branch':
+        return () => exportStyledPdfReport({
+          data: salesByBranch,
+          headers: { branchCode: 'รหัสสาขา', branchName: 'ชื่อสาขา', orderCount: 'จำนวนออเดอร์', totalSales: 'ยอดขาย' },
+          filename: 'ยอดขายตามสาขา',
+          title: 'รายงานยอดขายตามสาขา',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['orderCount'],
+          currencyColumns: ['totalSales'],
+          summaryConfig: {
+            columns: {
+              orderCount: 'sum',
+              totalSales: 'sum',
+            }
+          }
+        });
+
+      case 'by-category':
+        return () => {
+          const categoryName = selectedCategory === 'ALL'
+            ? 'ทั้งหมด'
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+
+          return exportStyledPdfReport({
+            data: filteredSalesByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', orderCount: 'จำนวนออเดอร์', totalQtySold: 'จำนวนขาย', totalSales: 'ยอดขาย', totalProfit: 'กำไร', profitMarginPct: 'อัตรากำไร (%)' },
+            filename: `ยอดขายตามหมวดหมู่_${categoryName}`,
+            title: `รายงานยอดขายตามหมวดหมู่ - ${categoryName}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['orderCount', 'totalQtySold'],
+            currencyColumns: ['totalSales', 'totalProfit'],
+            percentColumns: ['profitMarginPct'],
+            summaryConfig: {
+              columns: {
+                orderCount: 'sum',
+                totalQtySold: 'sum',
+                totalSales: 'sum',
+                totalProfit: 'sum',
+              }
+            }
+          });
+        };
+
+      case 'by-salesperson':
+        return () => exportStyledPdfReport({
+          data: salesBySalesperson,
+          headers: { saleCode: 'รหัสพนักงาน', saleName: 'ชื่อพนักงาน', customerCount: 'ลูกค้า', orderCount: 'ออเดอร์', totalSales: 'ยอดขาย', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
+          filename: 'ยอดขายตามพนักงาน',
+          title: 'รายงานยอดขายตามพนักงาน',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['customerCount', 'orderCount'],
+          currencyColumns: ['totalSales', 'avgOrderValue'],
+          summaryConfig: {
+            columns: {
+              customerCount: 'sum',
+              orderCount: 'sum',
+              totalSales: 'sum',
+            }
+          }
+        });
+
+      case 'top-customers':
+        return () => exportStyledPdfReport({
+          data: topCustomers,
+          headers: { customerCode: 'รหัสลูกค้า', customerName: 'ชื่อลูกค้า', orderCount: 'จำนวนออเดอร์', totalSpent: 'ยอดซื้อรวม', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์', lastOrderDate: 'ซื้อล่าสุด', daysSinceLastOrder: 'วันที่ผ่านมา' },
+          filename: 'ลูกค้ารายสำคัญ',
+          title: 'รายงานลูกค้ารายสำคัญ',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['orderCount', 'daysSinceLastOrder'],
+          currencyColumns: ['totalSpent', 'avgOrderValue'],
+          summaryConfig: {
+            columns: {
+              orderCount: 'sum',
+              totalSpent: 'sum',
+              avgOrderValue: 'avg',
+            }
+          }
+        });
+
+      case 'ar-status':
+        return () => exportStyledPdfReport({
+          data: arStatus,
+          headers: { statusPayment: 'สถานะชำระ', invoiceCount: 'จำนวนใบแจ้งหนี้', totalInvoiceAmount: 'ยอดรวม', totalPaid: 'ชำระแล้ว', totalOutstanding: 'ค้างชำระ' },
+          filename: 'สถานะลูกหนี้การค้า',
+          title: 'รายงานสถานะลูกหนี้การค้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['invoiceCount'],
+          currencyColumns: ['totalInvoiceAmount', 'totalPaid', 'totalOutstanding'],
+          summaryConfig: {
+            columns: {
+              invoiceCount: 'sum',
+              totalInvoiceAmount: 'sum',
+              totalPaid: 'sum',
+              totalOutstanding: 'sum',
+            }
+          }
+        });
+
+      default:
+        return undefined;
+    }
+  };
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header with integrated controls */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
               รายงานยอดขายและลูกค้า
@@ -1161,34 +1245,49 @@ export default function SalesReportPage() {
 
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
         </div>
-      </div>
-      <ReportTypeSelector
-        value={selectedReport}
-        options={reportOptions}
-        onChange={(value) => setSelectedReport(value as ReportType)}
-      />
+
+        {/* Compact Report Type Selector */}
+        <ReportTypeSelector
+          value={selectedReport}
+          options={reportOptions}
+          onChange={(value) => setSelectedReport(value as ReportType)}
+        />
+      </motion.div>
 
       {/* Error Display */}
-      {error && <ErrorDisplay error={error} onRetry={() => fetchReportData(selectedReport)} />}
+      {error && <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>}
 
       {/* Report Content */}
-      <ErrorBoundary>
+      <motion.div variants={itemVariants}>
+        <ErrorBoundary>
         <DataCard
           id={selectedReport}
           title={currentReport?.label || ''}
           description={currentReport?.description || ''}
-          headerExtra={selectedReport === 'sales-trend' ? (
-            <ReportFilter
-              label="หมวดสินค้า:"
-              value={categoryFilter}
-              onChange={setCategoryFilter}
-              options={Array.from(new Set(salesAnalysis.map(item => item.categoryName))).sort().map(category => ({
-                label: category,
-                value: category
-              }))}
-            />
-          ) : undefined}
           onExportExcel={getExportFunction()}
+          onExportPDF={getExportPdfFunction()}
+          headerExtra={
+            selectedReport === 'by-category' ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="category-filter" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                  หมวดหมู่:
+                </label>
+                <select
+                  id="category-filter"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                >
+                  <option value="ALL">ทั้งหมด</option>
+                  {uniqueCategories.map((cat) => (
+                    <option key={cat.code} value={cat.code}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : undefined
+          }
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -1197,6 +1296,7 @@ export default function SalesReportPage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

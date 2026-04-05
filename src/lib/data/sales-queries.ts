@@ -11,13 +11,8 @@ import { getPreviousPeriod } from '@/lib/comparison';
  * Get Total Sales KPI Query
  */
 export function getTotalSalesQuery(dateRange: DateRange): string {
-<<<<<<< HEAD
   const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
   return `SELECT
-=======
-    const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
-    return `SELECT
->>>>>>> main
   sum(total_amount) as current_value,
   (SELECT sum(total_amount)
    FROM saleinvoice_transaction
@@ -32,13 +27,8 @@ WHERE status_cancel != 'Cancel'
  * Get Gross Profit KPI Query
  */
 export function getGrossProfitQuery(dateRange: DateRange): string {
-<<<<<<< HEAD
   const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
   return `SELECT
-=======
-    const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
-    return `SELECT
->>>>>>> main
   sum(sid.sum_amount - sid.sum_of_cost) as current_value,
   (SELECT sum(sid2.sum_amount - sid2.sum_of_cost)
    FROM saleinvoice_transaction_detail sid2
@@ -55,13 +45,8 @@ WHERE si.status_cancel != 'Cancel'
  * Get Total Orders KPI Query
  */
 export function getTotalOrdersQuery(dateRange: DateRange): string {
-<<<<<<< HEAD
   const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
   return `SELECT
-=======
-    const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
-    return `SELECT
->>>>>>> main
   count(DISTINCT doc_no) as current_value,
   (SELECT count(DISTINCT doc_no)
    FROM saleinvoice_transaction
@@ -76,13 +61,8 @@ WHERE status_cancel != 'Cancel'
  * Get Average Order Value KPI Query
  */
 export function getAvgOrderValueQuery(dateRange: DateRange): string {
-<<<<<<< HEAD
   const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
   return `SELECT
-=======
-    const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
-    return `SELECT
->>>>>>> main
   avg(total_amount) as current_value,
   (SELECT avg(total_amount)
    FROM saleinvoice_transaction
@@ -97,11 +77,7 @@ WHERE status_cancel != 'Cancel'
  * Get Sales Trend Query with actual dates
  */
 export function getSalesTrendQuery(startDate: string, endDate: string): string {
-<<<<<<< HEAD
   return `
-=======
-    return `
->>>>>>> main
 SELECT
   toStartOfDay(doc_datetime) as date,
   sum(total_amount) as sales,
@@ -118,11 +94,7 @@ ORDER BY date ASC
  * Get Top Products Query with actual dates
  */
 export function getTopProductsQuery(startDate: string, endDate: string): string {
-<<<<<<< HEAD
   return `
-=======
-    return `
->>>>>>> main
 SELECT
   sid.item_code as itemCode,
   sid.item_name as itemName,
@@ -146,11 +118,7 @@ LIMIT 10
  * Get Sales by Branch Query with actual dates
  */
 export function getSalesByBranchQuery(startDate: string, endDate: string): string {
-<<<<<<< HEAD
   return `
-=======
-    return `
->>>>>>> main
 SELECT
   branch_code as branchCode,
   branch_name as branchName,
@@ -169,11 +137,7 @@ ORDER BY totalSales DESC
  * Get Sales by Salesperson Query with actual dates
  */
 export function getSalesBySalespersonQuery(startDate: string, endDate: string): string {
-<<<<<<< HEAD
   return `
-=======
-    return `
->>>>>>> main
 SELECT
   sale_code as saleCode,
   sale_name as saleName,
@@ -195,11 +159,7 @@ LIMIT 20
  * Get Top Customers Query with actual dates
  */
 export function getTopCustomersQuery(startDate: string, endDate: string): string {
-<<<<<<< HEAD
   return `
-=======
-    return `
->>>>>>> main
 SELECT
   customer_code as customerCode,
   customer_name as customerName,
@@ -222,11 +182,7 @@ LIMIT 20
  * Get AR Status Query with actual dates
  */
 export function getARStatusQuery(startDate: string, endDate: string): string {
-<<<<<<< HEAD
   return `
-=======
-    return `
->>>>>>> main
 SELECT
   status_payment as statusPayment,
   count(DISTINCT doc_no) as invoiceCount,
@@ -241,7 +197,6 @@ GROUP BY statusPayment
 ORDER BY totalOutstanding DESC
   `.trim();
 }
-<<<<<<< HEAD
 
 /**
  * Get Sales by Category Summary Query with actual dates
@@ -260,6 +215,32 @@ WHERE si.status_cancel != 'Cancel'
   AND si.doc_datetime BETWEEN '${startDate}' AND '${endDate}'
 GROUP BY categoryCode, categoryName
 ORDER BY totalSales DESC
+  `.trim();
+}
+
+/**
+ * Get Sales by Category Detail Query with actual dates
+ * Returns detailed item-level sales data grouped by category (matches actual API data)
+ */
+export function getSalesByCategoryDetailQuery(startDate: string, endDate: string): string {
+  return `
+SELECT
+  'All' as branchName,
+  COALESCE(NULLIF(sid.item_category_code, ''), 'N/A') as categoryCode,
+  COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+  sid.item_code as itemCode,
+  sid.item_name as itemName,
+  count(DISTINCT si.doc_no) as orderCount,
+  sum(sid.qty) as totalQtySold,
+  sum(sid.sum_amount) as totalSales,
+  sum(sid.sum_amount - sid.sum_of_cost) as totalProfit,
+  (totalProfit / totalSales) * 100 as profitMarginPct
+FROM saleinvoice_transaction_detail sid
+JOIN saleinvoice_transaction si ON sid.doc_no = si.doc_no AND sid.branch_sync = si.branch_sync
+WHERE si.status_cancel != 'Cancel'
+  AND si.doc_datetime BETWEEN '${startDate}' AND '${endDate}'
+GROUP BY categoryCode, categoryName, sid.item_code, sid.item_name
+ORDER BY categoryName ASC, totalSales DESC
   `.trim();
 }
 
@@ -287,5 +268,3 @@ WHERE si.status_cancel != 'Cancel'
 ORDER BY categoryName, docDate, docNo
     `.trim();
 }
-=======
->>>>>>> main

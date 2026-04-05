@@ -272,8 +272,10 @@ export async function getPurchaseByCategory(dateRange: DateRange, branchSync?: s
 
     const query = `
       SELECT
-        ptd.item_category_code as categoryCode,
-        ptd.item_category_name as categoryName,
+        COALESCE(NULLIF(ptd.item_category_code, ''), 'N/A') as categoryCode,
+        COALESCE(NULLIF(ptd.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+        ptd.item_code as itemCode,
+        ptd.item_name as itemName,
         sum(ptd.qty) as totalQty,
         sum(ptd.sum_amount) as totalPurchaseValue,
         count(DISTINCT ptd.item_code) as uniqueItems
@@ -281,11 +283,9 @@ export async function getPurchaseByCategory(dateRange: DateRange, branchSync?: s
       JOIN purchase_transaction pt ON ptd.doc_no = pt.doc_no AND ptd.branch_sync = pt.branch_sync
       WHERE pt.status_cancel != 'Cancel'
         AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
-        AND ptd.item_category_name != ''
         ${branchFilter.sql.replace(/branch_sync/g, 'pt.branch_sync')}
-      GROUP BY ptd.item_category_code, ptd.item_category_name
-      ORDER BY totalPurchaseValue DESC
-      LIMIT 15
+      GROUP BY categoryCode, categoryName, ptd.item_code, ptd.item_name
+      ORDER BY categoryName ASC, totalPurchaseValue DESC
     `;
 
     const result = await clickhouse.query({
@@ -300,8 +300,10 @@ export async function getPurchaseByCategory(dateRange: DateRange, branchSync?: s
 
     const data = await result.json();
     return data.map((row: any) => ({
-      categoryCode: row.categoryCode || '',
-      categoryName: row.categoryName || 'ไม่ระบุ',
+      categoryCode: row.categoryCode || 'N/A',
+      categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      itemCode: row.itemCode,
+      itemName: row.itemName,
       totalQty: Number(row.totalQty) || 0,
       totalPurchaseValue: Number(row.totalPurchaseValue) || 0,
       uniqueItems: Number(row.uniqueItems) || 0,

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, MoreVertical, Database, X, Download } from 'lucide-react';
+import { ExternalLink, MoreVertical, Database, X, Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 
 interface QueryInfo {
     query: string;
@@ -22,6 +22,7 @@ interface DataCardProps {
     id?: string; // ID for scroll target
     headerExtra?: React.ReactNode; // Extra content in header (e.g., filters)
     onExportExcel?: () => void; // Export to Excel callback
+    onExportPDF?: () => void; // Export to PDF callback
 }
 
 // Query Modal component
@@ -75,7 +76,7 @@ function QueryModal({
                 onClick={onClose}
             />
             {/* Popup */}
-            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-3xl p-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--popover))] shadow-2xl">
+            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] sm:w-[90vw] max-w-3xl mx-4 p-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--popover))] shadow-2xl">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <svg
@@ -162,10 +163,13 @@ function QueryModal({
     );
 }
 
-export function DataCard({ title, children, className, action, description, queryInfo, linkTo, id, headerExtra, onExportExcel }: DataCardProps) {
+export function DataCard({ title, children, className, action, description, queryInfo, linkTo, id, headerExtra, onExportExcel, onExportPDF }: DataCardProps) {
     const [showQueryPopup, setShowQueryPopup] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const exportMenuRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
     // Close menu when clicking outside
@@ -174,16 +178,19 @@ export function DataCard({ title, children, className, action, description, quer
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setShowMenu(false);
             }
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setShowExportMenu(false);
+            }
         };
 
-        if (showMenu) {
+        if (showMenu || showExportMenu) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [showMenu]);
+    }, [showMenu, showExportMenu]);
 
     const openPopup = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -219,6 +226,14 @@ export function DataCard({ title, children, className, action, description, quer
         setShowMenu(!showMenu);
     };
 
+    const toggleExportMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowExportMenu(!showExportMenu);
+    };
+
+    const hasExportActions = Boolean(onExportExcel || onExportPDF);
+
     // Check if we have any menu items to show
     const hasMenuItems = linkTo || queryInfo;
 
@@ -250,18 +265,78 @@ export function DataCard({ title, children, className, action, description, quer
                             </div>
                         )}
                         {/* Export Excel button */}
-                        {onExportExcel && (
-                            <button
-                                className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
-                                title="ดาวน์โหลด Excel"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    onExportExcel();
-                                }}
-                            >
-                                <Download className="w-5 h-5 text-green-600" />
-                            </button>
+                        {hasExportActions && (
+                            <div className="relative" ref={exportMenuRef}>
+                                <button
+                                    className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="ดาวน์โหลดรายงาน"
+                                    onClick={toggleExportMenu}
+                                    disabled={isExporting}
+                                >
+                                    {isExporting ? (
+                                        <Loader2 className="w-5 h-5 text-green-600 animate-spin" />
+                                    ) : (
+                                        <Download className="w-5 h-5 text-green-600" />
+                                    )}
+                                </button>
+
+                                {showExportMenu && (
+                                    <div className="absolute right-0 top-full mt-1 w-44 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-lg z-50 py-1">
+                                        {onExportExcel && (
+                                            <button
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                disabled={isExporting}
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setShowExportMenu(false);
+                                                    setIsExporting(true);
+                                                    try {
+                                                        await Promise.resolve(onExportExcel());
+                                                        // Add small delay for user feedback
+                                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                                    } finally {
+                                                        setIsExporting(false);
+                                                    }
+                                                }}
+                                            >
+                                                {isExporting ? (
+                                                    <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                                                ) : (
+                                                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                                                )}
+                                                <span>Excel (.xlsx)</span>
+                                            </button>
+                                        )}
+                                        {onExportPDF && (
+                                            <button
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                disabled={isExporting}
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setShowExportMenu(false);
+                                                    setIsExporting(true);
+                                                    try {
+                                                        await Promise.resolve(onExportPDF());
+                                                        // Add small delay for user feedback
+                                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                                    } finally {
+                                                        setIsExporting(false);
+                                                    }
+                                                }}
+                                            >
+                                                {isExporting ? (
+                                                    <Loader2 className="w-4 h-4 text-rose-600 animate-spin" />
+                                                ) : (
+                                                    <FileText className="w-4 h-4 text-rose-600" />
+                                                )}
+                                                <span>PDF (.pdf)</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         )}
                         {/* More menu button */}
                         {hasMenuItems && (

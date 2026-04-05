@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import ReactECharts from 'echarts-for-react';
+import { motion } from 'framer-motion';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { AlertsCard } from '@/components/AlertsCard';
@@ -9,10 +11,10 @@ import { RecentSales } from '@/components/RecentSales';
 import { DownloadReportButton } from '@/components/DownloadReportButton';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { DollarSign, ShoppingCart, Users, Package } from 'lucide-react';
-import { useBranchChange } from '@/lib/branch-events';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { getDateRange } from '@/lib/dateRanges';
 import type { DateRange } from '@/lib/data/types';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
 
 // Custom ECharts Theme
 const theme = {
@@ -44,73 +46,47 @@ const theme = {
 };
 
 export default function Dashboard() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-<<<<<<< HEAD:src/app/page.tsx
-<<<<<<< Updated upstream:src/app/page.tsx
-=======
-=======
->>>>>>> main:src/app/(main)/page.tsx
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('TODAY'));
+  const { dateRange, setDateRange } = useDateRangeStore();
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    console.log('📅 Fetching data with dateRange:', dateRange);
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['dashboardData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams();
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
-<<<<<<< HEAD:src/app/page.tsx
-
-      // Add date range to params
       params.append('startDate', dateRange.start);
       params.append('endDate', dateRange.end);
-
-=======
-      
-      // Add date range to params
-      params.append('startDate', dateRange.start);
-      params.append('endDate', dateRange.end);
-      
->>>>>>> main:src/app/(main)/page.tsx
       const queryParams = params.toString() ? `?${params.toString()}` : '';
-      console.log('🔗 API URL:', `/api/dashboard${queryParams}`);
 
       const [dashboardRes, salesChartRes, revenueRes] = await Promise.all([
         fetch(`/api/dashboard${queryParams}`),
         fetch(`/api/sales-chart${queryParams}`),
-        fetch(`/api/revenue-expense${queryParams}`)
+        fetch(`/api/revenue-expense${queryParams}`),
       ]);
 
       const dashboardData = await dashboardRes.json();
       const salesChartData = await salesChartRes.json();
       const revenueData = await revenueRes.json();
 
-      setData({
+      return {
         ...dashboardData,
         salesChart: Array.isArray(salesChartData) ? salesChartData : [],
-        revenueChart: Array.isArray(revenueData) ? revenueData : []
-      });
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [dateRange]);
-<<<<<<< HEAD:src/app/page.tsx
->>>>>>> Stashed changes:src/app/(main)/page.tsx
-=======
->>>>>>> main:src/app/(main)/page.tsx
+        revenueChart: Array.isArray(revenueData) ? revenueData : [],
+      };
+    },
+  });
 
-  useEffect(() => {
-    console.log('🔄 DateRange changed:', dateRange);
-    fetchData();
-  }, [dateRange, fetchData]);
-
-  // Listen for branch changes
-  useBranchChange(fetchData);
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   // Chart Options
   const salesTrendOption = {
@@ -195,9 +171,14 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <motion.div 
+      className="space-y-8"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header Section */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[hsl(var(--foreground))]">
             ภาพรวมธุรกิจ
@@ -207,103 +188,73 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-<<<<<<< HEAD:src/app/page.tsx
-<<<<<<< Updated upstream:src/app/page.tsx
-          <button className="inline-flex items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-2 text-sm font-medium shadow-sm hover:bg-[hsl(var(--accent))] transition-colors">
-            <Calendar className="mr-2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-            วันนี้: {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </button>
-=======
           <DateRangeFilter
             value={dateRange}
             onChange={setDateRange}
             defaultKey="TODAY"
           />
->>>>>>> Stashed changes:src/app/(main)/page.tsx
-=======
-          <DateRangeFilter 
-            value={dateRange} 
-            onChange={setDateRange}
-            defaultKey="TODAY"
-          />
->>>>>>> main:src/app/(main)/page.tsx
           <DownloadReportButton />
         </div>
-      </div>
+      </motion.div>
 
       {/* KPI Grid */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {loading ? (
-          // Skeleton loading for KPI cards
-          <>
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="rounded-xl border border-border bg-card p-6 animate-pulse">
-                <div className="h-4 bg-muted rounded w-24 mb-4"></div>
-                <div className="h-8 bg-muted rounded w-32 mb-2"></div>
-                <div className="h-3 bg-muted rounded w-20"></div>
-              </div>
-            ))}
-          </>
-        ) : (
-          <>
-            <KPICard
-              title="ยอดขายรวม"
-              value={`฿${data?.totalSales?.toLocaleString() || 0}`}
-              icon={DollarSign}
-              trend={data?.salesGrowth ? `${data.salesGrowth > 0 ? '+' : ''}${data.salesGrowth.toFixed(1)}%` : undefined}
-              trendUp={data?.salesGrowth > 0}
-              description="เทียบกับเดือนที่แล้ว"
-              className="delay-100"
-            />
-            <KPICard
-              title="คำสั่งซื้อ"
-              value={data?.totalOrders?.toLocaleString() || 0}
-              icon={ShoppingCart}
-              trend={data?.ordersGrowth ? `${data.ordersGrowth > 0 ? '+' : ''}${data.ordersGrowth.toFixed(1)}%` : undefined}
-              trendUp={data?.ordersGrowth > 0}
-              description="เทียบกับเดือนที่แล้ว"
-              className="delay-200"
-            />
-            <KPICard
-              title="ลูกค้า"
-              value={data?.totalCustomers?.toLocaleString() || 0}
-              icon={Users}
-              trend={data?.customersGrowth ? `${data.customersGrowth > 0 ? '+' : ''}${data.customersGrowth.toFixed(1)}%` : undefined}
-              trendUp={data?.customersGrowth > 0}
-              description="เทียบกับเดือนที่แล้ว"
-              className="delay-300"
-            />
-            <KPICard
-              title="มูลค่าเฉลี่ย"
-              value={`฿${Math.round(data?.avgOrderValue || 0).toLocaleString()}`}
-              icon={Package}
-              trend={data?.avgOrderGrowth ? `${data.avgOrderGrowth > 0 ? '+' : ''}${data.avgOrderGrowth.toFixed(1)}%` : undefined}
-              trendUp={data?.avgOrderGrowth > 0}
-              description="ต่อคำสั่งซื้อ"
-              className="delay-400"
-            />
-          </>
-        )}
-      </div>
+      <motion.div variants={itemVariants} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <KPICard
+          title="ยอดขายรวม"
+          value={`฿${data?.totalSales?.toLocaleString() || 0}`}
+          icon={DollarSign}
+          trend={data?.salesGrowth ? `${data.salesGrowth > 0 ? '+' : ''}${data.salesGrowth.toFixed(1)}%` : undefined}
+          trendUp={data?.salesGrowth > 0}
+          description="เทียบกับเดือนที่แล้ว"
+          detailTitle="รายละเอียดยอดขายรวม"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.salesGrowth !== undefined ? `${data.salesGrowth.toFixed(1)}%` : '-' },
+          ]}
+        />
+        <KPICard
+          title="คำสั่งซื้อ"
+          value={data?.totalOrders?.toLocaleString() || 0}
+          icon={ShoppingCart}
+          trend={data?.ordersGrowth ? `${data.ordersGrowth > 0 ? '+' : ''}${data.ordersGrowth.toFixed(1)}%` : undefined}
+          trendUp={data?.ordersGrowth > 0}
+          description="เทียบกับเดือนที่แล้ว"
+          detailTitle="รายละเอียดจำนวนคำสั่งซื้อ"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.ordersGrowth !== undefined ? `${data.ordersGrowth.toFixed(1)}%` : '-' },
+          ]}
+        />
+        <KPICard
+          title="ลูกค้า"
+          value={data?.totalCustomers?.toLocaleString() || 0}
+          icon={Users}
+          trend={data?.customersGrowth ? `${data.customersGrowth > 0 ? '+' : ''}${data.customersGrowth.toFixed(1)}%` : undefined}
+          trendUp={data?.customersGrowth > 0}
+          description="เทียบกับเดือนที่แล้ว"
+          detailTitle="รายละเอียดจำนวนลูกค้า"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.customersGrowth !== undefined ? `${data.customersGrowth.toFixed(1)}%` : '-' },
+          ]}
+        />
+        <KPICard
+          title="มูลค่าเฉลี่ย"
+          value={`฿${Math.round(data?.avgOrderValue || 0).toLocaleString()}`}
+          icon={Package}
+          trend={data?.avgOrderGrowth ? `${data.avgOrderGrowth > 0 ? '+' : ''}${data.avgOrderGrowth.toFixed(1)}%` : undefined}
+          trendUp={data?.avgOrderGrowth > 0}
+          description="ต่อคำสั่งซื้อ"
+          detailTitle="รายละเอียดมูลค่าเฉลี่ยต่อออเดอร์"
+          detailItems={[
+            { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+            { label: 'การเติบโต', value: data?.avgOrderGrowth !== undefined ? `${data.avgOrderGrowth.toFixed(1)}%` : '-' },
+          ]}
+        />
+      </motion.div>
 
       {/* Charts Section */}
-      <div className="grid gap-6 lg:grid-cols-7">
-<<<<<<< HEAD:src/app/page.tsx
-<<<<<<< Updated upstream:src/app/page.tsx
-        <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 min-h-[400px]">
-          <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '100%', width: '100%' }} />
-=======
-        <DataCard title="แนวโน้มยอดขาย" className="lg:col-span-4 h-[400px]">
-          <ReactECharts option={salesTrendOption} theme={theme} style={{ height: '350px', width: '100%' }} />
->>>>>>> main:src/app/(main)/page.tsx
-        </DataCard>
-        <DataCard
-          title="รายได้ vs ค่าใช้จ่าย"
-          className="lg:col-span-3 h-[400px]"
-        >
-          <ReactECharts option={revenueOption} theme={theme} style={{ height: '350px', width: '100%' }} />
-        </DataCard>
-=======
+      <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-7">
         {loading ? (
           // Skeleton loading for charts
           <>
@@ -329,52 +280,52 @@ export default function Dashboard() {
             </DataCard>
           </>
         )}
->>>>>>> Stashed changes:src/app/(main)/page.tsx
-      </div>
+      </motion.div >
 
       {/* Bottom Section */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {loading ? (
-          // Skeleton loading for bottom section
-          <>
-            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-6 animate-pulse">
-              <div className="h-5 bg-muted rounded w-32 mb-4"></div>
-              <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="h-16 bg-muted rounded"></div>
-                ))}
+      <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-3" >
+        {
+          loading ? (
+            // Skeleton loading for bottom section
+            <>
+              <div className="lg:col-span-2 rounded-xl border border-border bg-card p-6 animate-pulse">
+                <div className="h-5 bg-muted rounded w-32 mb-4"></div>
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-16 bg-muted rounded"></div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-6 animate-pulse">
-              <div className="h-5 bg-muted rounded w-24 mb-4"></div>
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-12 bg-muted rounded"></div>
-                ))}
+              <div className="rounded-xl border border-border bg-card p-6 animate-pulse">
+                <div className="h-5 bg-muted rounded w-24 mb-4"></div>
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 bg-muted rounded"></div>
+                  ))}
+                </div>
               </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="lg:col-span-2">
-              <DataCard
-                title="รายการขายล่าสุด"
-                action={
-                  <button className="text-xs font-medium text-[hsl(var(--primary))] hover:underline">
-                    ดูทั้งหมด
-                  </button>
-                }
-                className="lg:col-span-2"
-              >
-                <RecentSales sales={data?.recentSales || []} />
-              </DataCard>
-            </div>
-            <div>
-              <AlertsCard alerts={data?.alerts || []} />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+            </>
+          ) : (
+            <>
+              <div className="lg:col-span-2">
+                <DataCard
+                  title="รายการขายล่าสุด"
+                  action={
+                    <button className="text-xs font-medium text-[hsl(var(--primary))] hover:underline">
+                      ดูทั้งหมด
+                    </button>
+                  }
+                  className="lg:col-span-2"
+                >
+                  <RecentSales sales={data?.recentSales || []} />
+                </DataCard>
+              </div>
+              <div>
+                <AlertsCard alerts={data?.alerts || []} />
+              </div>
+            </>
+          )}
+      </motion.div >
+    </motion.div >
   );
 }

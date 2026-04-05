@@ -44,6 +44,7 @@ export interface ProfitLossData {
 
 export interface BalanceSheetItem {
   accountType: string;
+  account_type?: string; // For filtering (ASSETS, LIABILITIES, EQUITY)
   typeName: string;
   accountCode: string;
   accountName: string;
@@ -75,6 +76,36 @@ export interface CategoryBreakdown {
   accountName: string;
   amount: number;
   percentage: number;
+}
+
+export interface ProductAccountData {
+  categoryCode: string;
+  categoryName: string;
+  accountType: 'INCOME' | 'EQUITY' | 'EXPENSES';
+  accountCode: string;
+  accountName: string;
+  revenue: number;
+  equity: number;
+  expenses: number;
+}
+
+export interface AccountProductItem {
+  itemCode: string;
+  itemName: string;
+  categoryCode: string;
+  categoryName: string;
+  orderCount: number;
+  totalQtySold: number;
+  totalSales: number;
+  totalProfit: number;
+}
+
+export interface ChartOfAccountItem {
+  accountCode: string;
+  accountName: string;
+  accountType: string;
+  netAmount: number;
+  docCount: number;
 }
 
 // ============================================
@@ -158,6 +189,8 @@ export interface SalesByCategory {
   branchName: string;
   categoryCode: string;
   categoryName: string;
+  itemCode: string;
+  itemName: string;
   orderCount: number;
   totalQtySold: number;
   totalSales: number;
@@ -198,6 +231,8 @@ export interface TopSupplier {
 export interface PurchaseByCategory {
   categoryCode: string;
   categoryName: string;
+  itemCode: string;
+  itemName: string;
   totalQty: number;
   totalPurchaseValue: number;
   uniqueItems?: number;

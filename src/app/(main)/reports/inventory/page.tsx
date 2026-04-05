@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useState } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { formatSelectedBranchNames, useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
+import { exportStyledPdfReport } from '@/lib/exportPdf';
 import { formatCurrency, formatNumber, formatDate } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -88,106 +91,90 @@ const reportOptions: ReportOption<ReportType>[] = [
 ];
 
 export default function InventoryReportPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('stock-movement');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Data states
-  const [stockMovement, setStockMovement] = useState<StockMovement[]>([]);
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
-  const [overstockItems, setOverstockItems] = useState<OverstockItem[]>([]);
-  const [slowMovingItems, setSlowMovingItems] = useState<SlowMovingItem[]>([]);
-  const [inventoryTurnover, setInventoryTurnover] = useState<InventoryTurnover[]>([]);
-  const [stockByBranch, setStockByBranch] = useState<StockByBranch[]>([]);
-
   const asOfDate = new Date().toISOString().split('T')[0];
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
+  const withBranchSubtitle = (detail: string) => `กิจการ: ${selectedBranchLabel} | ${detail}`;
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
 
-  useEffect(() => {
-    fetchReportData(selectedReport);
-  }, [dateRange, selectedReport]);
+  const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['inventoryReportData', selectedReport, dateRange, selectedBranches],
+    queryFn: async () => {
+      const appendBranches = (params: URLSearchParams) => {
+        if (!selectedBranches.includes('ALL')) {
+          selectedBranches.forEach((b) => params.append('branch', b));
+        }
+      };
 
-  // Listen for branch changes
-  useBranchChange(() => fetchReportData(selectedReport));
-
-  const fetchReportData = async (reportType: ReportType) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
-      const params = new URLSearchParams({
+      const commonParams = {
         start_date: dateRange.start,
         end_date: dateRange.end,
         as_of_date: asOfDate,
-      });
-
-      const asOfParams = new URLSearchParams({ as_of_date: asOfDate });
-
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => {
-          params.append('branch', b);
-          asOfParams.append('branch', b);
-        });
-      }
+      };
 
       let endpoint = '';
-      switch (reportType) {
-        case 'stock-movement':
-          endpoint = `/api/inventory/stock-movement?${new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end })}`;
+      switch (selectedReport) {
+        case 'stock-movement': {
+          const params = new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end });
+          appendBranches(params);
+          endpoint = `/api/inventory/stock-movement?${params}`;
           break;
-        case 'low-stock':
-          endpoint = `/api/inventory/low-stock?${asOfParams}`;
+        }
+        case 'low-stock': {
+          const params = new URLSearchParams({ as_of_date: asOfDate });
+          appendBranches(params);
+          endpoint = `/api/inventory/low-stock?${params}`;
           break;
-        case 'overstock':
-          endpoint = `/api/inventory/overstock?${asOfParams}`;
+        }
+        case 'overstock': {
+          const params = new URLSearchParams({ as_of_date: asOfDate });
+          appendBranches(params);
+          endpoint = `/api/inventory/overstock?${params}`;
           break;
-        case 'slow-moving':
+        }
+        case 'slow-moving': {
+          const params = new URLSearchParams(commonParams);
+          appendBranches(params);
           endpoint = `/api/inventory/slow-moving?${params}`;
           break;
-        case 'turnover':
+        }
+        case 'turnover': {
+          const params = new URLSearchParams(commonParams);
+          appendBranches(params);
           endpoint = `/api/inventory/turnover?${params}`;
           break;
-        case 'by-branch':
-          endpoint = `/api/inventory/by-branch?${asOfParams}`;
+        }
+        case 'by-branch': {
+          const params = new URLSearchParams({ as_of_date: asOfDate });
+          appendBranches(params);
+          endpoint = `/api/inventory/by-branch?${params}`;
           break;
+        }
       }
 
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${reportType} data`);
+      if (!response.ok) throw new Error(`Failed to fetch ${selectedReport} data`);
 
       const result = await response.json();
-
-      switch (reportType) {
-        case 'stock-movement':
-          setStockMovement(result.data);
-          break;
-        case 'low-stock':
-          setLowStockItems(result.data);
-          break;
-        case 'overstock':
-          setOverstockItems(result.data);
-          break;
-        case 'slow-moving':
-          setSlowMovingItems(result.data);
-          break;
-        case 'turnover':
-          setInventoryTurnover(result.data);
-          break;
-        case 'by-branch':
-          setStockByBranch(result.data);
-          break;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching inventory data:', err);
-    } finally {
-      setLoading(false);
+      return result.data;
     }
-  };
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+
+  const stockMovement: StockMovement[] = selectedReport === 'stock-movement' ? (reportData || []) : [];
+  const lowStockItems: LowStockItem[] = selectedReport === 'low-stock' ? (reportData || []) : [];
+  const overstockItems: OverstockItem[] = selectedReport === 'overstock' ? (reportData || []) : [];
+  const slowMovingItems: SlowMovingItem[] = selectedReport === 'slow-moving' ? (reportData || []) : [];
+  const inventoryTurnover: InventoryTurnover[] = selectedReport === 'turnover' ? (reportData || []) : [];
+  const stockByBranch: StockByBranch[] = selectedReport === 'by-branch' ? (reportData || []) : [];
+
+  const fetchReportData = () => { refetch(); };
 
   // Column definitions for Stock Movement
   const stockMovementColumns: ColumnDef<StockMovement>[] = [
@@ -689,7 +676,7 @@ export default function InventoryReportPage() {
           filename: 'การเคลื่อนไหวสต็อก',
           sheetName: 'Stock Movement',
           title: 'รายงานการเคลื่อนไหวสต็อก',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['qtyIn', 'qtyOut'],
           summaryConfig: {
             columns: {
@@ -706,7 +693,7 @@ export default function InventoryReportPage() {
           filename: 'สินค้าใกล้หมด',
           sheetName: 'Low Stock',
           title: 'รายงานสินค้าใกล้หมด',
-          subtitle: `ณ วันที่ ${asOfDate}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
           numberColumns: ['qtyOnHand', 'reorderPoint'],
           currencyColumns: ['stockValue'],
           summaryConfig: {
@@ -724,7 +711,7 @@ export default function InventoryReportPage() {
           filename: 'สินค้าเกินคลัง',
           sheetName: 'Overstock',
           title: 'รายงานสินค้าเกินคลัง',
-          subtitle: `ณ วันที่ ${asOfDate}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
           numberColumns: ['qtyOnHand', 'maxStockLevel'],
           currencyColumns: ['valueExcess'],
           summaryConfig: {
@@ -742,7 +729,7 @@ export default function InventoryReportPage() {
           filename: 'สินค้าขายช้า',
           sheetName: 'Slow Moving',
           title: 'รายงานสินค้าขายช้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['qtyOnHand', 'qtySold', 'daysOfStock'],
           currencyColumns: ['stockValue'],
           summaryConfig: {
@@ -761,7 +748,7 @@ export default function InventoryReportPage() {
           filename: 'อัตราหมุนเวียนสินค้า',
           sheetName: 'Inventory Turnover',
           title: 'รายงานอัตราหมุนเวียนสินค้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['avgInventoryValue', 'totalCOGS'],
           numberColumns: ['turnoverRatio', 'daysToSell'],
         });
@@ -773,7 +760,7 @@ export default function InventoryReportPage() {
           filename: 'สต็อกตามสาขา',
           sheetName: 'Stock by Branch',
           title: 'รายงานสต็อกตามสาขา',
-          subtitle: `ณ วันที่ ${asOfDate}`,
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
           numberColumns: ['itemCount', 'qtyOnHand'],
           currencyColumns: ['inventoryValue'],
           summaryConfig: {
@@ -790,10 +777,129 @@ export default function InventoryReportPage() {
     }
   };
 
+  const getExportPdfFunction = () => {
+    switch (selectedReport) {
+      case 'stock-movement':
+        return () => exportStyledPdfReport({
+          data: stockMovement,
+          headers: { date: 'วันที่', qtyIn: 'รับเข้า', qtyOut: 'จ่ายออก' },
+          filename: 'การเคลื่อนไหวสต็อก',
+          title: 'รายงานการเคลื่อนไหวสต็อก',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyIn', 'qtyOut'],
+          summaryConfig: {
+            columns: {
+              qtyIn: 'sum',
+              qtyOut: 'sum',
+            }
+          }
+        });
+
+      case 'low-stock':
+        return () => exportStyledPdfReport({
+          data: lowStockItems,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', branchName: 'สาขา', qtyOnHand: 'คงเหลือ', reorderPoint: 'จุดสั่งซื้อ', stockValue: 'มูลค่า' },
+          filename: 'สินค้าใกล้หมด',
+          title: 'รายงานสินค้าใกล้หมด',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
+          numberColumns: ['qtyOnHand', 'reorderPoint'],
+          currencyColumns: ['stockValue'],
+          summaryConfig: {
+            columns: {
+              qtyOnHand: 'sum',
+              stockValue: 'sum',
+            }
+          }
+        });
+
+      case 'overstock':
+        return () => exportStyledPdfReport({
+          data: overstockItems,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', qtyOnHand: 'คงเหลือ', maxStockLevel: 'ระดับสูงสุด', valueExcess: 'มูลค่าส่วนเกิน' },
+          filename: 'สินค้าเกินคลัง',
+          title: 'รายงานสินค้าเกินคลัง',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
+          numberColumns: ['qtyOnHand', 'maxStockLevel'],
+          currencyColumns: ['valueExcess'],
+          summaryConfig: {
+            columns: {
+              qtyOnHand: 'sum',
+              valueExcess: 'sum',
+            }
+          }
+        });
+
+      case 'slow-moving':
+        return () => exportStyledPdfReport({
+          data: slowMovingItems,
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', categoryName: 'หมวดหมู่', qtyOnHand: 'คงเหลือ', qtySold: 'ขายได้', daysOfStock: 'วันสต็อก', stockValue: 'มูลค่า' },
+          filename: 'สินค้าขายช้า',
+          title: 'รายงานสินค้าขายช้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyOnHand', 'qtySold', 'daysOfStock'],
+          currencyColumns: ['stockValue'],
+          summaryConfig: {
+            columns: {
+              qtyOnHand: 'sum',
+              qtySold: 'sum',
+              stockValue: 'sum',
+            }
+          }
+        });
+
+      case 'turnover':
+        return () => exportStyledPdfReport({
+          data: inventoryTurnover,
+          headers: { itemName: 'หมวดหมู่', avgInventoryValue: 'มูลค่าสต็อกเฉลี่ย', totalCOGS: 'ต้นทุนขาย', turnoverRatio: 'อัตราหมุนเวียน', daysToSell: 'วันขายหมด' },
+          filename: 'อัตราหมุนเวียนสินค้า',
+          title: 'รายงานอัตราหมุนเวียนสินค้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['avgInventoryValue', 'totalCOGS'],
+          numberColumns: ['turnoverRatio', 'daysToSell'],
+        });
+
+      case 'by-branch':
+        return () => exportStyledPdfReport({
+          data: stockByBranch,
+          headers: { branchCode: 'รหัสสาขา', branchName: 'ชื่อสาขา', itemCount: 'จำนวนรายการ', qtyOnHand: 'จำนวนสินค้า', inventoryValue: 'มูลค่าสินค้า' },
+          filename: 'สต็อกตามสาขา',
+          title: 'รายงานสต็อกตามสาขา',
+          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
+          numberColumns: ['itemCount', 'qtyOnHand'],
+          currencyColumns: ['inventoryValue'],
+          summaryConfig: {
+            columns: {
+              itemCount: 'sum',
+              qtyOnHand: 'sum',
+              inventoryValue: 'sum',
+            }
+          }
+        });
+
+      default:
+        return undefined;
+    }
+  };
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header with integrated controls */}
-      <div className="flex flex-col gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
@@ -812,37 +918,39 @@ export default function InventoryReportPage() {
           options={reportOptions}
           onChange={(value) => setSelectedReport(value as ReportType)}
         />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
-      {error && <ErrorDisplay error={error} onRetry={() => fetchReportData(selectedReport)} />}
+      {error && <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>}
 
       {/* Report Content */}
-      <ErrorBoundary>
+      <motion.div variants={itemVariants}>
+        <ErrorBoundary>
         <DataCard
           id={selectedReport}
           title={currentReport?.label || ''}
           description={currentReport?.description || ''}
           queryInfo={selectedReport === 'stock-movement' ? {
-            query: getStockMovementQuery(dateRange.start, dateRange.end),
+            query: getStockMovementQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'low-stock' ? {
-            query: getLowStockItemsQuery(asOfDate),
+            query: getLowStockItemsQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'overstock' ? {
-            query: getOverstockItemsQuery(asOfDate),
+            query: getOverstockItemsQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'slow-moving' ? {
-            query: getSlowMovingItemsQuery(dateRange.start, dateRange.end, asOfDate),
+            query: getSlowMovingItemsQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'turnover' ? {
-            query: getInventoryTurnoverQuery(dateRange.start, dateRange.end, asOfDate),
+            query: getInventoryTurnoverQuery(dateRange),
             format: 'JSONEachRow'
           } : selectedReport === 'by-branch' ? {
-            query: getStockByBranchQuery(asOfDate),
+            query: getStockByBranchQuery(dateRange),
             format: 'JSONEachRow'
           } : undefined}
           onExportExcel={getExportFunction()}
+          onExportPDF={getExportPdfFunction()}
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -851,6 +959,7 @@ export default function InventoryReportPage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

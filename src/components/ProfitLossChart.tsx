@@ -119,7 +119,7 @@ export function ProfitLossChart({ data }: ProfitLossChartProps) {
     };
 
     return (
-        <div className="h-[400px] w-full">
+        <div className="h-[300px] sm:h-[350px] md:h-[400px] lg:h-[450px] w-full">
             <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
         </div>
     );

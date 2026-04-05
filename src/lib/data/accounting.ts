@@ -26,6 +26,9 @@ import {
   getAPAgingQuery,
   getRevenueBreakdownQuery,
   getExpenseBreakdownQuery,
+  getProfitLossByProductCategoryQuery,
+  getAccountProductsQuery,
+  getChartOfAccountsListQuery,
 } from './accounting-queries';
 
 // Re-export query functions for convenience (server-side usage only)
@@ -137,19 +140,20 @@ export async function getProfitLossData(dateRange: DateRange, branchSync?: strin
 /**
  * Get Balance Sheet data
  */
-export async function getBalanceSheetData(asOfDate: string, branchSync?: string[]): Promise<BalanceSheetItem[]> {
+export async function getBalanceSheetData(dateRange: DateRange, branchSync?: string[]): Promise<BalanceSheetItem[]> {
   try {
-    const query = getBalanceSheetQuery(asOfDate, branchSync);
+    const query = getBalanceSheetQuery(dateRange, branchSync);
 
     const result = await clickhouse.query({
       query,
-      query_params: { as_of_date: asOfDate },
+      query_params: { start_date: dateRange.start, end_date: dateRange.end },
       format: 'JSONEachRow',
     });
 
     const data = await result.json();
     return data.map((row: any) => ({
       accountType: row.accountType,
+      account_type: row.account_type, // Map the full account type (ASSETS, LIABILITIES, EQUITY)
       typeName: row.typeName,
       accountCode: row.account_code,
       accountName: row.account_name,
@@ -190,11 +194,15 @@ export async function getCashFlowData(dateRange: DateRange, branchSync?: string[
 /**
  * Get AR (Accounts Receivable) Aging data
  */
-export async function getARAgingData(branchSync?: string[]): Promise<AgingItem[]> {
+export async function getARAgingData(dateRange: DateRange, branchSync?: string[]): Promise<AgingItem[]> {
   try {
-    const query = getARAgingQuery(branchSync);
+    const query = getARAgingQuery(dateRange, branchSync);
 
-    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const result = await clickhouse.query({
+      query,
+      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      format: 'JSONEachRow'
+    });
     const data = await result.json();
 
     return data.map((row: any) => ({
@@ -218,11 +226,15 @@ export async function getARAgingData(branchSync?: string[]): Promise<AgingItem[]
 /**
  * Get AP (Accounts Payable) Aging data
  */
-export async function getAPAgingData(branchSync?: string[]): Promise<AgingItem[]> {
+export async function getAPAgingData(dateRange: DateRange, branchSync?: string[]): Promise<AgingItem[]> {
   try {
-    const query = getAPAgingQuery(branchSync);
+    const query = getAPAgingQuery(dateRange, branchSync);
 
-    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const result = await clickhouse.query({
+      query,
+      query_params: { start_date: dateRange.start, end_date: dateRange.end },
+      format: 'JSONEachRow'
+    });
     const data = await result.json();
 
     return data.map((row: any) => ({
@@ -291,6 +303,90 @@ export async function getExpenseBreakdown(dateRange: DateRange, branchSync?: str
     }));
   } catch (error) {
     console.error('Error fetching expense breakdown:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get products for a specific category (same source as revenue breakdown)
+ */
+export async function getAccountProducts(
+  dateRange: DateRange,
+  accountCode: string,
+  branchSync?: string[]
+): Promise<import('./types').AccountProductItem[]> {
+  try {
+    const query = getAccountProductsQuery(dateRange, accountCode, branchSync);
+    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const data = await result.json();
+    return data.map((row: any) => ({
+      itemCode: row.itemCode ?? '',
+      itemName: row.itemName ?? '',
+      categoryCode: row.categoryCode ?? 'N/A',
+      categoryName: row.categoryName ?? 'ไม่ระบุหมวดหมู่',
+      orderCount: Number(row.orderCount) || 0,
+      totalQtySold: Number(row.totalQtySold) || 0,
+      totalSales: Number(row.totalSales) || 0,
+      totalProfit: Number(row.totalProfit) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching account products:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Profit & Loss breakdown by product category (JOIN sales + journal)
+ */
+export async function getProfitLossByProductCategory(
+  dateRange: DateRange,
+  branchSync?: string[]
+): Promise<import('./types').ProductAccountData[]> {
+  try {
+    const query = getProfitLossByProductCategoryQuery(dateRange, branchSync);
+
+    const result = await clickhouse.query({
+      query,
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      categoryCode: row.categoryCode ?? '',
+      categoryName: row.categoryName ?? 'ไม่ระบุหมวด',
+      accountType: row.accountType as 'INCOME' | 'EQUITY' | 'EXPENSES',
+      accountCode: row.accountCode ?? '',
+      accountName: row.accountName ?? '',
+      revenue: Number(row.revenue) || 0,
+      equity: Number(row.equity) || 0,
+      expenses: Number(row.expenses) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching P&L by product category:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get chart of accounts list joined with saleinvoice_transaction_detail
+ */
+export async function getChartOfAccountsList(
+  dateRange: DateRange,
+  branchSync?: string[]
+): Promise<import('./types').ChartOfAccountItem[]> {
+  try {
+    const query = getChartOfAccountsListQuery(dateRange, branchSync);
+    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const data = await result.json();
+    return data.map((row: any) => ({
+      accountCode: row.accountCode ?? '',
+      accountName: row.accountName ?? '',
+      accountType: row.accountType ?? '',
+      netAmount: Number(row.netAmount) || 0,
+      docCount: Number(row.docCount) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching chart of accounts list:', error);
     throw error;
   }
 }

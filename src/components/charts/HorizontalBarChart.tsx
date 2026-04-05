@@ -23,11 +23,14 @@ export interface HorizontalBarChartProps {
   // Display options
   showLegend?: boolean;
   showPercentage?: boolean;
+  showRank?: boolean;
   barWidth?: string;
   fontSize?: number;
   // Grid
   gridLeft?: number;
   gridRight?: number;
+  // Y-axis label margin
+  yAxisLabelMargin?: number;
 }
 
 // Default color function - gold/silver/bronze for top 3
@@ -60,10 +63,12 @@ export function HorizontalBarChart({
   getBarColor = defaultGetBarColor,
   showLegend = true,
   showPercentage = true,
+  showRank = true,
   barWidth = '85%',
   fontSize = 12,
   gridLeft = 150,
   gridRight = 150,
+  yAxisLabelMargin,
 }: HorizontalBarChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -96,9 +101,11 @@ export function HorizontalBarChart({
             return tooltipFormatter(itemData, parseFloat(percentage));
           }
           
+          const rankLabel = showRank ? `อันดับ ${itemData.rank}: ` : '';
+          
           return `
             <div style="padding: 8px;">
-              <div style="font-weight: 600; margin-bottom: 6px;">อันดับ ${itemData.rank}: ${itemData.name}</div>
+              <div style="font-weight: 600; margin-bottom: 6px;">${rankLabel}${itemData.name}</div>
               ${itemData.subLabel ? `<div style="color: #666; font-size: 12px; margin-bottom: 4px;">${itemData.subLabel}</div>` : ''}
               <div style="margin-top: 8px;">
                 <div>ยอด: <b style="color: #3b82f6;">฿${itemData.value.toLocaleString('th-TH')}</b></div>
@@ -130,11 +137,11 @@ export function HorizontalBarChart({
       },
       yAxis: {
         type: 'category',
-        data: displayData.map((item) => `${item.rank}. ${item.name}`),
+        data: displayData.map((item) => showRank ? `${item.rank}. ${item.name}` : item.name),
         axisLabel: {
           fontSize: fontSize,
           align: 'left',
-          margin: 220 ,
+          margin: yAxisLabelMargin !== undefined ? yAxisLabelMargin : 220,
           color: '#374151',
         },
         axisTick: {

@@ -92,7 +92,7 @@ export function SalesChart({ data }: { data: any[] }) {
     };
 
     return (
-        <div className="h-[300px] w-full">
+        <div className="h-[250px] sm:h-[280px] md:h-[320px] lg:h-[350px] w-full">
             <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
         </div>
     );

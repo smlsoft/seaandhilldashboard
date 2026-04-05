@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { formatSelectedBranchNames, useBranchStore } from '@/store/useBranchStore';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -18,6 +20,7 @@ import {
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
+import { exportStyledPdfReport } from '@/lib/exportPdf';
 import { formatCurrency, formatNumber, formatDate, formatPercent, formatMonth } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -71,47 +74,35 @@ const reportOptions: ReportOption<ReportType>[] = [
 ];
 
 export default function PurchaseReportPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(
-    getDateRange('THIS_MONTH')
-  );
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('purchase-trend');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Data states
-  const [trendData, setTrendData] = useState<PurchaseTrendData[]>([]);
-  const [topSuppliers, setTopSuppliers] = useState<TopSupplier[]>([]);
-  const [purchaseByCategory, setPurchaseByCategory] = useState<PurchaseByCategory[]>([]);
-  const [purchaseByBrand, setPurchaseByBrand] = useState<PurchaseByBrand[]>([]);
-  const [apOutstanding, setApOutstanding] = useState<APOutstanding[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const availableBranches = useBranchStore((s) => s.availableBranches);
+  const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
+  const withBranchSubtitle = (detail: string) => `กิจการ: ${selectedBranchLabel} | ${detail}`;
 
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
 
+  // Reset category filter when switching reports
   useEffect(() => {
-    fetchReportData(selectedReport);
-  }, [dateRange, selectedReport]);
+    setSelectedCategory('ALL');
+  }, [selectedReport]);
 
-  // Listen for branch changes
-  useBranchChange(() => fetchReportData(selectedReport));
-
-  const fetchReportData = async (reportType: ReportType) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['purchaseReportData', selectedReport, dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
-
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
 
       let endpoint = '';
-      switch (reportType) {
+      switch (selectedReport) {
         case 'purchase-trend':
           endpoint = `/api/purchase/trend?${params}`;
           break;
@@ -130,36 +121,22 @@ export default function PurchaseReportPage() {
       }
 
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${reportType} data`);
+      if (!response.ok) throw new Error(`Failed to fetch ${selectedReport} data`);
 
       const result = await response.json();
-
-      switch (reportType) {
-        case 'purchase-trend':
-          setTrendData(result.data);
-          break;
-        case 'top-suppliers':
-          setTopSuppliers(result.data);
-          break;
-        case 'by-category':
-          setPurchaseByCategory(result.data);
-          break;
-        case 'by-brand':
-          setPurchaseByBrand(result.data);
-          break;
-        case 'ap-outstanding':
-          setApOutstanding(result.data);
-          break;
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล'
-      );
-      console.error('Error fetching purchase data:', err);
-    } finally {
-      setLoading(false);
+      return result.data;
     }
-  };
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+
+  const trendData: PurchaseTrendData[] = selectedReport === 'purchase-trend' ? (reportData || []) : [];
+  const topSuppliers: TopSupplier[] = selectedReport === 'top-suppliers' ? (reportData || []) : [];
+  const purchaseByCategory: PurchaseByCategory[] = selectedReport === 'by-category' ? (reportData || []) : [];
+  const purchaseByBrand: PurchaseByBrand[] = selectedReport === 'by-brand' ? (reportData || []) : [];
+  const apOutstanding: APOutstanding[] = selectedReport === 'ap-outstanding' ? (reportData || []) : [];
+
+  const fetchReportData = () => { refetch(); };
 
   // Column definitions for Purchase Trend
   const purchaseTrendColumns: ColumnDef<PurchaseTrendData>[] = [
@@ -262,20 +239,22 @@ export default function PurchaseReportPage() {
   // Column definitions for Purchase by Category
   const purchaseByCategoryColumns: ColumnDef<PurchaseByCategory>[] = [
     {
-      key: 'categoryName',
-      header: 'หมวดหมู่',
+      key: 'itemCode',
+      header: 'รหัสสินค้า',
       sortable: true,
       align: 'left',
       render: (item: PurchaseByCategory) => (
-        <span className="font-medium">{item.categoryName}</span>
+        <span className="font-mono text-xs">{item.itemCode}</span>
       ),
     },
     {
-      key: 'uniqueItems',
-      header: 'จำนวนรายการ',
+      key: 'itemName',
+      header: 'ชื่อสินค้า',
       sortable: true,
-      align: 'right',
-      render: (item: PurchaseByCategory) => formatNumber(item.uniqueItems || 0),
+      align: 'left',
+      render: (item: PurchaseByCategory) => (
+        <span className="font-medium">{item.itemName}</span>
+      ),
     },
     {
       key: 'totalQty',
@@ -392,6 +371,19 @@ export default function PurchaseReportPage() {
   // Get current report option
   const currentReport = reportOptions.find(opt => opt.value === selectedReport);
 
+  // Get unique categories from purchaseByCategory
+  const uniqueCategories = Array.from(
+    new Set(purchaseByCategory.map(item => JSON.stringify({ 
+      code: item.categoryCode, 
+      name: item.categoryName 
+    })))
+  ).map(str => JSON.parse(str));
+
+  // Filter purchaseByCategory by selected category
+  const filteredPurchaseByCategory = selectedCategory === 'ALL' 
+    ? purchaseByCategory 
+    : purchaseByCategory.filter(item => item.categoryCode === selectedCategory);
+
   // Render report content based on selected type
   const renderReportContent = () => {
     switch (selectedReport) {
@@ -458,16 +450,16 @@ export default function PurchaseReportPage() {
       case 'by-category':
         return (
           <PaginatedTable
-            data={purchaseByCategory}
+            data={filteredPurchaseByCategory}
             columns={purchaseByCategoryColumns}
-            itemsPerPage={10}
+            itemsPerPage={15}
             emptyMessage="ไม่มีข้อมูลหมวดหมู่"
-            defaultSortKey="totalPurchase"
-            defaultSortOrder="desc"
-            keyExtractor={(item: PurchaseByCategory) => item.categoryName}
+            defaultSortKey="categoryName"
+            defaultSortOrder="asc"
+            keyExtractor={(item: PurchaseByCategory, index?: number) => `${item.categoryCode}-${item.itemCode}-${index}`}
             showSummary={true}
             summaryConfig={{
-              labelColSpan: 1,
+              labelColSpan: 2,
               values: {
                 totalQty: (data) => {
                   const total = data.reduce((sum, item) => sum + item.totalQty, 0);
@@ -538,7 +530,7 @@ export default function PurchaseReportPage() {
             filename: 'แนวโน้มการจัดซื้อ',
             sheetName: 'Purchase Trend',
             title: 'รายงานแนวโน้มการจัดซื้อ',
-            subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
             currencyColumns: ['totalPurchases', 'avgPOValue'],
             numberColumns: ['poCount'],
             summaryConfig: {
@@ -558,7 +550,7 @@ export default function PurchaseReportPage() {
           filename: 'ซัพพลายเออร์ยอดนิยม',
           sheetName: 'Top Suppliers',
           title: 'รายงานซัพพลายเออร์ยอดนิยม',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['orderCount'],
           currencyColumns: ['totalPurchase', 'avgOrderValue'],
           summaryConfig: {
@@ -570,23 +562,28 @@ export default function PurchaseReportPage() {
         });
 
       case 'by-category':
-        return () => exportStyledReport({
-          data: purchaseByCategory,
-          headers: { categoryName: 'หมวดหมู่', itemCount: 'จำนวนรายการ', totalQty: 'จำนวนซื้อ', totalPurchase: 'ยอดซื้อ', percentage: 'สัดส่วน (%)' },
-          filename: 'การซื้อตามหมวดหมู่',
-          sheetName: 'By Category',
-          title: 'รายงานการซื้อตามหมวดหมู่',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
-          numberColumns: ['itemCount', 'totalQty'],
-          currencyColumns: ['totalPurchase'],
-          percentColumns: ['percentage'],
-          summaryConfig: {
-            columns: {
-              totalQty: 'sum',
-              totalPurchase: 'sum',
+        return () => {
+          const categoryName = selectedCategory === 'ALL' 
+            ? 'ทั้งหมด' 
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+          
+          return exportStyledReport({
+            data: filteredPurchaseByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', totalQty: 'จำนวนซื้อ', totalPurchaseValue: 'ยอดซื้อ' },
+            filename: `การซื้อตามหมวดหมู่_${categoryName}`,
+            sheetName: 'By Category',
+            title: `รายงานการซื้อตามหมวดหมู่ - ${categoryName}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['totalQty'],
+            currencyColumns: ['totalPurchaseValue'],
+            summaryConfig: {
+              columns: {
+                totalQty: 'sum',
+                totalPurchaseValue: 'sum',
+              }
             }
-          }
-        });
+          });
+        };
 
       case 'by-brand':
         return () => exportStyledReport({
@@ -595,7 +592,7 @@ export default function PurchaseReportPage() {
           filename: 'การซื้อตามแบรนด์',
           sheetName: 'By Brand',
           title: 'รายงานการซื้อตามแบรนด์',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           numberColumns: ['itemCount', 'totalQty'],
           currencyColumns: ['totalPurchase'],
           percentColumns: ['percentage'],
@@ -614,7 +611,7 @@ export default function PurchaseReportPage() {
           filename: 'สถานะเจ้าหนี้การค้า',
           sheetName: 'AP Outstanding',
           title: 'รายงานสถานะเจ้าหนี้การค้า',
-          subtitle: `ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['totalOutstanding', 'overdueAmount'],
           numberColumns: ['docCount'],
           summaryConfig: {
@@ -631,10 +628,132 @@ export default function PurchaseReportPage() {
     }
   };
 
+  const getExportPdfFunction = () => {
+    switch (selectedReport) {
+      case 'purchase-trend':
+        return () => {
+          const dataWithAvg = trendData.map(item => ({
+            ...item,
+            avgPOValue: item.poCount > 0 ? item.totalPurchases / item.poCount : 0
+          }));
+          exportStyledPdfReport({
+            data: dataWithAvg,
+            headers: { month: 'เดือน', totalPurchases: 'ยอดจัดซื้อ', poCount: 'จำนวน PO', avgPOValue: 'ยอดเฉลี่ย/PO' },
+            filename: 'แนวโน้มการจัดซื้อ',
+            title: 'รายงานแนวโน้มการจัดซื้อ',
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            currencyColumns: ['totalPurchases', 'avgPOValue'],
+            numberColumns: ['poCount'],
+            summaryConfig: {
+              columns: {
+                totalPurchases: 'sum',
+                poCount: 'sum',
+                avgPOValue: 'avg'
+              }
+            }
+          });
+        };
+
+      case 'top-suppliers':
+        return () => exportStyledPdfReport({
+          data: topSuppliers,
+          headers: { supplierCode: 'รหัสซัพพลายเออร์', supplierName: 'ชื่อซัพพลายเออร์', orderCount: 'ใบสั่งซื้อ', totalPurchase: 'ยอดซื้อรวม', avgOrderValue: 'ยอดเฉลี่ย/ใบ', lastOrderDate: 'สั่งซื้อล่าสุด' },
+          filename: 'ซัพพลายเออร์ยอดนิยม',
+          title: 'รายงานซัพพลายเออร์ยอดนิยม',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['orderCount'],
+          currencyColumns: ['totalPurchase', 'avgOrderValue'],
+          summaryConfig: {
+            columns: {
+              orderCount: 'sum',
+              totalPurchase: 'sum',
+            }
+          }
+        });
+
+      case 'by-category':
+        return () => {
+          const categoryName = selectedCategory === 'ALL'
+            ? 'ทั้งหมด'
+            : uniqueCategories.find(c => c.code === selectedCategory)?.name || 'ไม่ระบุ';
+
+          return exportStyledPdfReport({
+            data: filteredPurchaseByCategory,
+            headers: { categoryCode: 'รหัสหมวดหมู่', categoryName: 'ชื่อหมวดหมู่', itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', totalQty: 'จำนวนซื้อ', totalPurchaseValue: 'ยอดซื้อ' },
+            filename: `การซื้อตามหมวดหมู่_${categoryName}`,
+            title: `รายงานการซื้อตามหมวดหมู่ - ${categoryName}`,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['totalQty'],
+            currencyColumns: ['totalPurchaseValue'],
+            summaryConfig: {
+              columns: {
+                totalQty: 'sum',
+                totalPurchaseValue: 'sum',
+              }
+            }
+          });
+        };
+
+      case 'by-brand':
+        return () => exportStyledPdfReport({
+          data: purchaseByBrand,
+          headers: { brandName: 'แบรนด์', itemCount: 'จำนวนรายการ', totalQty: 'จำนวนซื้อ', totalPurchase: 'ยอดซื้อ', percentage: 'สัดส่วน (%)' },
+          filename: 'การซื้อตามแบรนด์',
+          title: 'รายงานการซื้อตามแบรนด์',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['itemCount', 'totalQty'],
+          currencyColumns: ['totalPurchase'],
+          percentColumns: ['percentage'],
+          summaryConfig: {
+            columns: {
+              totalQty: 'sum',
+              totalPurchase: 'sum',
+            }
+          }
+        });
+
+      case 'ap-outstanding':
+        return () => exportStyledPdfReport({
+          data: apOutstanding,
+          headers: { supplierCode: 'รหัสซัพพลายเออร์', supplierName: 'ชื่อซัพพลายเออร์', docCount: 'จำนวนเอกสาร', totalOutstanding: 'ยอดค้างชำระ', overdueAmount: 'ยอดเกินกำหนด' },
+          filename: 'สถานะเจ้าหนี้การค้า',
+          title: 'รายงานสถานะเจ้าหนี้การค้า',
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['totalOutstanding', 'overdueAmount'],
+          numberColumns: ['docCount'],
+          summaryConfig: {
+            columns: {
+              docCount: 'sum',
+              totalOutstanding: 'sum',
+              overdueAmount: 'sum',
+            }
+          }
+        });
+
+      default:
+        return undefined;
+    }
+  };
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header with integrated controls */}
-      <div className="flex flex-col gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
@@ -653,19 +772,43 @@ export default function PurchaseReportPage() {
           options={reportOptions}
           onChange={(value) => setSelectedReport(value as ReportType)}
         />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
-      {error && <ErrorDisplay error={error} onRetry={() => fetchReportData(selectedReport)} />}
+      {error && <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>}
 
       {/* Report Content */}
-      <ErrorBoundary>
+      <motion.div variants={itemVariants}>
+        <ErrorBoundary>
         <DataCard
           id={selectedReport}
           title={currentReport?.label || ''}
           description={currentReport?.description || ''}
           queryInfo={undefined}
           onExportExcel={getExportFunction()}
+          onExportPDF={getExportPdfFunction()}
+          headerExtra={
+            selectedReport === 'by-category' ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="category-filter" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                  หมวดหมู่:
+                </label>
+                <select
+                  id="category-filter"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                >
+                  <option value="ALL">ทั้งหมด</option>
+                  {uniqueCategories.map((cat) => (
+                    <option key={cat.code} value={cat.code}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : undefined
+          }
         >
           {loading ? (
             <TableSkeleton rows={10} />
@@ -674,6 +817,7 @@ export default function PurchaseReportPage() {
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

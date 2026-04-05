@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { KPICardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/LoadingSkeleton';
+import { PaginatedTable } from '@/components/PaginatedTable';
 import { PurchaseTrendChart } from '@/components/purchase/PurchaseTrendChart';
 import { HorizontalBarChart, type HorizontalBarItem } from '@/components/charts/HorizontalBarChart';
 import { PurchaseByCategoryChart } from '@/components/purchase/PurchaseByCategoryChart';
 import { PurchaseByBrandChart } from '@/components/purchase/PurchaseByBrandChart';
-import { APOutstandingChart } from '@/components/purchase/APOutstandingChart';
 import { ShoppingBag, Package, TrendingDown, FileText } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { formatGrowthPercentage } from '@/lib/comparison';
@@ -30,35 +32,24 @@ import {
 } from '@/lib/data/purchase-queries';
 
 export default function PurchasePage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { dateRange, setDateRange } = useDateRangeStore();
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  // Data states
-  const [kpis, setKpis] = useState<PurchaseKPIs | null>(null);
-  const [trendData, setTrendData] = useState<PurchaseTrendData[]>([]);
-  const [topSuppliers, setTopSuppliers] = useState<TopSupplier[]>([]);
-  const [purchaseByCategory, setPurchaseByCategory] = useState<PurchaseByCategory[]>([]);
-  const [purchaseByBrand, setPurchaseByBrand] = useState<PurchaseByBrand[]>([]);
-  const [apOutstanding, setApOutstanding] = useState<APOutstanding[]>([]);
-
-
+  // Reset category filter when date range changes
   useEffect(() => {
-    fetchAllData();
+    setSelectedCategory('ALL');
   }, [dateRange]);
 
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['purchaseData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => params.append('branch', b));
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
       }
 
       // Fetch all data in parallel
@@ -94,22 +85,34 @@ export default function PurchasePage() {
         apRes.json(),
       ]);
 
-      setKpis(kpisData.data);
-      setTrendData(trendDataRes.data);
-      setTopSuppliers(suppliersData.data);
-      setPurchaseByCategory(categoryData.data);
-      setPurchaseByBrand(brandData.data);
-      setApOutstanding(apData.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching purchase data:', err);
-    } finally {
-      setLoading(false);
+      return {
+        kpis: kpisData.data as PurchaseKPIs,
+        trendData: trendDataRes.data as PurchaseTrendData[],
+        topSuppliers: suppliersData.data as TopSupplier[],
+        purchaseByCategory: categoryData.data as PurchaseByCategory[],
+        purchaseByBrand: brandData.data as PurchaseByBrand[],
+        apOutstanding: apData.data as APOutstanding[],
+      };
     }
-  };
+  });
 
-  // Listen for branch changes
-  useBranchChange(fetchAllData);
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+  const kpis = data?.kpis;
+  const trendData = data?.trendData || [];
+  const topSuppliers = data?.topSuppliers || [];
+  const purchaseByCategory = data?.purchaseByCategory || [];
+  const purchaseByBrand = data?.purchaseByBrand || [];
+  const apOutstanding = data?.apOutstanding || [];
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -125,10 +128,83 @@ export default function PurchasePage() {
     });
   };
 
+  // Aggregate purchase by category data for Pie Chart (sum all items per category)
+  const aggregatedPurchaseByCategory = (() => {
+    const categoryMap = new Map<string, PurchaseByCategory>();
+    
+    purchaseByCategory.forEach(item => {
+      const key = item.categoryCode;
+      const existing = categoryMap.get(key);
+      
+      if (existing) {
+        existing.totalQty += item.totalQty;
+        existing.totalPurchaseValue += item.totalPurchaseValue;
+      } else {
+        categoryMap.set(key, {
+          categoryCode: item.categoryCode,
+          categoryName: item.categoryName,
+          itemCode: '', // Not used in aggregated data
+          itemName: '', // Not used in aggregated data
+          totalQty: item.totalQty,
+          totalPurchaseValue: item.totalPurchaseValue,
+          uniqueItems: item.uniqueItems,
+        });
+      }
+    });
+    
+    return Array.from(categoryMap.values());
+  })();
+
+  // Calculate unique categories and filtered data
+  const uniqueCategories = Array.from(
+    new Set(purchaseByCategory.map(item => JSON.stringify({ code: item.categoryCode, name: item.categoryName })))
+  )
+    .map(str => JSON.parse(str))
+    .sort((a, b) => a.name.localeCompare(b.name, 'th'));
+
+  const filteredPurchaseByCategory = selectedCategory === 'ALL'
+    ? purchaseByCategory
+    : purchaseByCategory.filter(item => item.categoryCode === selectedCategory);
+
+  // Column definitions for purchase by category
+  const purchaseByCategoryColumns = [
+    {
+      key: 'itemCode',
+      header: 'รหัสสินค้า',
+      render: (item: PurchaseByCategory) => (
+        <span className="font-mono text-xs">{item.itemCode}</span>
+      ),
+    },
+    {
+      key: 'itemName',
+      header: 'ชื่อสินค้า',
+      render: (item: PurchaseByCategory) => (
+        <span className="font-medium">{item.itemName}</span>
+      ),
+    },
+    {
+      key: 'totalQty',
+      header: 'จำนวนที่ซื้อ',
+      align: 'right' as const,
+      render: (item: PurchaseByCategory) => formatNumber(item.totalQty),
+    },
+    {
+      key: 'totalPurchaseValue',
+      header: 'มูลค่าทั้งหมด',
+      align: 'right' as const,
+      render: (item: PurchaseByCategory) => formatCurrency(item.totalPurchaseValue),
+    },
+  ];
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             การจัดซื้อและซัพพลายเออร์
@@ -138,28 +214,34 @@ export default function PurchasePage() {
           </p>
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
       {error && (
-        <ErrorDisplay error={error} onRetry={fetchAllData} />
+        <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>
       )}
 
       {/* KPI Cards */}
       {loading ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <KPICardSkeleton key={i} />
           ))}
-        </div>
+        </motion.div>
       ) : kpis ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="ยอดซื้อรวม"
             value={formatCurrency(kpis.totalPurchases.value)}
             trend={formatGrowthPercentage(kpis.totalPurchases.growthPercentage || 0)}
             trendUp={kpis.totalPurchases.trend === 'down'} // Down is good for purchases (cost reduction)
             icon={ShoppingBag}
+            detailTitle="รายละเอียดยอดซื้อรวม"
+            detailNote="ใช้ประเมินภาพรวมต้นทุนการจัดซื้อในช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มต้นทุน', value: kpis.totalPurchases.trend === 'down' ? 'ลดลง (ดี)' : 'เพิ่มขึ้น' },
+            ]}
             queryInfo={{
               query: getTotalPurchasesQuery(dateRange),
               format: 'JSONEachRow'
@@ -171,6 +253,12 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.totalItemsPurchased.growthPercentage || 0)}
             trendUp={kpis.totalItemsPurchased.trend === 'up'}
             icon={Package}
+            detailTitle="รายละเอียดจำนวนสินค้าที่ซื้อ"
+            detailNote="แสดงปริมาณสินค้าที่รับเข้าจากการจัดซื้อทั้งหมด"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มจำนวนรับเข้า', value: kpis.totalItemsPurchased.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
             queryInfo={{
               query: getTotalItemsPurchasedQuery(dateRange),
               format: 'JSONEachRow'
@@ -182,6 +270,12 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.totalOrders.growthPercentage || 0)}
             trendUp={kpis.totalOrders.trend === 'up'}
             icon={FileText}
+            detailTitle="รายละเอียดจำนวนออเดอร์ซื้อ"
+            detailNote="นับจำนวนใบสั่งซื้อทั้งหมดในช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มจำนวนใบสั่งซื้อ', value: kpis.totalOrders.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
             queryInfo={{
               query: getTotalOrdersQuery(dateRange),
               format: 'JSONEachRow'
@@ -193,37 +287,48 @@ export default function PurchasePage() {
             trend={formatGrowthPercentage(kpis.avgOrderValue.growthPercentage || 0)}
             trendUp={kpis.avgOrderValue.trend === 'down'} // Down is good for avg order (efficiency)
             icon={TrendingDown}
+            detailTitle="รายละเอียดค่าเฉลี่ยต่อออเดอร์ซื้อ"
+            detailNote="ใช้ติดตามประสิทธิภาพมูลค่าต่อใบสั่งซื้อ"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มต่อออเดอร์', value: kpis.avgOrderValue.trend === 'down' ? 'ลดลง (ดี)' : 'เพิ่มขึ้น' },
+            ]}
             queryInfo={{
               query: getAvgOrderValueQuery(dateRange),
               format: 'JSONEachRow'
             }}
           />
-        </div>
+        </motion.div>
       ) : null}
 
       {/* Purchase Trend Chart */}
-      <div className="grid gap-5 ">
-        <ErrorBoundary>
-          <DataCard
-            title="แนวโน้มการจัดซื้อ"
-            description="ยอดซื้อและจำนวนออเดอร์รายวัน"
-            linkTo="/reports/purchase#trend"
-            queryInfo={{
-              query: getPurchaseTrendQuery(dateRange),
-              format: 'JSONEachRow'
-            }}
-          >
-            {loading ? (
-              <ChartSkeleton />
-            ) : (
-              <PurchaseTrendChart data={trendData} />
-            )}
-          </DataCard>
-        </ErrorBoundary>
+      <motion.div variants={itemVariants}>
+      <ErrorBoundary>
+        <DataCard
+          title="แนวโน้มการจัดซื้อ"
+          description="ยอดซื้อและจำนวนออเดอร์รายวัน"
+          linkTo="/reports/purchase#trend"
+          queryInfo={{
+            query: getPurchaseTrendQuery(dateRange),
+            format: 'JSONEachRow'
+          }}
+        >
+          {loading ? (
+            <ChartSkeleton />
+          ) : (
+            <PurchaseTrendChart data={trendData} />
+          )}
+        </DataCard>
+      </ErrorBoundary>
+      </motion.div>
+
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+
 
         {/* Top Suppliers */}
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="ซัพพลายเออร์ยอดนิยม Top 20"
             description="รายการซัพพลายเออร์ที่มียอดซื้อสูงสุด"
             linkTo="/reports/purchase#top-suppliers"
@@ -247,7 +352,10 @@ export default function PurchasePage() {
                     lastPurchaseDate: supplier.lastPurchaseDate,
                   },
                 }))}
-                height="600px"
+                height="500px"
+              //  gridLeft={35}
+                gridRight={90}
+                yAxisLabelMargin={270}
                 tooltipFormatter={(item, percentage) => {
                   const poCount = item.extraData?.poCount || 0;
                   const avgPOValue = item.extraData?.avgPOValue || 0;
@@ -256,7 +364,7 @@ export default function PurchasePage() {
                     : '-';
                   return `
                   <div style="padding: 8px;">
-                    <div style="font-weight: 600; margin-bottom: 6px;">อันดับ ${item.rank}: ${item.name}</div>
+                    <div style="font-weight: 6000; margin-bottom: 6px;">อันดับ ${item.rank}: ${item.name}</div>
                     <div style="color: #666; font-size: 12px; margin-bottom: 8px;">${item.subLabel}</div>
                     <div>ยอดซื้อ: <b style="color: #3b82f6;">฿${item.value.toLocaleString('th-TH')}</b></div>
                     <div>จำนวน PO: <b>${poCount} รายการ</b></div>
@@ -270,11 +378,10 @@ export default function PurchasePage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
-      {/* Purchase by Category & Brand */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="การซื้อตามหมวดสินค้า"
             description="สัดส่วนการซื้อแยกตามหมวดหมู่"
             linkTo="/reports/purchase#by-category"
@@ -286,10 +393,14 @@ export default function PurchasePage() {
             {loading ? (
               <ChartSkeleton />
             ) : (
-              <PurchaseByCategoryChart data={purchaseByCategory} />
+              <PurchaseByCategoryChart data={aggregatedPurchaseByCategory} />
             )}
           </DataCard>
         </ErrorBoundary>
+      </motion.div>
+
+      {/* Purchase by Category & Brand */}
+      <motion.div variants={itemVariants} className="grid gap-6">
 
         <ErrorBoundary>
           <DataCard
@@ -308,13 +419,55 @@ export default function PurchasePage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
-      {/* AP Outstanding */}
+      {/* Purchase Items by Category - Detailed Table */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
-          title="สถานะเจ้าหนี้การค้า (AP)"
-          description="สรุปยอดเจ้าหนี้ตามสถานะการชำระเงิน"
+          title="รายละเอียดสินค้าแยกตามหมวดหมู่"
+          description="รายการสินค้าทั้งหมดในแต่ละหมวดหมู่"
+          linkTo="/reports/purchase#by-category"
+          queryInfo={{
+            query: getPurchaseByCategoryQuery(dateRange),
+            format: 'JSONEachRow'
+          }}
+          headerExtra={
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="ALL">ทุกหมวดหมู่</option>
+              {uniqueCategories.map(cat => (
+                <option key={cat.code} value={cat.code}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          }
+        >
+          {loading ? (
+            <TableSkeleton />
+          ) : (
+            <PaginatedTable
+              data={filteredPurchaseByCategory}
+              columns={purchaseByCategoryColumns}
+              keyExtractor={(item, index) => `${item.categoryCode}-${item.itemCode}-${index}`}
+              itemsPerPage={15}
+              emptyMessage="ไม่พบข้อมูลสินค้า"
+            />
+          )}
+        </DataCard>
+      </ErrorBoundary>
+      </motion.div>
+
+      {/* AP Outstanding */}
+      <motion.div variants={itemVariants}>
+      <ErrorBoundary>
+        <DataCard
+          title="สถานะเจ้าหนี้การค้า (AP) Top 20"
+          description="ซัพพลายเออร์ที่มียอดค้างชำระสูงสุด"
           linkTo="/reports/purchase#ap-outstanding"
           queryInfo={{
             query: getAPOutstandingQuery(dateRange),
@@ -322,12 +475,91 @@ export default function PurchasePage() {
           }}
         >
           {loading ? (
-            <ChartSkeleton height="350px" />
+            <ChartSkeleton height="600px" />
           ) : (
-            <APOutstandingChart data={apOutstanding} height="350px" />
+            <HorizontalBarChart
+              data={apOutstanding.map((ap, index) => ({
+                rank: index + 1,
+                name: ap.supplierName,
+                value: ap.totalOutstanding,
+                subLabel: ap.supplierCode,
+                extraData: {
+                  overdueAmount: ap.overdueAmount,
+                  notOverdueAmount: ap.totalOutstanding - ap.overdueAmount,
+                  docCount: ap.docCount,
+                  overduePercent: ap.totalOutstanding > 0
+                    ? ((ap.overdueAmount / ap.totalOutstanding) * 100).toFixed(1)
+                    : '0',
+                },
+              }))}
+              height="500px"
+              gridLeft={350}
+              gridRight={40}
+              yAxisLabelMargin={340}
+              showRank={true}
+              showLegend={false}
+              getBarColor={(rank) => {
+                // ใช้ gradient amber-orange สำหรับ AP (warning theme)
+                const intensity = 0.9 - (rank - 1) * 0.04;
+                return `rgba(245, 158, 11, ${Math.max(0.4, intensity)})`;
+              }}
+              tooltipFormatter={(item, percentage) => {
+                const overdueAmount = item.extraData?.overdueAmount || 0;
+                const notOverdueAmount = item.extraData?.notOverdueAmount || 0;
+                const docCount = item.extraData?.docCount || 0;
+                const overduePercent = item.extraData?.overduePercent || '0';
+                const overduePercentNum = parseFloat(overduePercent);
+
+                return `
+                  <div style="padding: 10px; min-width: 300px;">
+                    <div style="font-weight: 600; margin-bottom: 4px; color: #1f2937;">อันดับ ${item.rank}: ${item.name}</div>
+                    <div style="color: #6b7280; font-size: 11px; margin-bottom: 10px;">${item.subLabel}</div>
+                    
+                    <div style="margin-bottom: 8px; padding: 8px; background: #fef3c7; border-radius: 6px;">
+                      <div style="color: #92400e; font-size: 11px; margin-bottom: 2px;">ยอดค้างชำระทั้งหมด</div>
+                      <div style="font-size: 18px; font-weight: 700; color: #d97706;">฿${item.value.toLocaleString('th-TH')}</div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; margin-bottom: 10px;">
+                      <div style="flex: 1; padding: 6px; background: #dbeafe; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 2px;">
+                          <span style="display: inline-block; width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; margin-right: 6px;"></span>
+                          <span style="font-size: 10px; color: #1e40af;">ยังไม่ครบกำหนด</span>
+                        </div>
+                        <div style="font-weight: 600; color: #1e3a8a; font-size: 13px;">฿${notOverdueAmount.toLocaleString('th-TH')}</div>
+                      </div>
+                      
+                      <div style="flex: 1; padding: 6px; background: #fee2e2; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 2px;">
+                          <span style="display: inline-block; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; margin-right: 6px;"></span>
+                          <span style="font-size: 10px; color: #991b1b;">เกินกำหนด</span>
+                        </div>
+                        <div style="font-weight: 600; color: #991b1b; font-size: 13px;">฿${overdueAmount.toLocaleString('th-TH')}</div>
+                      </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #e5e7eb;">
+                      <span style="font-size: 11px; color: #6b7280;">สัดส่วนเกินกำหนด</span>
+                      <span style="font-weight: 700; font-size: 13px; color: ${overduePercentNum > 50 ? '#dc2626' : overduePercentNum > 30 ? '#f59e0b' : '#10b981'};">${overduePercent}%</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                      <span style="font-size: 11px; color: #6b7280;">จำนวนบิล</span>
+                      <span style="font-weight: 600; color: #374151; font-size: 12px;">${docCount} รายการ</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #e5e7eb;">
+                      <span style="font-size: 11px; color: #6b7280;">สัดส่วนจากยอดค้างทั้งหมด</span>
+                      <span style="font-weight: 600; color: #f59e0b; font-size: 12px;">${percentage}%</span>
+                    </div>
+                  </div>
+                `;
+              }}
+            />
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

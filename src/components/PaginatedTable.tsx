@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode } from 'react';
+import { useState, ReactNode, useEffect } from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Database } from 'lucide-react';
 
 export interface ColumnDef<T> {
@@ -45,21 +45,13 @@ interface PaginatedTableProps<T> {
   defaultSortOrder?: 'asc' | 'desc';
   showSummary?: boolean;
   summaryConfig?: SummaryConfig<T>;
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> main
   // Server-side pagination props
   manualPagination?: boolean;
   totalItems?: number;
   currentPage?: number;
   onPageChange?: (page: number) => void;
-<<<<<<< HEAD
   paginationClassName?: string;
->>>>>>> Stashed changes
-=======
->>>>>>> main
+  onRowClick?: (item: T) => void;
 }
 
 export function PaginatedTable<T = any>({
@@ -73,24 +65,23 @@ export function PaginatedTable<T = any>({
   defaultSortOrder = 'desc',
   showSummary = false,
   summaryConfig,
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> main
   manualPagination = false,
   totalItems = 0,
   currentPage: externalPage = 1,
   onPageChange,
-<<<<<<< HEAD
   paginationClassName,
->>>>>>> Stashed changes
-=======
->>>>>>> main
+  onRowClick,
 }: PaginatedTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(defaultSortOrder);
   const [internalPage, setInternalPage] = useState(1);
+
+  // Reset pagination when data changes (e.g., filter applied)
+  useEffect(() => {
+    if (!manualPagination) {
+      setInternalPage(1);
+    }
+  }, [data.length, manualPagination]);
 
   // Use external page if manual, otherwise internal
   const currentPage = manualPagination ? externalPage : internalPage;
@@ -243,7 +234,8 @@ export function PaginatedTable<T = any>({
             {paginatedData.map((item, index) => (
               <tr
                 key={keyExtractor(item, startIndex + index)}
-                className={`hover:bg-muted/30 transition-colors ${rowClassName ? rowClassName(item, startIndex + index) : ''}`}
+                className={`hover:bg-muted/30 transition-colors ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(item, startIndex + index) : ''}`}
+                onClick={() => onRowClick?.(item)}
               >
                 {columns.map((column) => (
                   <td
@@ -301,12 +293,12 @@ export function PaginatedTable<T = any>({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className={`flex items-center justify-between px-2 pr-16 py-3 border-t border-border bg-white sticky bottom-0 z-10 mt-auto ${paginationClassName || ''}`}>
+        <div className="flex items-center justify-between px-2 py-3 pr-10 sticky bottom-0 z-30 bg-white border-t border-border mt-auto">
           <div className="text-xs text-muted-foreground">
             แสดง {startIndex + 1}-{Math.min(endIndex, sortedData.length)} จาก {sortedData.length} รายการ
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 mr-4">
             <button
               onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage === 1}
@@ -319,25 +311,10 @@ export function PaginatedTable<T = any>({
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-                className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${
-                  currentPage === page
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
-=======
-                className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-                  }`}
->>>>>>> Stashed changes
-=======
-                className={`min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
+                className={`min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                   }`}
->>>>>>> main
               >
                 {page}
               </button>

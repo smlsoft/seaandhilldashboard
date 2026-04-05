@@ -4,6 +4,7 @@ import "./globals.css";
 import ConditionalLayout from "@/components/ConditionalLayout";
 import { PermissionProvider } from "@/lib/permissions";
 import { ComparisonProvider } from "@/lib/ComparisonContext";
+import { QueryProvider } from "@/providers/QueryProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -25,13 +26,15 @@ export default function RootLayout({
       <body
         className={`${inter.variable} antialiased bg-[hsl(var(--background))] text-[hsl(var(--foreground))]`}
       >
-        <PermissionProvider>
-          <ComparisonProvider>
-            <ConditionalLayout>
-              {children}
-            </ConditionalLayout>
-          </ComparisonProvider>
-        </PermissionProvider>
+        <QueryProvider>
+          <PermissionProvider>
+            <ComparisonProvider>
+              <ConditionalLayout>
+                {children}
+              </ConditionalLayout>
+            </ComparisonProvider>
+          </PermissionProvider>
+        </QueryProvider>
       </body>
     </html>
   );

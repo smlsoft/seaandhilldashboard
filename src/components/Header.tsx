@@ -53,14 +53,7 @@ export function Header() {
     const pathname = usePathname();
     const router = useRouter();
     const [currentTime, setCurrentTime] = useState(new Date());
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
     const { isComparisonMode, setComparisonMode, toggleComparisonMode } = useComparison();
->>>>>>> Stashed changes
-=======
-    const { isComparisonMode, setComparisonMode } = useComparison();
->>>>>>> main
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -71,9 +64,6 @@ export function Header() {
     }, []);
 
     const pageName = pageNames[pathname] || 'Dashboard';
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
 
     // ตรวจสอบว่าอยู่ในหน้าเปรียบเทียบหรือไม่
     const isComparisonView = pathname.includes('/comparison');
@@ -88,14 +78,6 @@ export function Header() {
             toggleComparisonMode();
             return;
         }
-=======
-    
-    // ตรวจสอบว่าอยู่ในหน้าเปรียบเทียบหรือไม่
-    const isComparisonView = pathname.includes('/comparison');
-    
-    // สลับโหมดเปรียบเทียบ
-    const handleToggleComparison = () => {
->>>>>>> main
         if (isComparisonView) {
             // ปิดโหมดเปรียบเทียบ → ไปหน้าหลัก
             setComparisonMode(false);
@@ -108,18 +90,14 @@ export function Header() {
             router.push(comparisonRoute);
         }
     };
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> main
 
     return (
         <header className="h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]/80 backdrop-blur-md sticky top-0 z-40 px-8 flex items-center justify-between">
             {/* Left: Breadcrumbs or Page Title */}
             <div className="flex items-center gap-4">
                 <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))]">
-                    <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
-                    <span className="mx-2">/</span>
+                    {/* <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
+                    <span className="mx-2">/</span>*/}
                     <span className="font-medium text-[hsl(var(--foreground))]">{pageName}</span>
                 </div>
             </div>
@@ -139,30 +117,17 @@ export function Header() {
                     />
                 </div>
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> main
                 {/* Comparison Toggle Button */}
                 <button
                     onClick={handleToggleComparison}
                     className={cn(
                         "inline-flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors",
-<<<<<<< HEAD
                         (isComparisonView || (isReportsPage && isComparisonMode))
-=======
-                        isComparisonView || isComparisonMode
->>>>>>> main
                             ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                             : "border-[hsl(var(--border))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
                     )}
                 >
-<<<<<<< HEAD
                     {(isComparisonView || (isReportsPage && isComparisonMode)) ? (
-=======
-                    {isComparisonView ? (
->>>>>>> main
                         <>
                             <LayoutDashboard className="h-4 w-4" />
                             <span className="hidden lg:inline">ภาพรวม</span>
@@ -175,10 +140,6 @@ export function Header() {
                     )}
                 </button>
 
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> main
                 {/* Notifications */}
                 <button
                     type="button"

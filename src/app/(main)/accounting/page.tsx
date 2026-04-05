@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
+import { KPIRecordsDetailContent, type KPIRecordsColumn, type KPIRecordsRow } from '@/components/KPIRecordsDetailContent';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
@@ -14,10 +16,12 @@ import { CashFlowChart } from '@/components/accounting/CashFlowChart';
 import { ARAgingTable } from '@/components/accounting/ARAgingTable';
 import { APAgingTable } from '@/components/accounting/APAgingTable';
 import { RevenueExpenseBreakdown } from '@/components/accounting/RevenueExpenseBreakdown';
+import { ProductAccountBreakdownChart } from '@/components/accounting/ProductAccountBreakdownChart';
 import { Wallet, CreditCard, PiggyBank, TrendingUp, TrendingDown } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { formatGrowthPercentage } from '@/lib/comparison';
 import type { DateRange, AccountingKPIs, ProfitLossData, BalanceSheetItem, CashFlowData, AgingItem, CategoryBreakdown } from '@/lib/data/types';
+import type { ProductAccountData } from '@/lib/data/types';
 import {
   getAssetsQuery,
   getLiabilitiesQuery,
@@ -31,50 +35,24 @@ import {
   getAPAgingQuery,
   getRevenueBreakdownQuery,
   getExpenseBreakdownQuery,
+  getProfitLossByProductCategoryQuery,
 } from '@/lib/data/accounting-queries';
 
 export default function AccountingPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { dateRange, setDateRange } = useDateRangeStore();
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  // Data states
-  const [kpis, setKpis] = useState<AccountingKPIs | null>(null);
-  const [profitLossData, setProfitLossData] = useState<ProfitLossData[]>([]);
-  const [balanceSheetData, setBalanceSheetData] = useState<BalanceSheetItem[]>([]);
-  const [cashFlowData, setCashFlowData] = useState<CashFlowData[]>([]);
-  const [arAgingData, setArAgingData] = useState<AgingItem[]>([]);
-  const [apAgingData, setApAgingData] = useState<AgingItem[]>([]);
-  const [revenueBreakdown, setRevenueBreakdown] = useState<CategoryBreakdown[]>([]);
-  const [expenseBreakdown, setExpenseBreakdown] = useState<CategoryBreakdown[]>([]);
-
-
-  useEffect(() => {
-    fetchAllData();
-  }, [dateRange]);
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['accountingData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
       });
 
-      const asOfParams = new URLSearchParams({
-        as_of_date: dateRange.end,
-      });
-
-      const agingParams = new URLSearchParams();
-
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => {
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => {
           params.append('branch', b);
-          asOfParams.append('branch', b);
-          agingParams.append('branch', b);
         });
       }
 
@@ -87,14 +65,16 @@ export default function AccountingPage() {
         arRes,
         apRes,
         breakdownRes,
+        productAccountRes,
       ] = await Promise.all([
         fetch(`/api/accounting/kpis?${params}`),
         fetch(`/api/accounting/profit-loss?${params}`),
-        fetch(`/api/accounting/balance-sheet?${asOfParams}`),
+        fetch(`/api/accounting/balance-sheet?${params}`),
         fetch(`/api/accounting/cash-flow?${params}`),
-        fetch(`/api/accounting/ar-aging?${agingParams}`),
-        fetch(`/api/accounting/ap-aging?${agingParams}`),
+        fetch(`/api/accounting/ar-aging?${params}`),
+        fetch(`/api/accounting/ap-aging?${params}`),
         fetch(`/api/accounting/revenue-expense-breakdown?${params}`),
+        fetch(`/api/accounting/profit-loss-by-product?${params}`),
       ]);
 
       if (!kpisRes.ok) throw new Error('Failed to fetch KPIs');
@@ -105,7 +85,7 @@ export default function AccountingPage() {
       if (!apRes.ok) throw new Error('Failed to fetch AP aging');
       if (!breakdownRes.ok) throw new Error('Failed to fetch breakdown');
 
-      const [kpisData, plData, bsData, cfData, arData, apData, breakdownData] = await Promise.all([
+      const [kpisData, plData, bsData, cfData, arData, apData, breakdownData, productAccountData] = await Promise.all([
         kpisRes.json(),
         plRes.json(),
         bsRes.json(),
@@ -113,26 +93,43 @@ export default function AccountingPage() {
         arRes.json(),
         apRes.json(),
         breakdownRes.json(),
+        productAccountRes.ok ? productAccountRes.json() : Promise.resolve({ data: [] }),
       ]);
 
-      setKpis(kpisData.data);
-      setProfitLossData(plData.data);
-      setBalanceSheetData(bsData.data);
-      setCashFlowData(cfData.data);
-      setArAgingData(arData.data);
-      setApAgingData(apData.data);
-      setRevenueBreakdown(breakdownData.data.revenue);
-      setExpenseBreakdown(breakdownData.data.expenses);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching accounting data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Transform balance sheet data - ensure account_type is present for filtering
+      const transformedBalanceSheet = (bsData.data as any[]).map((item: any) => ({
+        accountType: item.accountType,
+        account_type: item.account_type, // The full account type (ASSETS, LIABILITIES, EQUITY)
+        typeName: item.typeName,
+        accountCode: item.accountCode,
+        accountName: item.accountName,
+        balance: item.balance,
+      }));
 
-  // Listen for branch changes
-  useBranchChange(fetchAllData);
+      return {
+        kpis: kpisData.data as AccountingKPIs,
+        profitLoss: plData.data as ProfitLossData[],
+        balanceSheet: transformedBalanceSheet as BalanceSheetItem[],
+        cashFlow: cfData.data as CashFlowData[],
+        arAging: arData.data as AgingItem[],
+        apAging: apData.data as AgingItem[],
+        revenueBreakdown: breakdownData.data.revenue as CategoryBreakdown[],
+        expenseBreakdown: breakdownData.data.expenses as CategoryBreakdown[],
+        productAccount: productAccountData.data as ProductAccountData[],
+      };
+    }
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+  const kpis = data?.kpis;
+  const profitLossData = data?.profitLoss || [];
+  const balanceSheetData = data?.balanceSheet || [];
+  const cashFlowData = data?.cashFlow || [];
+  const arAgingData = data?.arAging || [];
+  const apAgingData = data?.apAging || [];
+  const revenueBreakdown = data?.revenueBreakdown || [];
+  const expenseBreakdown = data?.expenseBreakdown || [];
+  const productAccountBreakdown = data?.productAccount || [];
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -141,10 +138,97 @@ export default function AccountingPage() {
     })}`;
   };
 
+  const balanceSheetColumns: KPIRecordsColumn[] = [
+    { key: 'accountCode', label: 'รหัสบัญชี' },
+    { key: 'accountName', label: 'ชื่อบัญชี' },
+    { key: 'balance', label: 'ยอดคงเหลือ', align: 'right' },
+  ];
+
+  const breakdownColumns: KPIRecordsColumn[] = [
+    { key: 'accountGroup', label: 'รหัสบัญชี' },
+    { key: 'accountName', label: 'ชื่อบัญชี' },
+    { key: 'amount', label: 'จำนวนเงิน', align: 'right' },
+    { key: 'percentage', label: 'สัดส่วน', align: 'right' },
+  ];
+
+  const mapBalanceRows = (items: BalanceSheetItem[]): KPIRecordsRow[] =>
+    items.map((item, index) => ({
+      id: `${item.accountCode}-${index}`,
+      cells: {
+        accountCode: item.accountCode,
+        accountName: item.accountName,
+        balance: formatCurrency(item.balance),
+      },
+    }));
+
+  const assetAccounts = balanceSheetData.filter(
+    (item) =>
+      item.account_type?.toUpperCase() === 'ASSETS' ||
+      item.typeName === 'สินทรัพย์' ||
+      item.accountType === 'A'
+  );
+  const liabilityAccounts = balanceSheetData.filter(
+    (item) =>
+      item.account_type?.toUpperCase() === 'LIABILITIES' ||
+      item.typeName === 'หนี้สิน' ||
+      item.accountType === 'L'
+  );
+  const equityAccounts = balanceSheetData.filter(
+    (item) =>
+      item.account_type?.toUpperCase() === 'EQUITY' ||
+      item.typeName === 'ส่วนของผู้ถือหุ้น' ||
+      item.accountType === 'E'
+  );
+
+  const assetRows = mapBalanceRows(assetAccounts);
+  const liabilityRows = mapBalanceRows(liabilityAccounts);
+  const equityRows = mapBalanceRows(equityAccounts);
+
+  const revenueRows: KPIRecordsRow[] = revenueBreakdown.map((item, index) => ({
+    id: `${item.accountName}-${index}`,
+    cells: {
+      accountGroup: item.accountGroup,
+      accountName: item.accountName,
+      amount: formatCurrency(item.amount),
+      percentage: `${item.percentage.toFixed(1)}%`,
+    },
+  }));
+
+  const expenseRows: KPIRecordsRow[] = expenseBreakdown.map((item, index) => ({
+    id: `${item.accountName}-${index}`,
+    cells: {
+      accountGroup: item.accountGroup,
+      accountName: item.accountName,
+      amount: formatCurrency(item.amount),
+      percentage: `${item.percentage.toFixed(1)}%`,
+    },
+  }));
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             บัญชีและการเงิน
@@ -154,11 +238,11 @@ export default function AccountingPage() {
           </p>
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
       {error && (
-        <ErrorDisplay error={error} onRetry={fetchAllData} />
+        <ErrorDisplay error={error} onRetry={() => refetch()} />
       )}
 
       {/* KPI Cards */}
@@ -169,13 +253,27 @@ export default function AccountingPage() {
           ))}
         </div>
       ) : kpis ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
           <KPICard
             title="สินทรัพย์"
             value={formatCurrency(kpis.assets.value)}
             trend={formatGrowthPercentage(kpis.assets.growthPercentage || 0)}
             trendUp={kpis.assets.trend === 'up'}
             icon={Wallet}
+            detailTitle="รายละเอียดสินทรัพย์"
+            detailNote="มูลค่าสินทรัพย์รวมที่กิจการถือครองในช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มสินทรัพย์', value: kpis.assets.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
+            detailContent={
+              <KPIRecordsDetailContent
+                title="สินทรัพย์"
+                columns={balanceSheetColumns}
+                rows={assetRows}
+                reportHref="/reports/accounting?report=balance-sheet&accountType=สินทรัพย์"
+              />
+            }
             queryInfo={{
               query: getAssetsQuery(dateRange),
               format: 'JSONEachRow'
@@ -187,6 +285,20 @@ export default function AccountingPage() {
             trend={formatGrowthPercentage(kpis.liabilities.growthPercentage || 0)}
             trendUp={kpis.liabilities.trend === 'down'} // Down is good for liabilities
             icon={CreditCard}
+            detailTitle="รายละเอียดหนี้สิน"
+            detailNote="มูลค่าหนี้สินรวม โดยแนวโน้มลดลงถือเป็นสัญญาณที่ดี"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มหนี้สิน', value: kpis.liabilities.trend === 'down' ? 'ลดลง (ดี)' : 'เพิ่มขึ้น' },
+            ]}
+            detailContent={
+              <KPIRecordsDetailContent
+                title="หนี้สิน"
+                columns={balanceSheetColumns}
+                rows={liabilityRows}
+                reportHref="/reports/accounting?report=balance-sheet&accountType=หนี้สิน"
+              />
+            }
             queryInfo={{
               query: getLiabilitiesQuery(dateRange),
               format: 'JSONEachRow'
@@ -198,6 +310,20 @@ export default function AccountingPage() {
             trend={formatGrowthPercentage(kpis.equity.growthPercentage || 0)}
             trendUp={kpis.equity.trend === 'up'}
             icon={PiggyBank}
+            detailTitle="รายละเอียดทุน"
+            detailNote="แสดงส่วนของผู้ถือหุ้นและความแข็งแรงทางการเงิน"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มทุน', value: kpis.equity.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
+            detailContent={
+              <KPIRecordsDetailContent
+                title="ส่วนของผู้ถือหุ้น"
+                columns={balanceSheetColumns}
+                rows={equityRows}
+                reportHref="/reports/accounting?report=balance-sheet&accountType=ส่วนของผู้ถือหุ้น"
+              />
+            }
             queryInfo={{
               query: getEquityQuery(dateRange),
               format: 'JSONEachRow'
@@ -209,6 +335,22 @@ export default function AccountingPage() {
             trend={formatGrowthPercentage(kpis.revenue.growthPercentage || 0)}
             trendUp={kpis.revenue.trend === 'up'}
             icon={TrendingUp}
+            detailTitle="รายละเอียดรายได้"
+            detailNote="ยอดรายได้รวมที่เกิดขึ้นในช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มรายได้', value: kpis.revenue.trend === 'up' ? 'เพิ่มขึ้น' : 'ลดลง' },
+            ]}
+            detailContent={
+              <KPIRecordsDetailContent
+                title="รายได้"
+                columns={breakdownColumns}
+                rows={revenueRows}
+                reportHref="/reports/accounting?report=revenue-breakdown"
+                headerPrefix="รายการ"
+                emptyPrefix="ไม่พบข้อมูล"
+              />
+            }
             queryInfo={{
               query: getRevenueQuery(dateRange),
               format: 'JSONEachRow'
@@ -220,49 +362,67 @@ export default function AccountingPage() {
             trend={formatGrowthPercentage(kpis.expenses.growthPercentage || 0)}
             trendUp={kpis.expenses.trend === 'down'} // Down is good for expenses
             icon={TrendingDown}
+            detailTitle="รายละเอียดค่าใช้จ่าย"
+            detailNote="แนวโน้มลดลงของค่าใช้จ่ายช่วยปรับปรุงผลกำไร"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'แนวโน้มค่าใช้จ่าย', value: kpis.expenses.trend === 'down' ? 'ลดลง (ดี)' : 'เพิ่มขึ้น' },
+            ]}
+            detailContent={
+              <KPIRecordsDetailContent
+                title="ค่าใช้จ่าย"
+                columns={breakdownColumns}
+                rows={expenseRows}
+                reportHref="/reports/accounting?report=expense-breakdown"
+                headerPrefix="รายการ"
+                emptyPrefix="ไม่พบข้อมูล"
+              />
+            }
             queryInfo={{
               query: getExpensesQuery(dateRange),
               format: 'JSONEachRow'
             }}
           />
-        </div>
+        </motion.div>
       ) : null}
 
       {/* Profit & Loss Chart */}
       <ErrorBoundary>
-        <DataCard
-          title="กำไร(ขาดทุน) สุทธิ"
-          description="เปรียบเทียบรายได้ ค่าใช้จ่าย และกำไรสุทธิรายเดือน"
-          linkTo="/reports/accounting#profit-loss"
-          queryInfo={{
-            query: getProfitLossQuery(dateRange),
-            format: 'JSONEachRow'
-          }}
-        >
-          {loading ? (
-            <ChartSkeleton />
-          ) : (
-            <ProfitLossChart data={profitLossData} />
-          )}
-        </DataCard>
+        <motion.div variants={itemVariants}>
+          <DataCard
+            title="กำไร(ขาดทุน) สุทธิ"
+            description="เปรียบเทียบรายได้ ค่าใช้จ่าย และกำไรสุทธิรายเดือน"
+            linkTo="/reports/accounting#profit-loss"
+            queryInfo={{
+              query: getProfitLossQuery(dateRange),
+              format: 'JSONEachRow'
+            }}
+          >
+            {loading ? (
+              <ChartSkeleton key="skeleton" />
+            ) : (
+              <ProfitLossChart key="chart" data={profitLossData} />
+            )}
+          </DataCard>
+        </motion.div>
       </ErrorBoundary>
 
       {/* Balance Sheet & Cash Flow */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>
           <DataCard
             title="งบดุล"
             description="สินทรัพย์ หนี้สิน และส่วนของผู้ถือหุ้น"
             linkTo="/reports/accounting#balance-sheet"
             queryInfo={{
-              query: getBalanceSheetQuery(dateRange.end),
+              query: getBalanceSheetQuery(dateRange),
               format: 'JSONEachRow'
             }}
           >
             {loading ? (
-              <ChartSkeleton height="350px" />
+              <ChartSkeleton key="skeleton" height="350px" />
             ) : (
-              <BalanceSheetChart data={balanceSheetData} height="350px" />
+              <BalanceSheetChart key="chart" data={balanceSheetData} height="350px" />
             )}
           </DataCard>
         </ErrorBoundary>
@@ -278,30 +438,30 @@ export default function AccountingPage() {
             }}
           >
             {loading ? (
-              <ChartSkeleton height="350px" />
+              <ChartSkeleton key="skeleton" height="350px" />
             ) : (
-              <CashFlowChart data={cashFlowData} height="350px" />
+              <CashFlowChart key="chart" data={cashFlowData} height="350px" />
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* AR & AP Aging */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>
           <DataCard
             title="อายุลูกหนี้ (AR Aging)"
             description="รายการลูกหนี้ค้างชำระ"
             linkTo="/reports/accounting#ar-aging"
             queryInfo={{
-              query: getARAgingQuery(),
+              query: getARAgingQuery(dateRange),
               format: 'JSONEachRow'
             }}
           >
             {loading ? (
-              <TableSkeleton rows={8} />
+              <TableSkeleton key="skeleton" rows={8} />
             ) : (
-              <ARAgingTable data={arAgingData} />
+              <ARAgingTable key="table" data={arAgingData} />
             )}
           </DataCard>
         </ErrorBoundary>
@@ -312,18 +472,18 @@ export default function AccountingPage() {
             description="รายการเจ้าหนี้ค้างชำระ"
             linkTo="/reports/accounting#ap-aging"
             queryInfo={{
-              query: getAPAgingQuery(),
+              query: getAPAgingQuery(dateRange),
               format: 'JSONEachRow'
             }}
           >
             {loading ? (
-              <TableSkeleton rows={8} />
+              <TableSkeleton key="skeleton" rows={8} />
             ) : (
-              <APAgingTable data={apAgingData} />
+              <APAgingTable key="table" data={apAgingData} />
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* Revenue & Expense Breakdown */}
       <ErrorBoundary>
@@ -337,18 +497,39 @@ export default function AccountingPage() {
           }}
         >
           {loading ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div key="skeleton" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ChartSkeleton height="300px" />
               <ChartSkeleton height="300px" />
             </div>
           ) : (
             <RevenueExpenseBreakdown
+              key="chart"
               revenueData={revenueBreakdown}
               expenseData={expenseBreakdown}
             />
           )}
         </DataCard>
       </ErrorBoundary>
-    </div>
+
+        {/* Product Account Breakdown */}
+        <ErrorBoundary>
+          <motion.div variants={itemVariants}>
+            <DataCard
+              title="รายได้ / ทุน / ค่าใช้จ่าย ตามหมวดสินค้า"
+              description="ผังบัญชี (INCOME / EQUITY / EXPENSES) จากการ JOIN ตารางขายกับตารางบัญชี"
+              queryInfo={{
+                query: getProfitLossByProductCategoryQuery(dateRange),
+                format: 'JSONEachRow'
+              }}
+            >
+              {loading ? (
+                <ChartSkeleton key="skeleton" height="420px" />
+              ) : (
+                <ProductAccountBreakdownChart key="chart" data={productAccountBreakdown} />
+              )}
+            </DataCard>
+          </motion.div>
+        </ErrorBoundary>
+    </motion.div>
   );
 }

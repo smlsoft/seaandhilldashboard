@@ -134,7 +134,7 @@ export function CustomersTable({ data, currentPage, totalPages, totalItems }: Cu
                     currentPage={currentPage}
                     manualPagination={true}
                     onPageChange={handlePageChange}
-                    keyExtractor={(item) => item.customer_code}
+                    keyExtractor={(item, index) => `${item.customer_code}-${index}`}
                     emptyMessage="ไม่พบข้อมูลลูกค้า"
                 />
             </div>

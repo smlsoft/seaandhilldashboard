@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useBranchChange } from '@/lib/branch-events';
-import { getSelectedBranch } from '@/app/actions/branch-actions';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useBranchStore } from '@/store/useBranchStore';
 import { KPICard } from '@/components/KPICard';
 import { DataCard } from '@/components/DataCard';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -31,50 +32,20 @@ import {
 } from '@/lib/data/inventory-queries';
 
 export default function InventoryPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { dateRange, setDateRange } = useDateRangeStore();
+  const selectedBranches = useBranchStore((s) => s.selectedBranches);
 
-  // Data states
-  const [kpis, setKpis] = useState<InventoryKPIs | null>(null);
-  const [stockMovement, setStockMovement] = useState<StockMovement[]>([]);
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
-  const [overstockItems, setOverstockItems] = useState<OverstockItem[]>([]);
-  const [slowMovingItems, setSlowMovingItems] = useState<SlowMovingItem[]>([]);
-  const [inventoryTurnover, setInventoryTurnover] = useState<InventoryTurnover[]>([]);
-  const [stockByBranch, setStockByBranch] = useState<StockByBranch[]>([]);
-
-  // Get as_of_date (today by default)
-  const asOfDate = new Date().toISOString().split('T')[0];
-
-  useEffect(() => {
-    fetchAllData();
-  }, [dateRange]);
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const branches = await getSelectedBranch();
+  const { data, isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ['inventoryData', dateRange, selectedBranches],
+    queryFn: async () => {
       const params = new URLSearchParams({
         start_date: dateRange.start,
         end_date: dateRange.end,
-        as_of_date: asOfDate,
       });
 
-      const kpisParams = new URLSearchParams({
-        as_of_date: asOfDate,
-      });
-      const asOfParams = new URLSearchParams({
-        as_of_date: asOfDate,
-      });
-
-      if (branches.length > 0 && !branches.includes('ALL')) {
-        branches.forEach(b => {
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => {
           params.append('branch', b);
-          kpisParams.append('branch', b);
-          asOfParams.append('branch', b);
         });
       }
 
@@ -88,13 +59,13 @@ export default function InventoryPage() {
         turnoverRes,
         branchRes,
       ] = await Promise.all([
-        fetch(`/api/inventory/kpis?${kpisParams}`),
+        fetch(`/api/inventory/kpis?${params}`),
         fetch(`/api/inventory/stock-movement?${params}`),
-        fetch(`/api/inventory/low-stock?${asOfParams}`),
-        fetch(`/api/inventory/overstock?${asOfParams}`),
+        fetch(`/api/inventory/low-stock?${params}`),
+        fetch(`/api/inventory/overstock?${params}`),
         fetch(`/api/inventory/slow-moving?${params}`),
         fetch(`/api/inventory/turnover?${params}`),
-        fetch(`/api/inventory/by-branch?${asOfParams}`),
+        fetch(`/api/inventory/by-branch?${params}`),
       ]);
 
       if (!kpisRes.ok) throw new Error('Failed to fetch KPIs');
@@ -115,23 +86,36 @@ export default function InventoryPage() {
         branchRes.json(),
       ]);
 
-      setKpis(kpisData.data);
-      setStockMovement(movementData.data);
-      setLowStockItems(lowStockData.data);
-      setOverstockItems(overstockData.data);
-      setSlowMovingItems(slowMovingData.data);
-      setInventoryTurnover(turnoverData.data);
-      setStockByBranch(branchData.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      console.error('Error fetching inventory data:', err);
-    } finally {
-      setLoading(false);
+      return {
+        kpis: kpisData.data as InventoryKPIs,
+        stockMovement: movementData.data as StockMovement[],
+        lowStockItems: lowStockData.data as LowStockItem[],
+        overstockItems: overstockData.data as OverstockItem[],
+        slowMovingItems: slowMovingData.data as SlowMovingItem[],
+        inventoryTurnover: turnoverData.data as InventoryTurnover[],
+        stockByBranch: branchData.data as StockByBranch[],
+      };
     }
-  };
+  });
 
-  // Listen for branch changes
-  useBranchChange(fetchAllData);
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : null;
+  const kpis = data?.kpis;
+  const stockMovement = data?.stockMovement || [];
+  const lowStockItems = data?.lowStockItems || [];
+  const overstockItems = data?.overstockItems || [];
+  const slowMovingItems = data?.slowMovingItems || [];
+  const inventoryTurnover = data?.inventoryTurnover || [];
+  const stockByBranch = data?.stockByBranch || [];
+
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -148,9 +132,14 @@ export default function InventoryPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             คลังสินค้าและสต็อก
@@ -160,28 +149,34 @@ export default function InventoryPage() {
           </p>
         </div>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Error Display */}
       {error && (
-        <ErrorDisplay error={error} onRetry={fetchAllData} />
+        <motion.div variants={itemVariants}><ErrorDisplay error={error} onRetry={() => refetch()} /></motion.div>
       )}
 
       {/* KPI Cards */}
       {loading ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <KPICardSkeleton key={i} />
           ))}
-        </div>
+        </motion.div>
       ) : kpis ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="มูลค่าสินค้าคงคลัง"
             value={formatCurrency(kpis.totalInventoryValue.value)}
             icon={Package}
+            detailTitle="รายละเอียดมูลค่าสินค้าคงคลัง"
+            detailNote="แสดงมูลค่ารวมของสินค้าคงคลังตามช่วงเวลาที่เลือก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'สถานะภาพรวม', value: 'ใช้ติดตามมูลค่าคงเหลือของคลัง' },
+            ]}
             queryInfo={{
-              query: getInventoryValueQuery(asOfDate),
+              query: getInventoryValueQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -189,8 +184,14 @@ export default function InventoryPage() {
             title="จำนวนรายการสินค้า"
             value={formatNumber(kpis.totalItemsInStock.value)}
             icon={Package}
+            detailTitle="รายละเอียดจำนวนรายการสินค้า"
+            detailNote="จำนวนรายการสินค้าที่มีอยู่ในคลังปัจจุบัน"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'การใช้งาน', value: 'ใช้ตรวจความครอบคลุมของ SKU ในคลัง' },
+            ]}
             queryInfo={{
-              query: getTotalItemsQuery(asOfDate),
+              query: getTotalItemsQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -200,8 +201,14 @@ export default function InventoryPage() {
             icon={AlertTriangle}
             trendUp={false}
             className={kpis.lowStockAlerts.value > 0 ? 'border-yellow-500/50' : ''}
+            detailTitle="รายละเอียดสินค้าใกล้หมด"
+            detailNote="จำนวนรายการที่ต่ำกว่าระดับ Reorder Point และควรเติมสต็อก"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'ความเร่งด่วน', value: kpis.lowStockAlerts.value > 0 ? 'ควรวางแผนสั่งซื้อ' : 'ปกติ' },
+            ]}
             queryInfo={{
-              query: getLowStockCountQuery(asOfDate),
+              query: getLowStockCountQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
@@ -211,22 +218,29 @@ export default function InventoryPage() {
             icon={AlertCircle}
             trendUp={false}
             className={kpis.overstockAlerts.value > 0 ? 'border-orange-500/50' : ''}
+            detailTitle="รายละเอียดสินค้าเกินคลัง"
+            detailNote="จำนวนรายการที่เกินระดับสูงสุดและมีความเสี่ยงสต็อกค้าง"
+            detailItems={[
+              { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
+              { label: 'ความเสี่ยง', value: kpis.overstockAlerts.value > 0 ? 'ต้นทุนจมสูงขึ้น' : 'ปกติ' },
+            ]}
             queryInfo={{
-              query: getOverstockCountQuery(asOfDate),
+              query: getOverstockCountQuery(dateRange),
               format: 'JSONEachRow',
             }}
           />
-        </div>
+        </motion.div>
       ) : null}
 
       {/* Stock Movement Chart */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="การเคลื่อนไหวสต็อก"
           description="จำนวนสินค้ารับเข้าและจ่ายออกรายวัน"
           linkTo="/reports/inventory#stock-movement"
           queryInfo={{
-            query: getStockMovementQuery(dateRange.start, dateRange.end),
+            query: getStockMovementQuery(dateRange),
             format: 'JSONEachRow',
           }}
         >
@@ -237,34 +251,37 @@ export default function InventoryPage() {
           )}
         </DataCard>
       </ErrorBoundary>
+      </motion.div>
 
       {/* Low Stock & Overstock */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="สินค้าใกล้หมด"
             description="รายการสินค้าที่ต่ำกว่าจุด Reorder Point"
             linkTo="/reports/inventory#low-stock"
             queryInfo={{
-              query: getLowStockItemsQuery(asOfDate),
+              query: getLowStockItemsQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
             {loading ? (
-              <TableSkeleton rows={10} />
+              <TableSkeleton rows={13} />
             ) : (
-              <LowStockTable data={lowStockItems} height="500px" />
+              <LowStockTable data={lowStockItems} height="500px" itemsPerPage={13} />
             )}
           </DataCard>
         </ErrorBoundary>
 
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="สินค้าเกินคลัง"
             description="รายการสินค้าที่เกินระดับสูงสุด"
             linkTo="/reports/inventory#overstock"
             queryInfo={{
-              query: getOverstockItemsQuery(asOfDate),
+              query: getOverstockItemsQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
@@ -275,16 +292,17 @@ export default function InventoryPage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* Slow Moving Items */}
+      <motion.div variants={itemVariants}>
       <ErrorBoundary>
         <DataCard
           title="สินค้าหมุนเวียนช้า"
           description="รายการสินค้าที่มีสต็อกคงค้างนานกว่า 90 วัน"
           linkTo="/reports/inventory#slow-moving"
           queryInfo={{
-            query: getSlowMovingItemsQuery(dateRange.start, dateRange.end, asOfDate),
+            query: getSlowMovingItemsQuery(dateRange),
             format: 'JSONEachRow',
           }}
         >
@@ -295,16 +313,18 @@ export default function InventoryPage() {
           )}
         </DataCard>
       </ErrorBoundary>
+      </motion.div>
 
       {/* Inventory Turnover & Stock by Branch */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="อัตราหมุนเวียนสินค้า"
             description="การหมุนเวียนและวันขายหมดตามหมวดสินค้า"
             linkTo="/reports/inventory#turnover"
             queryInfo={{
-              query: getInventoryTurnoverQuery(dateRange.start, dateRange.end, asOfDate),
+              query: getInventoryTurnoverQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
@@ -318,11 +338,12 @@ export default function InventoryPage() {
 
         <ErrorBoundary>
           <DataCard
+            className="h-full"
             title="สต็อกแยกตามสาขา"
             description="มูลค่าและจำนวนรายการสินค้าในแต่ละสาขา"
             linkTo="/reports/inventory#by-branch"
             queryInfo={{
-              query: getStockByBranchQuery(asOfDate),
+              query: getStockByBranchQuery(dateRange),
               format: 'JSONEachRow',
             }}
           >
@@ -333,7 +354,7 @@ export default function InventoryPage() {
             )}
           </DataCard>
         </ErrorBoundary>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -2,95 +2,67 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
 import { Building2, X, Loader2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSelectedBranch, setSelectedBranch } from '@/app/actions/branch-actions';
-import { emitBranchChange } from '@/lib/branch-events';
-
-interface BranchInfo {
-    key: string;
-    name: string;
-}
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useBranchStore, type BranchInfo } from '@/store/useBranchStore';
 
 export function BranchSwitcher() {
-    const router = useRouter();
+    const queryClient = useQueryClient();
+
+    // -- Zustand store --
+    const { selectedBranches, setSelectedBranches, setAvailableBranches, setLoaded } = useBranchStore();
+
+    // -- Local UI state (modal / pending) --
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPending, setIsPending] = useState(false);
-    const [selectedBranches, setSelectedBranches] = useState<string[]>(['ALL']);
-    const [tempSelectedBranches, setTempSelectedBranches] = useState<string[]>(['ALL']);
-    const [branches, setBranches] = useState<BranchInfo[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [tempSelectedBranches, setTempSelectedBranches] = useState<string[]>(selectedBranches);
     const [mounted, setMounted] = useState(false);
 
-    // Ensure component is mounted (client-side only)
     useEffect(() => {
         setMounted(true);
     }, []);
 
+    // Sync tempSelected when store changes (e.g. initial load)
     useEffect(() => {
-        // Fetch initial data
-        const init = async () => {
-            try {
-                // 1. Fetch available branches first
-                const res = await fetch('/api/branches');
-                if (res.ok) {
-                    const data = await res.json();
-                    console.log('🏢 Available branches:', data);
-                    setBranches(data);
+        setTempSelectedBranches(selectedBranches);
+    }, [selectedBranches]);
 
-                    // 2. Get current selection and validate against available branches
-                    const keys = await getSelectedBranch();
-                    console.log('🏢 Initial branch selection from cookie:', keys);
-                    
-                    // Get list of valid branch keys
-                    const validKeys = data.map((b: BranchInfo) => b.key);
-                    console.log('🏢 Valid branch keys:', validKeys);
-                    
-                    // Filter out invalid branch keys
-                    const validSelectedBranches = keys.filter((key: string) => 
-                        validKeys.includes(key)
-                    );
-                    console.log('🏢 Filtered valid selection:', validSelectedBranches);
-                    
-                    // If no valid branches, default to ALL
-                    const finalSelection = validSelectedBranches.length > 0 
-                        ? validSelectedBranches 
-                        : ['ALL'];
-                    console.log('🏢 Final selection:', finalSelection);
-                    
-                    // Update cookie if selection was invalid
-                    if (JSON.stringify(keys) !== JSON.stringify(finalSelection)) {
-                        console.log('🏢 Updating cookie with valid selection');
-                        await setSelectedBranch(finalSelection);
-                    }
-                    
-                    setSelectedBranches(finalSelection);
-                    setTempSelectedBranches(finalSelection);
-                }
-            } catch (error) {
-                console.error('Failed to load branches:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
+    // Fetch branches list + initial cookie selection with React Query
+    const { isLoading } = useQuery({
+        queryKey: ['branchInit'],
+        queryFn: async () => {
+            const res = await fetch('/api/branches');
+            if (!res.ok) throw new Error('Failed to fetch branches');
+            const branchesData: BranchInfo[] = await res.json();
 
-        init();
-    }, []);
+            const keys = await getSelectedBranch();
+            const validKeys = branchesData.map((b) => b.key);
+            const validSelectedBranches = keys.filter((key: string) => validKeys.includes(key));
+            const finalSelection = validSelectedBranches.length > 0 ? validSelectedBranches : ['ALL'];
+
+            // Update Zustand store
+            setAvailableBranches(branchesData);
+            setSelectedBranches(finalSelection);
+            setLoaded(true);
+
+            return { branches: branchesData, selectedBranches: finalSelection };
+        },
+        staleTime: Infinity,
+    });
 
     // Close modal on Escape key
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && isModalOpen) {
                 setIsModalOpen(false);
-                // Reset temp selection to current selection
                 setTempSelectedBranches(selectedBranches);
             }
         };
 
         if (isModalOpen) {
             document.addEventListener('keydown', handleEscape);
-            // Prevent body scroll when modal is open
             document.body.style.overflow = 'hidden';
         }
 
@@ -101,29 +73,16 @@ export function BranchSwitcher() {
     }, [isModalOpen, selectedBranches]);
 
     const handleToggle = (key: string) => {
-        console.log('🏢 Toggling branch:', key);
         if (key === 'ALL') {
-            // Selecting "All" clears other selections
-            console.log('🏢 Setting to ALL');
             setTempSelectedBranches(['ALL']);
         } else {
-            setTempSelectedBranches(prev => {
-                console.log('🏢 Previous selection:', prev);
-                // Remove 'ALL' if selecting specific branch
-                const withoutAll = prev.filter(k => k !== 'ALL');
-                console.log('🏢 After removing ALL:', withoutAll);
-
+            setTempSelectedBranches((prev) => {
+                const withoutAll = prev.filter((k) => k !== 'ALL');
                 if (prev.includes(key)) {
-                    // Deselecting - remove from array
-                    const newSelection = withoutAll.filter(k => k !== key);
-                    console.log('🏢 Deselecting, new selection:', newSelection);
-                    // If nothing selected, default to ALL
+                    const newSelection = withoutAll.filter((k) => k !== key);
                     return newSelection.length === 0 ? ['ALL'] : newSelection;
                 } else {
-                    // Selecting - add to array
-                    const newSelection = [...withoutAll, key];
-                    console.log('🏢 Selecting, new selection:', newSelection);
-                    return newSelection;
+                    return [...withoutAll, key];
                 }
             });
         }
@@ -131,19 +90,15 @@ export function BranchSwitcher() {
 
     const handleApply = async () => {
         setIsPending(true);
-        console.log('🏢 Applying branch selection:', tempSelectedBranches);
         try {
             await setSelectedBranch(tempSelectedBranches);
-            console.log('🏢 Branch saved to cookie');
+
+            // 1. Update Zustand store — all pages that read from the store will react
             setSelectedBranches(tempSelectedBranches);
-            console.log('🏢 Updated selectedBranches state:', tempSelectedBranches);
             setIsModalOpen(false);
 
-            // Emit event to notify all dashboard pages
-            emitBranchChange(tempSelectedBranches);
-
-            // Note: router.refresh() is removed to prevent duplicate fetch
-            // revalidatePath() in setSelectedBranch already handles the refresh
+            // 2. Invalidate all React Query caches so fresh data is fetched
+            await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'branchInit' });
         } catch (error) {
             console.error('Failed to switch branch:', error);
         } finally {
@@ -152,22 +107,18 @@ export function BranchSwitcher() {
     };
 
     const getDisplayText = () => {
-        console.log('🏢 getDisplayText - selectedBranches:', selectedBranches, 'branches:', branches.length);
-        if (selectedBranches.includes('ALL')) {
-            return 'ทุกกิจการ';
-        }
+        const { availableBranches } = useBranchStore.getState();
+        if (selectedBranches.includes('ALL')) return 'ทุกกิจการ';
         if (selectedBranches.length === 1) {
-            const branch = branches.find(b => b.key === selectedBranches[0]);
-            const text = branch?.name || 'เลือกกิจการ';
-            console.log('🏢 Display text (1 branch):', text, 'for key:', selectedBranches[0]);
-            return text;
+            const branch = availableBranches.find((b) => b.key === selectedBranches[0]);
+            return branch?.name || 'เลือกกิจการ';
         }
-        const text = `${selectedBranches.length} กิจการ`;
-        console.log('🏢 Display text (multiple):', text);
-        return text;
+        return `${selectedBranches.length} กิจการ`;
     };
 
-    if (loading) {
+    const { availableBranches } = useBranchStore();
+
+    if (isLoading) {
         return (
             <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-[hsl(var(--muted-foreground))] rounded-lg bg-[hsl(var(--accent))]/50 animate-pulse">
                 <Building2 className="h-4 w-4" />
@@ -236,7 +187,7 @@ export function BranchSwitcher() {
                         {/* Branch Grid */}
                         <div className="p-8 overflow-y-auto max-h-[calc(85vh-200px)] custom-scrollbar">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                {branches.map((branch) => {
+                                {availableBranches.map((branch) => {
                                     const isSelected = tempSelectedBranches.includes(branch.key);
 
                                     return (
@@ -254,14 +205,11 @@ export function BranchSwitcher() {
                                                     : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:border-[hsl(var(--primary))]/50 hover:shadow-lg"
                                             )}
                                         >
-                                            {/* Background Pattern for Selected */}
                                             {isSelected && (
                                                 <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-50" />
                                             )}
 
-                                            {/* Card Content */}
                                             <div className="relative p-6">
-                                                {/* Icon */}
                                                 <div className={cn(
                                                     "mb-4 inline-flex items-center justify-center w-12 h-12 rounded-xl transition-all",
                                                     isSelected
@@ -274,7 +222,6 @@ export function BranchSwitcher() {
                                                     )} />
                                                 </div>
 
-                                                {/* Branch Name */}
                                                 <h3 className={cn(
                                                     "font-bold text-lg mb-1 transition-colors",
                                                     isSelected ? "text-white" : "text-[hsl(var(--foreground))] group-hover:text-[hsl(var(--primary))]"
@@ -282,7 +229,6 @@ export function BranchSwitcher() {
                                                     {branch.name}
                                                 </h3>
 
-                                                {/* Selected Indicator */}
                                                 {isSelected && (
                                                     <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-white text-xs font-semibold animate-in slide-in-from-left-2 duration-200">
                                                         <Check className="w-3.5 h-3.5" strokeWidth={3} />
@@ -291,7 +237,6 @@ export function BranchSwitcher() {
                                                 )}
                                             </div>
 
-                                            {/* Shine Effect on Hover */}
                                             {!isSelected && (
                                                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-transparent via-[hsl(var(--primary))]/10 to-transparent -translate-x-full group-hover:translate-x-full transform transition-transform duration-1000" />
                                             )}
@@ -301,7 +246,7 @@ export function BranchSwitcher() {
                             </div>
                         </div>
 
-                        {/* Footer with Apply Button */}
+                        {/* Footer */}
                         <div className="flex items-center justify-between px-8 py-4 border-t border-[hsl(var(--border))] bg-[hsl(var(--muted))]/30">
                             <div className="text-sm text-[hsl(var(--muted-foreground))]">
                                 {tempSelectedBranches.includes('ALL')

@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useDateRangeStore } from '@/store/useDateRangeStore';
 import ReactECharts from 'echarts-for-react';
+import { motion } from 'framer-motion';
 import { useComparison } from '@/lib/ComparisonContext';
 import { ComparisonDateFilter } from '@/components/comparison/ComparisonDateFilter';
 import { SimpleKPICard, KPIGrid } from '@/components/comparison/SimpleKPICard';
@@ -69,9 +71,12 @@ function BranchDot({ idx }: { idx: number }) {
 
 export default function InventoryComparisonPage() {
   const { selectedBranches, availableBranches, isLoaded } = useComparison();
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRange('THIS_MONTH'));
+  const { dateRange, setDateRange } = useDateRangeStore();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BranchInventoryData[]>([]);
+
+  // Stable key to prevent infinite re-fetch from array reference changes
+  const branchesKey = useMemo(() => selectedBranches.join(','), [selectedBranches]);
 
   /* ─── Fetch data from multiple endpoints and combine ─── */
   const fetchData = useCallback(async () => {
@@ -169,7 +174,8 @@ export default function InventoryComparisonPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedBranches, availableBranches, dateRange, isLoaded]);
+  }, [branchesKey, dateRange, isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -324,11 +330,26 @@ export default function InventoryComparisonPage() {
     }],
   }), [data]);
 
+  // Framer motion variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
+  };
+
   /* ═══ Render ═══ */
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-widest font-semibold mb-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
@@ -338,7 +359,7 @@ export default function InventoryComparisonPage() {
           <p className="text-sm text-muted-foreground mt-0.5">เปรียบเทียบมูลค่าสต็อก อัตราหมุนเวียน และสถานะคลังสินค้า</p>
         </div>
         <ComparisonDateFilter value={dateRange} onChange={setDateRange} />
-      </div>
+      </motion.div>
 
       {/* Loading / Empty */}
       {loading ? (
@@ -361,58 +382,60 @@ export default function InventoryComparisonPage() {
           {/* ════════════════════════════════════════
              1) KPI Summary Cards
              ════════════════════════════════════════ */}
-          <KPIGrid
-            columns={5}
-            cards={[
-              { 
-                icon: DollarSign, 
-                iconColor: 'text-indigo-600',
-                label: 'มูลค่าสต็อกรวม', 
-                value: totals.totalValue, 
-                barColor: 'bg-indigo-500', 
-                subText: `จาก ${data.length} กิจการ`, 
-                format: 'money' 
-              },
-              { 
-                icon: Boxes, 
-                iconColor: 'text-emerald-600',
-                label: 'รายการสินค้า', 
-                value: totals.totalItems, 
-                barColor: 'bg-emerald-500', 
-                format: 'number' 
-              },
-              { 
-                icon: RefreshCw, 
-                iconColor: 'text-sky-600',
-                label: 'อัตราหมุนเวียนเฉลี่ย', 
-                value: totals.avgTurnover, 
-                barColor: 'bg-sky-500', 
-                format: 'turnover', 
-                subText: 'x/ปี' 
-              },
-              { 
-                icon: AlertCircle, 
-                iconColor: 'text-rose-600',
-                label: 'Dead Stock', 
-                value: totals.deadStockValue, 
-                barColor: 'bg-rose-500', 
-                format: 'money', 
-                subText: `${totals.totalValue > 0 ? ((totals.deadStockValue / totals.totalValue) * 100).toFixed(1) : 0}%` 
-              },
-              { 
-                icon: AlertTriangle, 
-                iconColor: 'text-amber-600',
-                label: 'สินค้าใกล้หมด', 
-                value: totals.lowStockCount, 
-                barColor: 'bg-amber-500', 
-                format: 'number' 
-              },
-            ]}
-          />
+          <motion.div variants={itemVariants}>
+            <KPIGrid
+              columns={5}
+              cards={[
+                { 
+                  icon: DollarSign, 
+                  iconColor: 'text-indigo-600',
+                  label: 'มูลค่าสต็อกรวม', 
+                  value: totals.totalValue, 
+                  barColor: 'bg-indigo-500', 
+                  subText: `จาก ${data.length} กิจการ`, 
+                  format: 'money' 
+                },
+                { 
+                  icon: Boxes, 
+                  iconColor: 'text-emerald-600',
+                  label: 'รายการสินค้า', 
+                  value: totals.totalItems, 
+                  barColor: 'bg-emerald-500', 
+                  format: 'number' 
+                },
+                { 
+                  icon: RefreshCw, 
+                  iconColor: 'text-sky-600',
+                  label: 'อัตราหมุนเวียนเฉลี่ย', 
+                  value: totals.avgTurnover, 
+                  barColor: 'bg-sky-500', 
+                  format: 'turnover', 
+                  subText: 'x/ปี' 
+                },
+                { 
+                  icon: AlertCircle, 
+                  iconColor: 'text-rose-600',
+                  label: 'Dead Stock', 
+                  value: totals.deadStockValue, 
+                  barColor: 'bg-rose-500', 
+                  format: 'money', 
+                  subText: `${totals.totalValue > 0 ? ((totals.deadStockValue / totals.totalValue) * 100).toFixed(1) : 0}%` 
+                },
+                { 
+                  icon: AlertTriangle, 
+                  iconColor: 'text-amber-600',
+                  label: 'สินค้าใกล้หมด', 
+                  value: totals.lowStockCount, 
+                  barColor: 'bg-amber-500', 
+                  format: 'number' 
+                },
+              ]}
+            />
+          </motion.div>
  {/* ════════════════════════════════════════
              4) Detailed Ranking Table
              ════════════════════════════════════════ */}
-          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<BarChart3 className="h-4 w-4 text-primary" />}
               title="อันดับประสิทธิภาพการบริหารสต็อก"
@@ -476,7 +499,7 @@ export default function InventoryComparisonPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
           {/* ════════════════════════════════════════
              2) Best Performer Hero Card
              ════════════════════════════════════════ 
@@ -529,7 +552,7 @@ export default function InventoryComparisonPage() {
           {/* ════════════════════════════════════════
              3) Charts Section
              ════════════════════════════════════════ */}
-          <div className="grid gap-6 lg:grid-cols-2">
+          <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <SectionHeader icon={<Package className="h-4 w-4 text-indigo-600" />} title="มูลค่าสต็อกและ Dead Stock" desc="เปรียบเทียบมูลค่าสต็อกและสินค้าไม่เคลื่อนไหว" />
               <div className="px-4 pb-4">
@@ -543,9 +566,9 @@ export default function InventoryComparisonPage() {
                 <ReactECharts option={turnoverChart} style={{ height: 320 }} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <SectionHeader icon={<Clock className="h-4 w-4 text-amber-600" />} title="การแบ่งอายุสต็อก" desc="Stock Aging Analysis" />
               <div className="px-4 pb-4">
@@ -559,9 +582,9 @@ export default function InventoryComparisonPage() {
                 <ReactECharts option={deadStockChart} style={{ height: 320 }} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <motion.div variants={itemVariants} className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
               <SectionHeader icon={<TrendingUp className="h-4 w-4 text-sky-600" />} title="สินค้าขายดี Top 10" desc="สินค้าที่มียอดขายสูงสุดจากทุกกิจการ" />
               <div className="px-4 pb-4">
@@ -575,11 +598,11 @@ export default function InventoryComparisonPage() {
                 <ReactECharts option={coverageRadarChart} style={{ height: 320, width: '100%' }} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
          
         </>
       )}
-    </div>
+    </motion.div>
   );
 }
