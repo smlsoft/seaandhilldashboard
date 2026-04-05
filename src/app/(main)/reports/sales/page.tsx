@@ -362,7 +362,7 @@ export default function SalesReportPage() {
     },
     {
       key: 'orderCount',
-      header: 'จำนวนออเดอร์',
+      header: 'ออเดอร์ (ต่อสินค้า)',
       sortable: true,
       align: 'right',
       render: (item: SalesByCategory) => formatNumber(item.orderCount),
@@ -764,10 +764,7 @@ export default function SalesReportPage() {
             summaryConfig={{
               labelColSpan: 2,
               values: {
-                orderCount: (data) => {
-                  const total = data.reduce((sum, item) => sum + item.orderCount, 0);
-                  return <span className="font-medium text-black">{formatNumber(total)}</span>;
-                },
+                orderCount: () => <span className="text-muted-foreground">-</span>,
                 totalQtySold: (data) => {
                   const total = data.reduce((sum, item) => sum + item.totalQtySold, 0);
                   return <span className="font-medium text-black">{formatNumber(total)}</span>;

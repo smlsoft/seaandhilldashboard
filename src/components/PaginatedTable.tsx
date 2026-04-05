@@ -42,6 +42,7 @@ interface PaginatedTableProps<T> {
   currentPage?: number;
   onPageChange?: (page: number) => void;
   paginationClassName?: string;
+  onRowClick?: (item: T) => void;
 }
 
 export function PaginatedTable<T = any>({
@@ -60,6 +61,7 @@ export function PaginatedTable<T = any>({
   currentPage: externalPage = 1,
   onPageChange,
   paginationClassName,
+  onRowClick,
 }: PaginatedTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(defaultSortOrder);
@@ -223,7 +225,8 @@ export function PaginatedTable<T = any>({
             {paginatedData.map((item, index) => (
               <tr
                 key={keyExtractor(item, startIndex + index)}
-                className={`hover:bg-muted/30 transition-colors ${rowClassName ? rowClassName(item, startIndex + index) : ''}`}
+                className={`hover:bg-muted/30 transition-colors ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(item, startIndex + index) : ''}`}
+                onClick={() => onRowClick?.(item)}
               >
                 {columns.map((column) => (
                   <td

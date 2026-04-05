@@ -78,6 +78,36 @@ export interface CategoryBreakdown {
   percentage: number;
 }
 
+export interface ProductAccountData {
+  categoryCode: string;
+  categoryName: string;
+  accountType: 'INCOME' | 'EQUITY' | 'EXPENSES';
+  accountCode: string;
+  accountName: string;
+  revenue: number;
+  equity: number;
+  expenses: number;
+}
+
+export interface AccountProductItem {
+  itemCode: string;
+  itemName: string;
+  categoryCode: string;
+  categoryName: string;
+  orderCount: number;
+  totalQtySold: number;
+  totalSales: number;
+  totalProfit: number;
+}
+
+export interface ChartOfAccountItem {
+  accountCode: string;
+  accountName: string;
+  accountType: string;
+  netAmount: number;
+  docCount: number;
+}
+
 // ============================================
 // Sales Types
 // ============================================

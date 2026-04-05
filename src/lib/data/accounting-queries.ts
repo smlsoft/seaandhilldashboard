@@ -248,20 +248,36 @@ export function getRevenueBreakdownQuery(dateRange: DateRange, branchSync?: stri
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
     SELECT
-      substring(account_code, 1, 2) as accountGroup,
-      any(account_name) as accountName,
-      sum(credit - debit) as amount,
-      (amount / (SELECT sum(credit - debit)
-                  FROM journal_transaction_detail
-                  WHERE account_type = 'INCOME'
-                    AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-                    ${branchFilter})) * 100 as percentage
+      account_code AS accountGroup,
+      account_name AS accountName,
+      sum(credit - debit) AS amount,
+      (amount / (
+        SELECT sum(credit - debit)
+        FROM journal_transaction_detail
+        WHERE account_type = 'INCOME'
+          AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+          AND doc_no IN (
+            SELECT DISTINCT doc_no
+            FROM saleinvoice_transaction_detail
+            WHERE status_cancel != 'Cancel'
+              AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+              ${branchFilter}
+          )
+          ${branchFilter}
+      )) * 100 AS percentage
     FROM journal_transaction_detail
     WHERE account_type = 'INCOME'
       AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      AND doc_no IN (
+        SELECT DISTINCT doc_no
+        FROM saleinvoice_transaction_detail
+        WHERE status_cancel != 'Cancel'
+          AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+          ${branchFilter}
+      )
       ${branchFilter}
-    GROUP BY accountGroup
-    HAVING amount > 0
+    GROUP BY account_code, account_name
+    HAVING amount != 0
     ORDER BY amount DESC
   `;
 }
@@ -270,20 +286,130 @@ export function getExpenseBreakdownQuery(dateRange: DateRange, branchSync?: stri
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
     SELECT
-      substring(account_code, 1, 2) as accountGroup,
-      any(account_name) as accountName,
-      sum(debit - credit) as amount,
-      (amount / (SELECT sum(debit - credit)
-                  FROM journal_transaction_detail
-                  WHERE account_type = 'EXPENSES'
-                    AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-                    ${branchFilter})) * 100 as percentage
+      account_code AS accountGroup,
+      account_name AS accountName,
+      sum(debit - credit) AS amount,
+      (amount / (
+        SELECT sum(debit - credit)
+        FROM journal_transaction_detail
+        WHERE account_type = 'EXPENSES'
+          AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+          ${branchFilter}
+      )) * 100 AS percentage
     FROM journal_transaction_detail
     WHERE account_type = 'EXPENSES'
       AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
-    GROUP BY accountGroup
+    GROUP BY account_code, account_name
     HAVING amount > 0
     ORDER BY amount DESC
+  `;
+}
+
+export function getProfitLossByProductCategoryQuery(dateRange: DateRange, branchSync?: string[]): string {
+  const branchFilter = buildBranchFilterSql(branchSync);
+  return `
+    WITH sales AS (
+      SELECT
+        doc_no,
+        branch_sync,
+        if(item_category_code = '' OR item_category_code IS NULL, 'OTHER', item_category_code) AS item_category_code,
+        if(item_category_name = '' OR item_category_name IS NULL, 'ไม่ระบุหมวด', item_category_name) AS item_category_name,
+        SUM(sum_amount)  AS sum_amount,
+        SUM(sum_of_cost) AS sum_of_cost
+      FROM saleinvoice_transaction_detail
+      WHERE status_cancel != 'Cancel'
+        AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${branchFilter}
+      GROUP BY doc_no, branch_sync, item_category_code, item_category_name
+    ),
+    journals AS (
+      SELECT
+        doc_no,
+        branch_sync,
+        account_type,
+        account_code,
+        account_name,
+        SUM(credit - debit) AS credit_net,
+        SUM(debit - credit) AS debit_net
+      FROM journal_transaction_detail
+      WHERE account_type IN ('INCOME', 'EQUITY', 'EXPENSES')
+        AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${branchFilter}
+      GROUP BY doc_no, branch_sync, account_type, account_code, account_name
+    )
+    SELECT
+      s.item_category_code  AS categoryCode,
+      s.item_category_name  AS categoryName,
+      j.account_type        AS accountType,
+      j.account_code        AS accountCode,
+      j.account_name        AS accountName,
+      SUM(if(j.account_type = 'INCOME',   j.credit_net, 0)) AS revenue,
+      SUM(if(j.account_type = 'EQUITY',   j.credit_net, 0)) AS equity,
+      SUM(if(j.account_type = 'EXPENSES', j.debit_net,  0)) AS expenses
+    FROM sales s
+    INNER JOIN journals j
+      ON s.doc_no = j.doc_no AND s.branch_sync = j.branch_sync
+    GROUP BY s.item_category_code, s.item_category_name, j.account_type, j.account_code, j.account_name
+    ORDER BY j.account_type, revenue DESC
+  `;
+}
+
+export function getChartOfAccountsListQuery(dateRange: DateRange, branchSync?: string[]): string {
+  const branchFilter = buildBranchFilterSql(branchSync);
+  return `
+    WITH sales AS (
+      SELECT DISTINCT doc_no, branch_sync
+      FROM saleinvoice_transaction_detail
+      WHERE status_cancel != 'Cancel'
+        AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${branchFilter}
+    )
+    SELECT
+      j.account_code AS accountCode,
+      j.account_name AS accountName,
+      j.account_type AS accountType,
+      SUM(j.credit - j.debit) AS netAmount,
+      COUNT(DISTINCT j.doc_no) AS docCount
+    FROM journal_transaction_detail j
+    INNER JOIN sales s ON j.doc_no = s.doc_no AND j.branch_sync = s.branch_sync
+    WHERE date(j.doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      ${branchFilter}
+    GROUP BY j.account_code, j.account_name, j.account_type
+    HAVING netAmount != 0
+    ORDER BY j.account_type, j.account_code
+  `;
+}
+
+export function getAccountProductsQuery(
+  dateRange: DateRange,
+  accountCode: string,
+  branchSync?: string[]
+): string {
+  const branchFilter = buildBranchFilterSql(branchSync);
+  return `
+    SELECT
+      item_code                                              AS itemCode,
+      item_name                                              AS itemName,
+      COALESCE(NULLIF(item_category_code, ''), 'N/A')       AS categoryCode,
+      COALESCE(NULLIF(item_category_name, ''), 'ไม่ระบุหมวดหมู่') AS categoryName,
+      count(DISTINCT doc_no)                                AS orderCount,
+      sum(qty)                                              AS totalQtySold,
+      sum(sum_amount)                                       AS totalSales,
+      sum(sum_amount - sum_of_cost)                        AS totalProfit
+    FROM saleinvoice_transaction_detail
+    WHERE status_cancel != 'Cancel'
+      AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      AND doc_no IN (
+        SELECT DISTINCT doc_no
+        FROM journal_transaction_detail
+        WHERE account_code = '${accountCode}'
+          AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+          ${branchFilter}
+      )
+      ${branchFilter}
+    GROUP BY itemCode, itemName, categoryCode, categoryName
+    HAVING totalSales > 0
+    ORDER BY totalSales DESC
   `;
 }

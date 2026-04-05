@@ -19,11 +19,11 @@ import {
   Clock,
   Users,
   PieChart,
+  BookOpen,
 } from 'lucide-react';
-import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
 import { exportStyledPdfReport } from '@/lib/exportPdf';
-import { formatCurrency, formatDate, formatMonth } from '@/lib/formatters';
+import { formatCurrency, formatDate, formatMonth, formatNumber } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
   DateRange,
@@ -31,7 +31,9 @@ import type {
   BalanceSheetItem,
   CashFlowData,
   AgingItem,
-  CategoryBreakdown
+  CategoryBreakdown,
+  ChartOfAccountItem,
+  AccountProductItem,
 } from '@/lib/data/types';
 import {
   getProfitLossQuery,
@@ -41,6 +43,7 @@ import {
   getAPAgingQuery,
   getRevenueBreakdownQuery,
   getExpenseBreakdownQuery,
+  getChartOfAccountsListQuery,
 } from '@/lib/data/accounting-queries';
 
 // Report types
@@ -51,7 +54,8 @@ type ReportType =
   | 'ar-aging'
   | 'ap-aging'
   | 'revenue-breakdown'
-  | 'expense-breakdown';
+  | 'expense-breakdown'
+  | 'chart-of-accounts';
 
 const reportOptions: ReportOption<ReportType>[] = [
   {
@@ -96,6 +100,12 @@ const reportOptions: ReportOption<ReportType>[] = [
     icon: PieChart,
     description: 'สัดส่วนค่าใช้จ่ายแยกตามประเภทบัญชี',
   },
+  {
+    value: 'chart-of-accounts',
+    label: 'ยอดขายตามผังบัญชี',
+    icon: BookOpen,
+    description: 'รายการสินค้าสำหรับแต่ละผังบัญชีจากการ JOIN journal กับใบแจ้งหนี้',
+  },
 ];
 
 export default function AccountingReportPage() {
@@ -107,7 +117,7 @@ export default function AccountingReportPage() {
     const reportFromUrl = searchParams.get('report');
     return (reportFromUrl as ReportType) || 'profit-loss';
   });
-  
+
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
   const availableBranches = useBranchStore((s) => s.availableBranches);
   const selectedBranchLabel = formatSelectedBranchNames(selectedBranches, availableBranches);
@@ -118,6 +128,15 @@ export default function AccountingReportPage() {
     const filterFromUrl = searchParams.get('accountType');
     return filterFromUrl || 'all';
   });
+
+  const [selectedAccountCode, setSelectedAccountCode] = useState<string>('');
+
+  // Reset selected account code when switching away from revenue-breakdown / expense-breakdown / chart-of-accounts or when filters change
+  useEffect(() => {
+    if (selectedReport !== 'chart-of-accounts' && selectedReport !== 'revenue-breakdown' && selectedReport !== 'expense-breakdown') {
+      setSelectedAccountCode('');
+    }
+  }, [selectedReport, dateRange, selectedBranches]);
 
   // Effect to update report from URL after initial load
   useEffect(() => {
@@ -167,6 +186,9 @@ export default function AccountingReportPage() {
         case 'expense-breakdown':
           endpoint = `/api/accounting/revenue-expense-breakdown?${params}`;
           break;
+        case 'chart-of-accounts':
+          endpoint = `/api/reports/accounting?${params}`;
+          break;
       }
 
       const response = await fetch(endpoint);
@@ -186,6 +208,28 @@ export default function AccountingReportPage() {
   const apAgingData: AgingItem[] = selectedReport === 'ap-aging' ? (reportData || []) : [];
   const revenueBreakdown: CategoryBreakdown[] = (selectedReport === 'revenue-breakdown' || selectedReport === 'expense-breakdown') ? (reportData?.revenue || []) : [];
   const expenseBreakdown: CategoryBreakdown[] = (selectedReport === 'expense-breakdown' || selectedReport === 'revenue-breakdown') ? (reportData?.expenses || []) : [];
+  const chartOfAccountsList: ChartOfAccountItem[] = selectedReport === 'chart-of-accounts' ? (reportData || []) : [];
+
+  // Separate query for account products (triggered when user selects an account)
+  const { data: accountProducts, isLoading: productsLoading } = useQuery<AccountProductItem[]>({
+    queryKey: ['accountProducts', selectedAccountCode, dateRange, selectedBranches],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+      });
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
+      const response = await fetch(
+        `/api/reports/accounting/${encodeURIComponent(selectedAccountCode)}?${params}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch account products');
+      const result = await response.json();
+      return result.data as AccountProductItem[];
+    },
+    enabled: (selectedReport === 'chart-of-accounts' || selectedReport === 'revenue-breakdown' || selectedReport === 'expense-breakdown') && !!selectedAccountCode,
+  });
 
   const fetchReportData = () => { refetch(); };
 
@@ -387,11 +431,11 @@ export default function AccountingReportPage() {
     },
   ];
 
-  // Column definitions for Category Breakdown
+  // Column definitions for Category Breakdown (account summary)
   const breakdownColumns: ColumnDef<CategoryBreakdown>[] = [
     {
       key: 'accountGroup',
-      header: 'รหัสกลุ่ม',
+      header: 'รหัสบัญชี',
       sortable: true,
       align: 'left',
       render: (item: CategoryBreakdown) => (
@@ -428,6 +472,8 @@ export default function AccountingReportPage() {
 
   // Get current report option
   const currentReport = reportOptions.find(opt => opt.value === selectedReport);
+
+  const currentBreakdownData = selectedReport === 'revenue-breakdown' ? revenueBreakdown : expenseBreakdown;
 
   // Render report content based on selected type
   const renderReportContent = () => {
@@ -549,15 +595,151 @@ export default function AccountingReportPage() {
           />
         );
 
-      case 'revenue-breakdown':
-      case 'expense-breakdown':
-        const breakdownData = selectedReport === 'revenue-breakdown' ? revenueBreakdown : expenseBreakdown;
+      case 'revenue-breakdown': {
+        const revenueListColumns: ColumnDef<CategoryBreakdown>[] = [
+          {
+            key: 'accountGroup',
+            header: 'รหัสบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item: CategoryBreakdown) => (
+              <span className="font-mono text-xs">{item.accountGroup}</span>
+            ),
+          },
+          {
+            key: 'accountName',
+            header: 'ชื่อบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item: CategoryBreakdown) => (
+              <span className="font-medium">{item.accountName}</span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดรายได้',
+            sortable: true,
+            align: 'right',
+            render: (item: CategoryBreakdown) => (
+              <span className="font-medium text-green-600">฿{formatCurrency(item.amount)}</span>
+            ),
+          },
+          {
+            key: 'percentage',
+            header: 'สัดส่วน',
+            sortable: true,
+            align: 'right',
+            render: (item: CategoryBreakdown) => (
+              <span className="text-muted-foreground">{item.percentage.toFixed(1)}%</span>
+            ),
+          },
+        ];
+        const productColumns: ColumnDef<AccountProductItem>[] = [
+          {
+            key: 'itemCode',
+            header: 'รหัสสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.itemCode}</span>,
+          },
+          {
+            key: 'itemName',
+            header: 'ชื่อสินค้า',
+            sortable: true,
+            align: 'left',
+          },
+          {
+            key: 'categoryName',
+            header: 'หมวดสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <span className="px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
+                {item.categoryName}
+              </span>
+            ),
+          },
+          {
+            key: 'orderCount',
+            header: 'ออเดอร์ (ต่อสินค้า)',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.orderCount),
+          },
+          {
+            key: 'totalQtySold',
+            header: 'จำนวนขาย',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.totalQtySold),
+          },
+          {
+            key: 'totalSales',
+            header: 'ยอดขาย',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span>
+            ),
+          },
+          {
+            key: 'totalProfit',
+            header: 'กำไร',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={item.totalProfit >= 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
+                ฿{formatCurrency(item.totalProfit)}
+              </span>
+            ),
+          },
+        ];
+
+        // Dropdown selected → show products for that account
+        if (selectedAccountCode) {
+          return productsLoading ? (
+            <TableSkeleton rows={8} />
+          ) : (
+            <PaginatedTable
+              data={accountProducts || []}
+              columns={productColumns}
+              itemsPerPage={15}
+              emptyMessage="ไม่พบสินค้าในผังบัญชีนี้"
+              defaultSortKey="totalSales"
+              defaultSortOrder="desc"
+              keyExtractor={(item, index) => `${item.itemCode}-${index}`}
+              showSummary={true}
+              summaryConfig={{
+                labelColSpan: 3,
+                values: {
+                  orderCount: () => <span className="text-muted-foreground">-</span>,
+                  totalQtySold: (data) => <span className="font-medium">{formatNumber(data.reduce((s, i) => s + i.totalQtySold, 0))}</span>,
+                  totalSales: (data) => (
+                    <span className="font-bold text-green-600">
+                      ฿{formatCurrency(data.reduce((s, i) => s + i.totalSales, 0))}
+                    </span>
+                  ),
+                  totalProfit: (data) => {
+                    const total = data.reduce((s, i) => s + i.totalProfit, 0);
+                    return (
+                      <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        ฿{formatCurrency(total)}
+                      </span>
+                    );
+                  },
+                },
+              }}
+            />
+          );
+        }
+
+        // ทั้งหมด → show accounts summary
         return (
           <PaginatedTable
-            data={breakdownData}
-            columns={breakdownColumns}
-            itemsPerPage={10}
-            emptyMessage="ไม่มีข้อมูล"
+            data={revenueBreakdown}
+            columns={revenueListColumns}
+            itemsPerPage={15}
+            emptyMessage="ไม่มีข้อมูลรายได้"
             defaultSortKey="amount"
             defaultSortOrder="desc"
             keyExtractor={(item: CategoryBreakdown, index: number) => `${item.accountGroup}-${index}`}
@@ -565,21 +747,394 @@ export default function AccountingReportPage() {
             summaryConfig={{
               labelColSpan: 1,
               values: {
-                amount: (data) => {
-                  const total = data.reduce((sum, item) => sum + item.amount, 0);
-                  return (
-                    <span className={`font-bold ${selectedReport === 'revenue-breakdown' ? 'text-green-600' : 'text-red-600'}`}>
-                      ฿{formatCurrency(total)}
-                    </span>
-                  );
-                }
-              }
+                amount: (data) => (
+                  <span className="font-bold text-green-600">
+                    ฿{formatCurrency(data.reduce((s, i) => s + i.amount, 0))}
+                  </span>
+                ),
+              },
             }}
           />
         );
+      }
 
-      default:
-        return null;
+      case 'expense-breakdown': {
+        const expenseListColumns: ColumnDef<CategoryBreakdown>[] = [
+          {
+            key: 'accountGroup',
+            header: 'รหัสบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item: CategoryBreakdown) => (
+              <span className="font-mono text-xs">{item.accountGroup}</span>
+            ),
+          },
+          {
+            key: 'accountName',
+            header: 'ชื่อบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item: CategoryBreakdown) => (
+              <span className="font-medium">{item.accountName}</span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดค่าใช้จ่าย',
+            sortable: true,
+            align: 'right',
+            render: (item: CategoryBreakdown) => (
+              <span className="font-medium text-red-600">฿{formatCurrency(item.amount)}</span>
+            ),
+          },
+          {
+            key: 'percentage',
+            header: 'สัดส่วน',
+            sortable: true,
+            align: 'right',
+            render: (item: CategoryBreakdown) => (
+              <span className="text-muted-foreground">{item.percentage.toFixed(1)}%</span>
+            ),
+          },
+        ];
+        const expenseProductColumns: ColumnDef<AccountProductItem>[] = [
+          {
+            key: 'itemCode',
+            header: 'รหัสสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.itemCode}</span>,
+          },
+          {
+            key: 'itemName',
+            header: 'ชื่อสินค้า',
+            sortable: true,
+            align: 'left',
+          },
+          {
+            key: 'categoryName',
+            header: 'หมวดสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <span className="px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
+                {item.categoryName}
+              </span>
+            ),
+          },
+          {
+            key: 'orderCount',
+            header: 'ออเดอร์ (ต่อสินค้า)',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.orderCount),
+          },
+          {
+            key: 'totalQtySold',
+            header: 'จำนวนขาย',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.totalQtySold),
+          },
+          {
+            key: 'totalSales',
+            header: 'ยอดขาย',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span>
+            ),
+          },
+          {
+            key: 'totalProfit',
+            header: 'กำไร',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={item.totalProfit >= 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
+                ฿{formatCurrency(item.totalProfit)}
+              </span>
+            ),
+          },
+        ];
+
+        // Dropdown selected → show products for that account
+        if (selectedAccountCode) {
+          return productsLoading ? (
+            <TableSkeleton rows={8} />
+          ) : (
+            <PaginatedTable
+              data={accountProducts || []}
+              columns={expenseProductColumns}
+              itemsPerPage={15}
+              emptyMessage="ไม่พบสินค้าในผังบัญชีนี้"
+              defaultSortKey="totalSales"
+              defaultSortOrder="desc"
+              keyExtractor={(item, index) => `${item.itemCode}-${index}`}
+              showSummary={true}
+              summaryConfig={{
+                labelColSpan: 3,
+                values: {
+                  orderCount: () => <span className="text-muted-foreground">-</span>,
+                  totalQtySold: (data) => <span className="font-medium">{formatNumber(data.reduce((s, i) => s + i.totalQtySold, 0))}</span>,
+                  totalSales: (data) => (
+                    <span className="font-bold text-green-600">
+                      ฿{formatCurrency(data.reduce((s, i) => s + i.totalSales, 0))}
+                    </span>
+                  ),
+                  totalProfit: (data) => {
+                    const total = data.reduce((s, i) => s + i.totalProfit, 0);
+                    return (
+                      <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        ฿{formatCurrency(total)}
+                      </span>
+                    );
+                  },
+                },
+              }}
+            />
+          );
+        }
+
+        // ทั้งหมด → show expense account summary
+        return (
+          <PaginatedTable
+            data={expenseBreakdown}
+            columns={expenseListColumns}
+            itemsPerPage={15}
+            emptyMessage="ไม่มีข้อมูลค่าใช้จ่าย"
+            defaultSortKey="amount"
+            defaultSortOrder="desc"
+            keyExtractor={(item: CategoryBreakdown, index: number) => `${item.accountGroup}-${index}`}
+            showSummary={true}
+            summaryConfig={{
+              labelColSpan: 1,
+              values: {
+                amount: (data) => (
+                  <span className="font-bold text-red-600">
+                    ฿{formatCurrency(data.reduce((s, i) => s + i.amount, 0))}
+                  </span>
+                ),
+              },
+            }}
+          />
+        );
+      }
+
+      case 'chart-of-accounts': {
+        const accountTypeLabel: Record<string, string> = {
+          INCOME: 'รายได้', EXPENSES: 'ค่าใช้จ่าย',
+          ASSETS: 'สินทรัพย์', LIABILITIES: 'หนี้สิน', EQUITY: 'ส่วนของผู้ถือหุ้น',
+        };
+        const accountTypeColor: Record<string, string> = {
+          INCOME: 'bg-green-100 text-green-700',
+          EXPENSES: 'bg-red-100 text-red-700',
+          ASSETS: 'bg-blue-100 text-blue-700',
+          LIABILITIES: 'bg-orange-100 text-orange-700',
+          EQUITY: 'bg-purple-100 text-purple-700',
+        };
+        const accountListColumns: import('@/components/PaginatedTable').ColumnDef<ChartOfAccountItem>[] = [
+          {
+            key: 'accountCode',
+            header: 'รหัสบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.accountCode}</span>,
+          },
+          {
+            key: 'accountName',
+            header: 'ชื่อบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-medium">{item.accountName}</span>,
+          },
+          {
+            key: 'accountType',
+            header: 'ประเภท',
+            sortable: true,
+            align: 'center',
+            render: (item) => (
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                accountTypeColor[item.accountType] || 'bg-secondary text-secondary-foreground'
+              }`}>
+                {accountTypeLabel[item.accountType] || item.accountType}
+              </span>
+            ),
+          },
+          {
+            key: 'netAmount',
+            header: 'ยอดรายได้',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={`font-medium ${item.netAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ฿{formatCurrency(item.netAmount)}
+              </span>
+            ),
+          },
+          {
+            key: 'docCount',
+            header: 'จำนวนเอกสาร',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.docCount),
+          },
+        ];
+        const productColumns: import('@/components/PaginatedTable').ColumnDef<AccountProductItem>[] = [
+          {
+            key: 'itemCode',
+            header: 'รหัสสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.itemCode}</span>,
+          },
+          {
+            key: 'itemName',
+            header: 'ชื่อสินค้า',
+            sortable: true,
+            align: 'left',
+          },
+          {
+            key: 'categoryName',
+            header: 'หมวดสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <span className="px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
+                {item.categoryName}
+              </span>
+            ),
+          },
+          {
+            key: 'orderCount',
+            header: 'ออเดอร์',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.orderCount),
+          },
+          {
+            key: 'totalQtySold',
+            header: 'จำนวน',
+            sortable: true,
+            align: 'right',
+            render: (item) => formatNumber(item.totalQtySold),
+          },
+          {
+            key: 'totalSales',
+            header: 'ยอดขาย',
+            sortable: true,
+            align: 'right',
+            render: (item) => <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span>,
+          },
+          {
+            key: 'totalProfit',
+            header: 'กำไร',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={item.totalProfit >= 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
+                ฿{formatCurrency(item.totalProfit)}
+              </span>
+            ),
+          },
+        ];
+        const selectedAccount = chartOfAccountsList.find(a => a.accountCode === selectedAccountCode);
+        return (
+          <div className="space-y-0">
+            {/* Top: Account list — clickable rows as category selector */}
+            <PaginatedTable
+              data={chartOfAccountsList}
+              columns={accountListColumns}
+              itemsPerPage={10}
+              emptyMessage="ไม่มีข้อมูลผังบัญชี"
+              defaultSortKey="netAmount"
+              defaultSortOrder="desc"
+              keyExtractor={(item) => item.accountCode}
+              showSummary={true}
+              summaryConfig={{
+                labelColSpan: 3,
+                values: {
+                  netAmount: (data) => (
+                    <span className="font-bold text-green-600">
+                      ฿{formatCurrency(data.reduce((s, i) => s + i.netAmount, 0))}
+                    </span>
+                  ),
+                  docCount: (data) => (
+                    <span className="font-bold">{formatNumber(data.reduce((s, i) => s + i.docCount, 0))}</span>
+                  ),
+                },
+              }}
+              onRowClick={(item) =>
+                setSelectedAccountCode(selectedAccountCode === item.accountCode ? '' : item.accountCode)
+              }
+              rowClassName={(item) =>
+                item.accountCode === selectedAccountCode
+                  ? 'bg-primary/10 border-l-2 border-l-primary'
+                  : ''
+              }
+            />
+            {/* Bottom: Products for selected account */}
+            {selectedAccountCode && (
+              <div className="border-t-2 border-primary/30 pt-4 mt-2 space-y-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary shrink-0" />
+                    <span className="font-semibold text-sm">
+                      {selectedAccount?.accountName || selectedAccountCode}
+                    </span>
+                    {selectedAccount && (
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        accountTypeColor[selectedAccount.accountType] || 'bg-secondary text-secondary-foreground'
+                      }`}>
+                        {accountTypeLabel[selectedAccount.accountType] || selectedAccount.accountType}
+                      </span>
+                    )}
+                  </div>
+                  {selectedAccount && (
+                    <span className="text-muted-foreground text-xs">
+                      ยอดสุทธิ: <span className="font-medium text-foreground">฿{formatCurrency(selectedAccount.netAmount)}</span>
+                      {' · '}
+                      เอกสาร: <span className="font-medium text-foreground">{formatNumber(selectedAccount.docCount)}</span>
+                    </span>
+                  )}
+                </div>
+                {productsLoading ? (
+                  <TableSkeleton rows={6} />
+                ) : (
+                  <PaginatedTable
+                    data={accountProducts || []}
+                    columns={productColumns}
+                    itemsPerPage={15}
+                    emptyMessage="ไม่พบสินค้าในผังบัญชีนี้"
+                    defaultSortKey="totalSales"
+                    defaultSortOrder="desc"
+                    keyExtractor={(item, index) => `${item.itemCode}-${index}`}
+                    showSummary={true}
+                    summaryConfig={{
+                      labelColSpan: 5,
+                      values: {
+                        totalSales: (data) => (
+                          <span className="font-bold text-green-600">
+                            ฿{formatCurrency(data.reduce((s, i) => s + i.totalSales, 0))}
+                          </span>
+                        ),
+                        totalProfit: (data) => {
+                          const total = data.reduce((s, i) => s + i.totalProfit, 0);
+                          return (
+                            <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                              ฿{formatCurrency(total)}
+                            </span>
+                          );
+                        },
+                      },
+                    }}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
     }
   };
 
@@ -675,35 +1230,48 @@ export default function AccountingReportPage() {
       case 'revenue-breakdown':
         return () => exportStyledReport({
           data: revenueBreakdown,
-          headers: { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานรายได้ตามหมวด',
+          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดรายได้', percentage: 'สัดส่วน (%)' },
+          filename: 'รายงานรายได้ตามผังบัญชี',
           sheetName: 'Revenue Breakdown',
-          title: 'รายงานรายได้ตามหมวด',
+          title: 'รายงานรายได้ตามผังบัญชี',
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['amount'],
           percentColumns: ['percentage'],
-          summaryConfig: {
-            columns: {
-              amount: 'sum',
-            }
-          }
+          summaryConfig: { columns: { amount: 'sum' } }
         });
 
       case 'expense-breakdown':
         return () => exportStyledReport({
           data: expenseBreakdown,
-          headers: { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานค่าใช้จ่ายตามหมวด',
+          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดค่าใช้จ่าย', percentage: 'สัดส่วน (%)' },
+          filename: 'รายงานค่าใช้จ่ายตามผังบัญชี',
           sheetName: 'Expense Breakdown',
-          title: 'รายงานค่าใช้จ่ายตามหมวด',
+          title: 'รายงานค่าใช้จ่ายตามผังบัญชี',
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['amount'],
           percentColumns: ['percentage'],
-          summaryConfig: {
-            columns: {
-              amount: 'sum',
-            }
-          }
+          summaryConfig: { columns: { amount: 'sum' } }
+        });
+
+      case 'chart-of-accounts':
+        if (!selectedAccountCode || !accountProducts?.length) return undefined;
+        return () => exportStyledReport({
+          data: accountProducts,
+          headers: {
+            itemCode: 'รหัสสินค้า',
+            itemName: 'ชื่อสินค้า',
+            categoryName: 'หมวดสินค้า',
+            orderCount: 'จำนวนออเดอร์',
+            totalQtySold: 'จำนวนสินค้า',
+            totalSales: 'ยอดขาย',
+            totalProfit: 'กำไร',
+          },
+          filename: `ยอดขายตามผังบัญชี-${selectedAccountCode}`,
+          sheetName: 'Account Products',
+          title: `ยอดขายตามผังบัญชี: ${selectedAccountCode}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['totalSales', 'totalProfit'],
+          summaryConfig: { columns: { totalSales: 'sum', totalProfit: 'sum' } },
         });
 
       default:
@@ -797,33 +1365,45 @@ export default function AccountingReportPage() {
       case 'revenue-breakdown':
         return () => exportStyledPdfReport({
           data: revenueBreakdown,
-          headers: { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานรายได้ตามหมวด',
-          title: 'รายงานรายได้ตามหมวด',
+          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดรายได้', percentage: 'สัดส่วน (%)' },
+          filename: 'รายงานรายได้ตามผังบัญชี',
+          title: 'รายงานรายได้ตามผังบัญชี',
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['amount'],
           percentColumns: ['percentage'],
-          summaryConfig: {
-            columns: {
-              amount: 'sum',
-            }
-          }
+          summaryConfig: { columns: { amount: 'sum' } }
         });
 
       case 'expense-breakdown':
         return () => exportStyledPdfReport({
           data: expenseBreakdown,
-          headers: { accountGroup: 'รหัสกลุ่ม', accountName: 'ชื่อบัญชี', amount: 'จำนวนเงิน', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานค่าใช้จ่ายตามหมวด',
-          title: 'รายงานค่าใช้จ่ายตามหมวด',
+          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดค่าใช้จ่าย', percentage: 'สัดส่วน (%)' },
+          filename: 'รายงานค่าใช้จ่ายตามผังบัญชี',
+          title: 'รายงานค่าใช้จ่ายตามผังบัญชี',
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
           currencyColumns: ['amount'],
           percentColumns: ['percentage'],
-          summaryConfig: {
-            columns: {
-              amount: 'sum',
-            }
-          }
+          summaryConfig: { columns: { amount: 'sum' } }
+        });
+
+      case 'chart-of-accounts':
+        if (!selectedAccountCode || !accountProducts?.length) return undefined;
+        return () => exportStyledPdfReport({
+          data: accountProducts,
+          headers: {
+            itemCode: 'รหัสสินค้า',
+            itemName: 'ชื่อสินค้า',
+            categoryName: 'หมวดสินค้า',
+            orderCount: 'จำนวนออเดอร์',
+            totalQtySold: 'จำนวนสินค้า',
+            totalSales: 'ยอดขาย',
+            totalProfit: 'กำไร',
+          },
+          filename: `ยอดขายตามผังบัญชี-${selectedAccountCode}`,
+          title: `ยอดขายตามผังบัญชี: ${selectedAccountCode}`,
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          currencyColumns: ['totalSales', 'totalProfit'],
+          summaryConfig: { columns: { totalSales: 'sum', totalProfit: 'sum' } },
         });
 
       default:
@@ -866,7 +1446,10 @@ export default function AccountingReportPage() {
         <ReportTypeSelector
           value={selectedReport}
           options={reportOptions}
-          onChange={(value) => setSelectedReport(value as ReportType)}
+          onChange={(value) => {
+            setSelectedReport(value as ReportType);
+            setSelectedAccountCode('');
+          }}
         />
       </motion.div>
 
@@ -894,6 +1477,38 @@ export default function AccountingReportPage() {
                 <option value="ส่วนของผู้ถือหุ้น">ส่วนของผู้ถือหุ้น</option>
               </select>
             </div>
+          ) : selectedReport === 'revenue-breakdown' ? (
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">ผังบัญชี:</label>
+              <select
+                value={selectedAccountCode || 'ALL'}
+                onChange={(e) => setSelectedAccountCode(e.target.value === 'ALL' ? '' : e.target.value)}
+                className="text-sm border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="ALL">ทั้งหมด</option>
+                {revenueBreakdown.map((acc) => (
+                  <option key={acc.accountGroup} value={acc.accountGroup}>
+                    {acc.accountName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : selectedReport === 'expense-breakdown' ? (
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">ผังบัญชี:</label>
+              <select
+                value={selectedAccountCode || 'ALL'}
+                onChange={(e) => setSelectedAccountCode(e.target.value === 'ALL' ? '' : e.target.value)}
+                className="text-sm border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="ALL">ทั้งหมด</option>
+                {expenseBreakdown.map((acc) => (
+                  <option key={acc.accountGroup} value={acc.accountGroup}>
+                    {acc.accountName}
+                  </option>
+                ))}
+              </select>
+            </div>
           ) : undefined}
           queryInfo={selectedReport === 'profit-loss' ? {
             query: getProfitLossQuery(dateRange),
@@ -915,6 +1530,9 @@ export default function AccountingReportPage() {
             format: 'JSONEachRow'
           } : selectedReport === 'expense-breakdown' ? {
             query: getExpenseBreakdownQuery(dateRange),
+            format: 'JSONEachRow'
+          } : selectedReport === 'chart-of-accounts' ? {
+            query: getChartOfAccountsListQuery(dateRange),
             format: 'JSONEachRow'
           } : undefined}
           onExportExcel={getExportFunction()}

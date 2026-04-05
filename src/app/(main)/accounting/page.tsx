@@ -16,10 +16,12 @@ import { CashFlowChart } from '@/components/accounting/CashFlowChart';
 import { ARAgingTable } from '@/components/accounting/ARAgingTable';
 import { APAgingTable } from '@/components/accounting/APAgingTable';
 import { RevenueExpenseBreakdown } from '@/components/accounting/RevenueExpenseBreakdown';
+import { ProductAccountBreakdownChart } from '@/components/accounting/ProductAccountBreakdownChart';
 import { Wallet, CreditCard, PiggyBank, TrendingUp, TrendingDown } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { formatGrowthPercentage } from '@/lib/comparison';
 import type { DateRange, AccountingKPIs, ProfitLossData, BalanceSheetItem, CashFlowData, AgingItem, CategoryBreakdown } from '@/lib/data/types';
+import type { ProductAccountData } from '@/lib/data/types';
 import {
   getAssetsQuery,
   getLiabilitiesQuery,
@@ -33,6 +35,7 @@ import {
   getAPAgingQuery,
   getRevenueBreakdownQuery,
   getExpenseBreakdownQuery,
+  getProfitLossByProductCategoryQuery,
 } from '@/lib/data/accounting-queries';
 
 export default function AccountingPage() {
@@ -62,6 +65,7 @@ export default function AccountingPage() {
         arRes,
         apRes,
         breakdownRes,
+        productAccountRes,
       ] = await Promise.all([
         fetch(`/api/accounting/kpis?${params}`),
         fetch(`/api/accounting/profit-loss?${params}`),
@@ -70,6 +74,7 @@ export default function AccountingPage() {
         fetch(`/api/accounting/ar-aging?${params}`),
         fetch(`/api/accounting/ap-aging?${params}`),
         fetch(`/api/accounting/revenue-expense-breakdown?${params}`),
+        fetch(`/api/accounting/profit-loss-by-product?${params}`),
       ]);
 
       if (!kpisRes.ok) throw new Error('Failed to fetch KPIs');
@@ -80,7 +85,7 @@ export default function AccountingPage() {
       if (!apRes.ok) throw new Error('Failed to fetch AP aging');
       if (!breakdownRes.ok) throw new Error('Failed to fetch breakdown');
 
-      const [kpisData, plData, bsData, cfData, arData, apData, breakdownData] = await Promise.all([
+      const [kpisData, plData, bsData, cfData, arData, apData, breakdownData, productAccountData] = await Promise.all([
         kpisRes.json(),
         plRes.json(),
         bsRes.json(),
@@ -88,6 +93,7 @@ export default function AccountingPage() {
         arRes.json(),
         apRes.json(),
         breakdownRes.json(),
+        productAccountRes.ok ? productAccountRes.json() : Promise.resolve({ data: [] }),
       ]);
 
       // Transform balance sheet data - ensure account_type is present for filtering
@@ -109,6 +115,7 @@ export default function AccountingPage() {
         apAging: apData.data as AgingItem[],
         revenueBreakdown: breakdownData.data.revenue as CategoryBreakdown[],
         expenseBreakdown: breakdownData.data.expenses as CategoryBreakdown[],
+        productAccount: productAccountData.data as ProductAccountData[],
       };
     }
   });
@@ -122,6 +129,7 @@ export default function AccountingPage() {
   const apAgingData = data?.apAging || [];
   const revenueBreakdown = data?.revenueBreakdown || [];
   const expenseBreakdown = data?.expenseBreakdown || [];
+  const productAccountBreakdown = data?.productAccount || [];
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
@@ -137,9 +145,10 @@ export default function AccountingPage() {
   ];
 
   const breakdownColumns: KPIRecordsColumn[] = [
-    { key: 'accountGroup', label: 'หมวด' },
+    { key: 'accountGroup', label: 'รหัสบัญชี' },
     { key: 'accountName', label: 'ชื่อบัญชี' },
     { key: 'amount', label: 'จำนวนเงิน', align: 'right' },
+    { key: 'percentage', label: 'สัดส่วน', align: 'right' },
   ];
 
   const mapBalanceRows = (items: BalanceSheetItem[]): KPIRecordsRow[] =>
@@ -181,6 +190,7 @@ export default function AccountingPage() {
       accountGroup: item.accountGroup,
       accountName: item.accountName,
       amount: formatCurrency(item.amount),
+      percentage: `${item.percentage.toFixed(1)}%`,
     },
   }));
 
@@ -190,6 +200,7 @@ export default function AccountingPage() {
       accountGroup: item.accountGroup,
       accountName: item.accountName,
       amount: formatCurrency(item.amount),
+      percentage: `${item.percentage.toFixed(1)}%`,
     },
   }));
 
@@ -499,6 +510,26 @@ export default function AccountingPage() {
           )}
         </DataCard>
       </ErrorBoundary>
+
+        {/* Product Account Breakdown */}
+        <ErrorBoundary>
+          <motion.div variants={itemVariants}>
+            <DataCard
+              title="รายได้ / ทุน / ค่าใช้จ่าย ตามหมวดสินค้า"
+              description="ผังบัญชี (INCOME / EQUITY / EXPENSES) จากการ JOIN ตารางขายกับตารางบัญชี"
+              queryInfo={{
+                query: getProfitLossByProductCategoryQuery(dateRange),
+                format: 'JSONEachRow'
+              }}
+            >
+              {loading ? (
+                <ChartSkeleton key="skeleton" height="420px" />
+              ) : (
+                <ProductAccountBreakdownChart key="chart" data={productAccountBreakdown} />
+              )}
+            </DataCard>
+          </motion.div>
+        </ErrorBoundary>
     </motion.div>
   );
 }
