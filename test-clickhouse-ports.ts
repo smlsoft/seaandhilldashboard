@@ -15,7 +15,7 @@ async function testPort(port: number) {
         console.log(`Port ${port} success:`, data);
         return true;
     } catch (error) {
-        console.error(`Port ${port} failed:`, error.message);
+        console.error(`Port ${port} failed:`, error instanceof Error ? error.message : error);
         return false;
     }
 }

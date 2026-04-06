@@ -70,7 +70,7 @@ export function FilterBar({ onFilterChange, activeFilter }: FilterBarProps) {
                     )}
                     animate={checked ? { scale: 1.05 } : { scale: 1 }}
                     whileHover={{ scale: 1.02 }}
-                    whileFocus={{ ring: 2 }}
+                    whileFocus={{ scale: 1.02 }}
                   >
                     {checked && (
                       <motion.div

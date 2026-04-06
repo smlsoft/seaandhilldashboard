@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
@@ -108,7 +108,7 @@ const reportOptions: ReportOption<ReportType>[] = [
   },
 ];
 
-export default function AccountingReportPage() {
+function AccountingReportContent() {
   const { dateRange, setDateRange } = useDateRangeStore();
   const searchParams = useSearchParams();
   
@@ -1546,5 +1546,13 @@ export default function AccountingReportPage() {
       </ErrorBoundary>
       </motion.div>
     </motion.div>
+  );
+}
+
+export default function AccountingReportPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-muted-foreground">กำลังโหลด...</div>}>
+      <AccountingReportContent />
+    </Suspense>
   );
 }
