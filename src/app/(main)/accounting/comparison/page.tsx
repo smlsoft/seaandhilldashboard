@@ -167,13 +167,25 @@ export default function AccountingComparisonPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   /* ─── Formatting ─── */
-  const fmt = (v: number) => `฿${v.toLocaleString('th-TH', { maximumFractionDigits: 0 })}`;
+  const fmt = (v: number) => {
+    const hasDecimals = v % 1 !== 0;
+    return `฿${v.toLocaleString('th-TH', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2 
+    })}`;
+  };
   const fmtShort = (v: number) => {
     if (Math.abs(v) >= 1_000_000) return `฿${(v / 1_000_000).toFixed(2)}M`;
     if (Math.abs(v) >= 1_000) return `฿${(v / 1_000).toFixed(1)}K`;
     return `฿${v.toFixed(0)}`;
   };
-  const fmtNum = (v: number) => v.toLocaleString('th-TH', { maximumFractionDigits: 0 });
+  const fmtNum = (v: number) => {
+    const hasDecimals = v % 1 !== 0;
+    return v.toLocaleString('th-TH', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2 
+    });
+  };
 
   /* ─── Computed: totals ─── */
   const totals = useMemo(() => {
@@ -660,7 +672,7 @@ export default function AccountingComparisonPage() {
           <motion.div variants={itemVariants} className="rounded-2xl border bg-card shadow-sm overflow-hidden">
             <SectionHeader
               icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
-              title="รายได้ตามหมวด"
+              title="รายได้ตามผังบัญชี"
               desc="สัดส่วนรายได้แยกตามหมวดบัญชีของแต่ละกิจการ (Nightingale Rose)"
             />
             <div className="px-6 pb-5">

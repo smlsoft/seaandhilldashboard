@@ -8,13 +8,21 @@ import type { DateRange } from './types';
 
 export interface DashboardKPIs {
   totalSales: number;
-  salesGrowth: number;
+  salesGrowth: number | null;     // null = ไม่มีข้อมูลรอบก่อนหน้า
   totalOrders: number;
-  ordersGrowth: number;
+  ordersGrowth: number | null;
   totalCustomers: number;
-  customersGrowth: number;
+  customersGrowth: number | null;
   avgOrderValue: number;
-  avgOrderGrowth: number;
+  avgOrderGrowth: number | null;
+}
+
+/**
+ * คำนวณ % การเติบโต — return null ถ้าไม่มีข้อมูล period ก่อนหน้า
+ */
+function calcGrowthPct(current: number, prev: number): number | null {
+  if (prev === 0) return null;  // ไม่มีข้อมูลรอบก่อน → แสดง "ไม่มีข้อมูล"
+  return ((current - prev) / prev) * 100;
 }
 
 export interface SalesChartData {
@@ -40,8 +48,8 @@ export interface RecentSale {
 }
 
 export interface Alert {
-  id: string;
-  type: 'low_stock' | 'overstock' | 'overdue_payment' | 'high_value_order';
+  id: number;
+  type: 'info' | 'warning' | 'error';  // ตรงกับ alertConfig ใน AlertsCard.tsx
   title: string;
   message: string;
   severity: 'info' | 'warning' | 'error';
@@ -76,12 +84,12 @@ export async function getDashboardKPIs(branchSync?: string[], dateRange?: DateRa
     // ใช้ dateRange ที่ส่งมา หรือ default เป็นวันนี้
     const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
     const startDate = dateRange?.start || endDate;
-    
+
     // คำนวณช่วงเวลาที่ผ่านมา (previous period) โดยใช้ระยะเวลาเท่ากัน
     const daysDiff = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const prevEndDate = new Date(new Date(startDate).getTime() - 86400000).toISOString().split('T')[0]; // วันก่อน startDate
     const prevStartDate = new Date(new Date(prevEndDate).getTime() - (daysDiff - 1) * 86400000).toISOString().split('T')[0];
-    
+
     const branchFilter = buildBranchFilter(branchSync);
 
     // ยอดขายช่วงเวลาที่เลือก
@@ -136,24 +144,27 @@ export async function getDashboardKPIs(branchSync?: string[], dateRange?: DateRa
     const currentData = (await currentResult.json())[0] as Record<string, unknown> || {};
     const prevData = (await prevResult.json())[0] as Record<string, unknown> || {};
 
+    // --- ค่าปัจจุบัน ---
     const currentSales = Number(currentData.currentSales) || 0;
-    const prevSales = Number(prevData.prevSales) || 1;
     const currentOrders = Number(currentData.currentOrders) || 0;
-    const prevOrders = Number(prevData.prevOrders) || 1;
     const currentCustomers = Number(currentData.currentCustomers) || 0;
-    const prevCustomers = Number(prevData.prevCustomers) || 1;
     const currentAvgOrder = Number(currentData.currentAvgOrder) || 0;
-    const prevAvgOrder = Number(prevData.prevAvgOrder) || 1;
+
+    // --- ค่า previous period (อาจเป็น 0 ถ้าไม่มีข้อมูล) ---
+    const prevSales = Number(prevData.prevSales) || 0;
+    const prevOrders = Number(prevData.prevOrders) || 0;
+    const prevCustomers = Number(prevData.prevCustomers) || 0;
+    const prevAvgOrder = Number(prevData.prevAvgOrder) || 0;
 
     return {
       totalSales: currentSales,
-      salesGrowth: ((currentSales - prevSales) / prevSales) * 100,
+      salesGrowth: calcGrowthPct(currentSales, prevSales),
       totalOrders: currentOrders,
-      ordersGrowth: ((currentOrders - prevOrders) / prevOrders) * 100,
+      ordersGrowth: calcGrowthPct(currentOrders, prevOrders),
       totalCustomers: currentCustomers,
-      customersGrowth: ((currentCustomers - prevCustomers) / prevCustomers) * 100,
+      customersGrowth: calcGrowthPct(currentCustomers, prevCustomers),
       avgOrderValue: currentAvgOrder,
-      avgOrderGrowth: ((currentAvgOrder - prevAvgOrder) / prevAvgOrder) * 100,
+      avgOrderGrowth: calcGrowthPct(currentAvgOrder, prevAvgOrder),
     };
   } catch (error) {
     console.error('Error fetching dashboard KPIs:', error);
@@ -168,7 +179,7 @@ export async function getDashboardKPIs(branchSync?: string[], dateRange?: DateRa
 export async function getSalesChartData(branchSync?: string[], dateRange?: DateRange): Promise<SalesChartData[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
-    
+
     // ใช้ dateRange ที่ส่งมา หรือ default เป็น 30 วันล่าสุด
     const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
     const startDate = dateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -219,7 +230,7 @@ export async function getSalesChartData(branchSync?: string[], dateRange?: DateR
 export async function getRevenueExpenseData(branchSync?: string[], dateRange?: DateRange): Promise<RevenueExpenseData[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
-    
+
     // ใช้ dateRange ที่ส่งมา หรือ default เป็น 12 เดือนล่าสุด
     const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
     const startDate = dateRange?.start || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -329,10 +340,10 @@ export async function getRevenueExpenseData(branchSync?: string[], dateRange?: D
  * Get Recent Sales
  * ดึงรายการขายล่าสุด 10 รายการตามช่วงวันที่
  */
-export async function getRecentSales(branchSync?: string[], dateRange?: DateRange): Promise<RecentSale[]> {
+export async function getRecentSales(branchSync?: string[], dateRange?: DateRange, limit: number = 10): Promise<RecentSale[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
-    
+
     // ใช้ dateRange ที่ส่งมา หรือ default เป็น 30 วันล่าสุด
     const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
     const startDate = dateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -342,7 +353,7 @@ export async function getRecentSales(branchSync?: string[], dateRange?: DateRang
         doc_no as docNo,
         customer_name as customerName,
         total_amount as totalAmount,
-        doc_datetime as docDate,
+        toTimeZone(doc_datetime, 'Asia/Bangkok') as docDate,
         status_payment as statusPayment,
         branch_sync_name as branchName
       FROM saleinvoice_transaction
@@ -354,7 +365,7 @@ export async function getRecentSales(branchSync?: string[], dateRange?: DateRang
 
     query += `
       ORDER BY doc_datetime DESC
-      LIMIT 10
+      LIMIT ${limit}
     `;
 
     const result = await clickhouse.query({
@@ -393,43 +404,58 @@ export async function getDashboardAlerts(branchSync?: string[]): Promise<Alert[]
     const branchFilter = buildBranchFilter(branchSync);
 
     // 1. Low Stock Items
-    let lowStockQuery = `
+    // ใช้ subquery GROUP BY item_code เพื่อนับจำนวนสินค้า (SKU)
+    // threshold = Days on Hand <= 7 (อิงจากอัตราขายย้อนหลัง 30 วัน)
+    const lowStockQuery = `
       SELECT count(*) as count
-      FROM stock_transaction
-      WHERE toDate(doc_datetime) <= toDate({today:String})
-        AND qty_onhand > 0
-        AND qty_onhand < reorder_point
-        AND reorder_point > 0
-        ${branchFilter.sql.replace(/branch_sync/g, 'wh_code')}
+      FROM (
+        SELECT
+          item_code,
+          sum(qty) as totalQty,
+          abs(sumIf(qty, qty < 0 AND toDate(doc_datetime) >= toDate({today:String}) - INTERVAL 30 DAY)) as totalOut30d,
+          totalOut30d / 30 as avgDailyOut,
+          if(avgDailyOut > 0, totalQty / avgDailyOut, 999999) as daysOnHand
+        FROM stock_transaction
+        WHERE toDate(doc_datetime) <= toDate({today:String})
+          ${branchFilter.sql}
+        GROUP BY item_code
+        HAVING totalQty > 0 AND avgDailyOut > 0 AND daysOnHand <= 7
+      )
     `;
 
     // 2. Overstock Items
-    let overstockQuery = `
+    // threshold = Days on Hand > 90 (อิงจากอัตราขายย้อนหลัง 30 วัน)
+    const overstockQuery = `
       SELECT count(*) as count
-      FROM stock_transaction
-      WHERE toDate(doc_datetime) <= toDate({today:String})
-        AND qty_onhand > max_stock_level
-        AND max_stock_level > 0
-        ${branchFilter.sql.replace(/branch_sync/g, 'wh_code')}
+      FROM (
+        SELECT
+          item_code,
+          sum(qty) as totalQty,
+          abs(sumIf(qty, qty < 0 AND toDate(doc_datetime) >= toDate({today:String}) - INTERVAL 30 DAY)) as totalOut30d,
+          totalOut30d / 30 as avgDailyOut,
+          if(avgDailyOut > 0, totalQty / avgDailyOut, 999999) as daysOnHand
+        FROM stock_transaction
+        WHERE toDate(doc_datetime) <= toDate({today:String})
+          ${branchFilter.sql}
+        GROUP BY item_code
+        HAVING totalQty > 0 AND daysOnHand > 90
+      )
     `;
 
     // 3. Overdue Payments (AR)
-    let overdueQuery = `
+    // นับเอกสารขายที่ค้างชำระเกินกำหนด
+    const overdueQuery = `
       SELECT count(*) as count, sum(outstanding) as amount
       FROM (
         SELECT
           doc_no,
-          total_amount - paid_amount as outstanding,
-          dateDiff('day', due_date, now()) as daysOverdue
+          total_amount - sum_pay_money as outstanding
         FROM saleinvoice_transaction
         WHERE status_cancel != 'Cancel'
-          AND status_payment != 'ชำระแล้ว'
-          AND due_date < now()
-          AND outstanding > 0
+          AND status_payment != 'Fully Paid'
+          AND due_date < today()
+          AND (total_amount - sum_pay_money) > 0
           ${branchFilter.sql}
-    `;
-
-    overdueQuery += `
       )
     `;
 
@@ -455,10 +481,10 @@ export async function getDashboardAlerts(branchSync?: string[]): Promise<Alert[]
 
     if (lowStockCount > 0) {
       alerts.push({
-        id: '1',
-        type: 'low_stock',
+        id: 1,
+        type: 'warning',
         title: 'สินค้าใกล้หมด',
-        message: `มีสินค้า ${lowStockCount} รายการที่ต่ำกว่า Reorder Point`,
+        message: `มีสินค้า ${lowStockCount} SKU ที่สต็อกคงเหลือใช้งานได้ ≤ 7 วัน`,
         severity: 'warning',
         timestamp: new Date().toISOString(),
       });
@@ -466,10 +492,10 @@ export async function getDashboardAlerts(branchSync?: string[]): Promise<Alert[]
 
     if (overstockCount > 0) {
       alerts.push({
-        id: '2',
-        type: 'overstock',
+        id: 2,
+        type: 'info',
         title: 'สินค้าเกินคลัง',
-        message: `มีสินค้า ${overstockCount} รายการที่เกิน Max Stock Level`,
+        message: `มีสินค้า ${overstockCount} SKU ที่คาดว่าจะขายได้นานกว่า > 90 วัน`,
         severity: 'info',
         timestamp: new Date().toISOString(),
       });
@@ -477,10 +503,10 @@ export async function getDashboardAlerts(branchSync?: string[]): Promise<Alert[]
 
     if (overdueCount > 0) {
       alerts.push({
-        id: '3',
-        type: 'overdue_payment',
+        id: 3,
+        type: 'error',
         title: 'ลูกหนี้ค้างชำระ',
-        message: `มีลูกหนี้ ${overdueCount} รายการเกินกำหนด มูลค่า ฿${overdueAmount.toLocaleString()}`,
+        message: `มี ${overdueCount} บิลเกินกำหนดชำระ มูลค่า ฿${overdueAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         severity: 'error',
         timestamp: new Date().toISOString(),
       });

@@ -11,8 +11,8 @@ interface TopProductsChartProps {
 export function TopProductsTable({ data, height = '400px' }: TopProductsChartProps) {
   const formatFullCurrency = (value: number) => {
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 

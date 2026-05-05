@@ -132,9 +132,10 @@ export default function AccountingPage() {
   const productAccountBreakdown = data?.productAccount || [];
 
   const formatCurrency = (value: number) => {
+    const hasDecimals = value % 1 !== 0;
     return `฿${value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     })}`;
   };
 
@@ -156,7 +157,16 @@ export default function AccountingPage() {
       id: `${item.accountCode}-${index}`,
       cells: {
         accountCode: item.accountCode,
-        accountName: item.accountName,
+        accountName: (
+          <a
+            href={`/reports/accounting?report=balance-sheet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            {item.accountName}
+          </a>
+        ),
         balance: formatCurrency(item.balance),
       },
     }));
@@ -188,7 +198,16 @@ export default function AccountingPage() {
     id: `${item.accountName}-${index}`,
     cells: {
       accountGroup: item.accountGroup,
-      accountName: item.accountName,
+      accountName: (
+        <a
+          href={`/reports/accounting?report=revenue-breakdown&accountCode=${encodeURIComponent(item.accountGroup)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          {item.accountName}
+        </a>
+      ),
       amount: formatCurrency(item.amount),
       percentage: `${item.percentage.toFixed(1)}%`,
     },
@@ -198,7 +217,16 @@ export default function AccountingPage() {
     id: `${item.accountName}-${index}`,
     cells: {
       accountGroup: item.accountGroup,
-      accountName: item.accountName,
+      accountName: (
+        <a
+          href={`/reports/accounting?report=expense-breakdown&accountCode=${encodeURIComponent(item.accountGroup)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          {item.accountName}
+        </a>
+      ),
       amount: formatCurrency(item.amount),
       percentage: `${item.percentage.toFixed(1)}%`,
     },
@@ -247,13 +275,13 @@ export default function AccountingPage() {
 
       {/* KPI Cards */}
       {loading ? (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           {[...Array(5)].map((_, i) => (
             <KPICardSkeleton key={i} />
           ))}
         </div>
       ) : kpis ? (
-        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+        <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <KPICard
             title="สินทรัพย์"
             value={formatCurrency(kpis.assets.value)}
@@ -274,6 +302,7 @@ export default function AccountingPage() {
                 reportHref="/reports/accounting?report=balance-sheet&accountType=สินทรัพย์"
               />
             }
+            expandHref="/reports/accounting?report=balance-sheet&accountType=สินทรัพย์"
             queryInfo={{
               query: getAssetsQuery(dateRange),
               format: 'JSONEachRow'
@@ -299,6 +328,7 @@ export default function AccountingPage() {
                 reportHref="/reports/accounting?report=balance-sheet&accountType=หนี้สิน"
               />
             }
+            expandHref="/reports/accounting?report=balance-sheet&accountType=หนี้สิน"
             queryInfo={{
               query: getLiabilitiesQuery(dateRange),
               format: 'JSONEachRow'
@@ -324,6 +354,7 @@ export default function AccountingPage() {
                 reportHref="/reports/accounting?report=balance-sheet&accountType=ส่วนของผู้ถือหุ้น"
               />
             }
+            expandHref="/reports/accounting?report=balance-sheet&accountType=ส่วนของผู้ถือหุ้น"
             queryInfo={{
               query: getEquityQuery(dateRange),
               format: 'JSONEachRow'
@@ -351,6 +382,7 @@ export default function AccountingPage() {
                 emptyPrefix="ไม่พบข้อมูล"
               />
             }
+            expandHref="/reports/accounting?report=revenue-breakdown"
             queryInfo={{
               query: getRevenueQuery(dateRange),
               format: 'JSONEachRow'
@@ -378,6 +410,7 @@ export default function AccountingPage() {
                 emptyPrefix="ไม่พบข้อมูล"
               />
             }
+            expandHref="/reports/accounting?report=expense-breakdown"
             queryInfo={{
               query: getExpensesQuery(dateRange),
               format: 'JSONEachRow'
@@ -512,7 +545,7 @@ export default function AccountingPage() {
       </ErrorBoundary>
 
         {/* Product Account Breakdown */}
-        <ErrorBoundary>
+        {/*  <ErrorBoundary>
           <motion.div variants={itemVariants}>
             <DataCard
               title="รายได้ / ทุน / ค่าใช้จ่าย ตามหมวดสินค้า"
@@ -529,7 +562,8 @@ export default function AccountingPage() {
               )}
             </DataCard>
           </motion.div>
-        </ErrorBoundary>
+        </ErrorBoundary>*/}
+
     </motion.div>
   );
 }

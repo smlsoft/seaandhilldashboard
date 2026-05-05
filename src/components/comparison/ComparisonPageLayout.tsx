@@ -22,7 +22,6 @@ const comparisonPages = [
   { href: '/sales/comparison', label: 'การขาย', icon: ShoppingCart },
   { href: '/inventory/comparison', label: 'สินค้าคงคลัง', icon: Package },
   { href: '/purchase/comparison', label: 'จัดซื้อ', icon: Truck },
-  { href: '/customers/comparison', label: 'ลูกค้า', icon: Users },
 ];
 
 const parentPageMap: Record<string, string> = {
@@ -31,7 +30,6 @@ const parentPageMap: Record<string, string> = {
   '/sales/comparison': '/sales',
   '/inventory/comparison': '/inventory',
   '/purchase/comparison': '/purchase',
-  '/customers/comparison': '/customers',
 };
 
 interface ComparisonPageLayoutProps {

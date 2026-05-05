@@ -22,8 +22,8 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
       return date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short' });
     });
 
-    const qtyInData = data.map(item => item.qtyIn);
-    const qtyOutData = data.map(item => item.qtyOut);
+    const qtyInData = data.map(item => item.valueIn || 0);
+    const qtyOutData = data.map(item => item.valueOut || 0);
 
     const option: echarts.EChartsOption = {
       tooltip: {
@@ -36,7 +36,7 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
           let result = `<div style="font-weight: bold; margin-bottom: 8px;">${date}</div>`;
 
           params.forEach((param: any) => {
-            const value = `${Number(param.value).toLocaleString('th-TH')} หน่วย`;
+            const value = `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             result += `<div style="margin-bottom: 4px;">
               ${param.marker} ${param.seriesName}: <strong>${value}</strong>
             </div>`;
@@ -46,7 +46,7 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
         },
       },
       legend: {
-        data: ['รับเข้า', 'จ่ายออก'],
+        data: ['ซื้อเข้า (สุทธิ)', 'ขายออก (สุทธิ)'],
         top: 0,
       },
       grid: {
@@ -62,7 +62,7 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
       },
       yAxis: {
         type: 'value',
-        name: 'จำนวน (หน่วย)',
+        name: 'มูลค่า (บาท)',
         axisLabel: {
           formatter: (value: number) => {
             if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
@@ -73,7 +73,7 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
       },
       series: [
         {
-          name: 'รับเข้า',
+          name: 'ซื้อเข้า (สุทธิ)',
           type: 'line',
           data: qtyInData,
           smooth: true,
@@ -88,7 +88,7 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
           },
         },
         {
-          name: 'จ่ายออก',
+          name: 'ขายออก (สุทธิ)',
           type: 'line',
           data: qtyOutData,
           smooth: true,
@@ -107,11 +107,11 @@ export function StockMovementChart({ data, height = '400px' }: StockMovementChar
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data]);

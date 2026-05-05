@@ -23,9 +23,11 @@ export async function GET(request: NextRequest) {
       branches = branches[0].split(',');
     }
 
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20;
+
     const cachedQuery = createCachedQuery(
-      () => getTopSuppliers({ start: startDate, end: endDate }, branches),
-      ['purchase', 'top-suppliers', startDate, endDate, ...branches],
+      () => getTopSuppliers({ start: startDate, end: endDate }, branches, limit),
+      ['purchase', 'top-suppliers', startDate, endDate, limit.toString(), ...branches],
       CacheDuration.MEDIUM
     );
 

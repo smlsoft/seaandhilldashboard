@@ -148,7 +148,6 @@ export function getBalanceSheetQuery(dateRange: DateRange, branchSync?: string[]
       AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
     GROUP BY account_type, accountType, typeName, account_code, account_name
-    HAVING balance != 0
     ORDER BY account_code ASC
   `;
 }
@@ -189,7 +188,7 @@ export function getARAgingQuery(dateRange: DateRange, branchSync?: string[]): st
       customer_code as code,
       customer_name as name,
       doc_no as docNo,
-      doc_datetime as docDate,
+      toTimeZone(doc_datetime, 'Asia/Bangkok') as docDate,
       due_date as dueDate,
       total_amount as totalAmount,
       sum_pay_money as paidAmount,
@@ -220,7 +219,7 @@ export function getAPAgingQuery(dateRange: DateRange, branchSync?: string[]): st
       supplier_code as code,
       supplier_name as name,
       doc_no as docNo,
-      doc_datetime as docDate,
+      toTimeZone(doc_datetime, 'Asia/Bangkok') as docDate,
       due_date as dueDate,
       total_amount as totalAmount,
       sum_pay_money as paidAmount,
@@ -255,26 +254,12 @@ export function getRevenueBreakdownQuery(dateRange: DateRange, branchSync?: stri
         SELECT sum(credit - debit)
         FROM journal_transaction_detail
         WHERE account_type = 'INCOME'
-          AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-          AND doc_no IN (
-            SELECT DISTINCT doc_no
-            FROM saleinvoice_transaction_detail
-            WHERE status_cancel != 'Cancel'
-              AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-              ${branchFilter}
-          )
+          AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
           ${branchFilter}
       )) * 100 AS percentage
     FROM journal_transaction_detail
     WHERE account_type = 'INCOME'
-      AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-      AND doc_no IN (
-        SELECT DISTINCT doc_no
-        FROM saleinvoice_transaction_detail
-        WHERE status_cancel != 'Cancel'
-          AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-          ${branchFilter}
-      )
+      AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
     GROUP BY account_code, account_name
     HAVING amount != 0
@@ -293,15 +278,15 @@ export function getExpenseBreakdownQuery(dateRange: DateRange, branchSync?: stri
         SELECT sum(debit - credit)
         FROM journal_transaction_detail
         WHERE account_type = 'EXPENSES'
-          AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+          AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
           ${branchFilter}
       )) * 100 AS percentage
     FROM journal_transaction_detail
     WHERE account_type = 'EXPENSES'
-      AND doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
       ${branchFilter}
     GROUP BY account_code, account_name
-    HAVING amount > 0
+    HAVING amount != 0
     ORDER BY amount DESC
   `;
 }
@@ -355,6 +340,18 @@ export function getProfitLossByProductCategoryQuery(dateRange: DateRange, branch
   `;
 }
 
+/**
+ * Query to get account type (INCOME, EXPENSES, etc.) for a specific account code
+ */
+export function getAccountTypeQuery(accountCode: string): string {
+  return `
+    SELECT DISTINCT account_type
+    FROM journal_transaction_detail
+    WHERE account_code = '${accountCode}'
+    LIMIT 1
+  `;
+}
+
 export function getChartOfAccountsListQuery(dateRange: DateRange, branchSync?: string[]): string {
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
@@ -388,28 +385,106 @@ export function getAccountProductsQuery(
 ): string {
   const branchFilter = buildBranchFilterSql(branchSync);
   return `
+    WITH journal_docs AS (
+      SELECT DISTINCT
+        doc_no,
+        branch_sync,
+        doc_datetime,
+        book_name,
+        branch_name,
+        debit,
+        credit,
+        (credit - debit) as amount,
+        account_code,
+        account_name
+      FROM journal_transaction_detail
+      WHERE account_code = '${accountCode}'
+        AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${branchFilter}
+        AND (credit - debit) != 0
+    )
     SELECT
-      item_code                                              AS itemCode,
-      item_name                                              AS itemName,
-      COALESCE(NULLIF(item_category_code, ''), 'N/A')       AS categoryCode,
-      COALESCE(NULLIF(item_category_name, ''), 'ไม่ระบุหมวดหมู่') AS categoryName,
-      count(DISTINCT doc_no)                                AS orderCount,
-      sum(qty)                                              AS totalQtySold,
-      sum(sum_amount)                                       AS totalSales,
-      sum(sum_amount - sum_of_cost)                        AS totalProfit
-    FROM saleinvoice_transaction_detail
-    WHERE status_cancel != 'Cancel'
-      AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-      AND doc_no IN (
-        SELECT DISTINCT doc_no
-        FROM journal_transaction_detail
-        WHERE account_code = '${accountCode}'
-          AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-          ${branchFilter}
+      DATE(jd.doc_datetime)                                 AS docDate,
+      jd.doc_no                                             AS docNo,
+      COALESCE(jd.book_name, '-')                          AS bookName,
+      COALESCE(jd.branch_name, '-')                        AS branchName,
+      jd.debit                                             AS debit,
+      jd.credit                                            AS credit,
+      jd.amount                                            AS amount,
+      COALESCE(std.item_code, '-')                         AS itemCode,
+      COALESCE(std.item_name, 'ไม่มีรายการสินค้า')          AS itemName,
+      COALESCE(NULLIF(std.item_category_code, ''), 'N/A')  AS categoryCode,
+      COALESCE(NULLIF(std.item_category_name, ''), 'ไม่ระบุหมวดหมู่') AS categoryName,
+      COALESCE(std.unit_code, '-')                         AS unitCode,
+      COALESCE(std.qty, 0)                                 AS qty,
+      COALESCE(std.price, 0)                               AS price,
+      COALESCE(std.sum_amount, 0)                          AS itemAmount
+    FROM journal_docs jd
+    LEFT JOIN saleinvoice_transaction_detail std
+      ON jd.doc_no = std.doc_no
+      AND jd.branch_sync = std.branch_sync
+      AND std.status_cancel != 'Cancel'
+      AND (
+        -- กรองเฉพาะสินค้าที่ category ตรงกับชื่อผังบัญชี
+        TRIM(SUBSTRING_INDEX(jd.account_name, '-', -1)) = TRIM(std.item_category_name)
+        OR std.item_category_name LIKE CONCAT('%', TRIM(SUBSTRING_INDEX(jd.account_name, '-', -1)), '%')
+        OR TRIM(SUBSTRING_INDEX(jd.account_name, '-', -1)) LIKE CONCAT('%', std.item_category_name, '%')
       )
-      ${branchFilter}
-    GROUP BY itemCode, itemName, categoryCode, categoryName
-    HAVING totalSales > 0
-    ORDER BY totalSales DESC
+    ORDER BY jd.doc_datetime DESC, jd.doc_no DESC, std.item_code ASC
+  `;
+}
+
+export function getAccountPurchaseItemsQuery(
+  dateRange: DateRange,
+  accountCode: string,
+  branchSync?: string[]
+): string {
+  const branchFilter = buildBranchFilterSql(branchSync);
+  return `
+    WITH journal_docs AS (
+      SELECT DISTINCT
+        doc_no,
+        branch_sync,
+        doc_datetime,
+        book_name,
+        branch_name,
+        debit,
+        credit,
+        (credit - debit) as amount,
+        account_code,
+        account_name
+      FROM journal_transaction_detail
+      WHERE account_code = '${accountCode}'
+        AND date(doc_datetime) BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${branchFilter}
+        AND (credit - debit) != 0
+    )
+    SELECT
+      DATE(jd.doc_datetime)                                 AS docDate,
+      jd.doc_no                                             AS docNo,
+      COALESCE(jd.book_name, '-')                          AS bookName,
+      COALESCE(jd.branch_name, '-')                        AS branchName,
+      jd.debit                                             AS debit,
+      jd.credit                                            AS credit,
+      jd.amount                                            AS amount,
+      COALESCE(ptd.item_code, '-')                         AS itemCode,
+      COALESCE(ptd.item_name, 'ไม่มีรายการสินค้า')          AS itemName,
+      COALESCE(NULLIF(ptd.item_category_code, ''), 'N/A')  AS categoryCode,
+      COALESCE(NULLIF(ptd.item_category_name, ''), 'ไม่ระบุหมวดหมู่') AS categoryName,
+      COALESCE(ptd.unit_code, '-')                         AS unitCode,
+      COALESCE(ptd.qty, 0)                                 AS qty,
+      COALESCE(ptd.price, 0)                               AS price,
+      COALESCE(ptd.sum_amount, 0)                          AS itemAmount
+    FROM journal_docs jd
+    LEFT JOIN purchase_transaction_detail ptd
+      ON jd.doc_no = ptd.doc_no
+      AND jd.branch_sync = ptd.branch_sync
+      AND (
+        -- กรองเฉพาะสินค้าที่ category ตรงกับชื่อผังบัญชี
+        TRIM(SUBSTRING_INDEX(jd.account_name, '-', -1)) = TRIM(ptd.item_category_name)
+        OR ptd.item_category_name LIKE CONCAT('%', TRIM(SUBSTRING_INDEX(jd.account_name, '-', -1)), '%')
+        OR TRIM(SUBSTRING_INDEX(jd.account_name, '-', -1)) LIKE CONCAT('%', ptd.item_category_name, '%')
+      )
+    ORDER BY jd.doc_datetime DESC, jd.doc_no DESC, ptd.item_code ASC
   `;
 }

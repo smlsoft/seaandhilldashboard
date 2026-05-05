@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ExternalLink, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { DialogDescription } from '@/components/ui/dialog';
 
 export interface KPIDetailItem {
     label: string;
@@ -30,6 +31,7 @@ export interface KPIDetailModalProps {
     detailItems?: KPIDetailItem[];
     detailContent?: ReactNode;
     detailActionButton?: KPIDetailActionButton;
+    expandHref?: string;
 }
 
 export function KPIDetailModal({
@@ -46,6 +48,7 @@ export function KPIDetailModal({
     detailItems,
     detailContent,
     detailActionButton,
+    expandHref,
 }: KPIDetailModalProps) {
     const [mounted, setMounted] = useState(false);
     const dateRangeItem = detailItems?.find((item) => item.label.includes('ช่วงวันที่'));
@@ -88,46 +91,70 @@ export function KPIDetailModal({
     return createPortal(
         <div className="fixed inset-0 z-[9999]">
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] sm:w-[90vw] max-w-2xl mx-4 p-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--popover))] shadow-2xl max-h-[85vh] overflow-y-auto">
-                <div className="flex items-center justify-between gap-4 mb-4">
+            <div
+                className={cn(
+                    'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-3 sm:p-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--popover))] shadow-2xl w-[95vw] sm:w-[90vw] max-w-2xl max-h-[92dvh] overflow-y-auto'
+                )}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="kpi-modal-title"
+                aria-describedby="kpi-modal-desc"
+            >
+                <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
                     <div>
-                        <h3 className="text-base font-semibold text-[hsl(var(--foreground))]">
+                        <h3 id="kpi-modal-title" className="text-sm sm:text-base font-semibold text-[hsl(var(--foreground))]">
                             {detailTitle || `รายละเอียด: ${title}`}
                         </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">ข้อมูลสรุปของตัวชี้วัดนี้</p>
+                        <DialogDescription id="kpi-modal-desc" className="mt-0.5">
+                            ข้อมูลสรุปของตัวชี้วัดนี้
+                        </DialogDescription>
                     </div>
-                    <button
-                        type="button"
-                        className="p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors"
-                        onClick={onClose}
-                        aria-label="Close detail modal"
-                    >
-                        <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                    <div className="flex items-center gap-1">
+                        {expandHref && (
+                            <a
+                                href={expandHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--muted))] transition-colors"
+                                aria-label="เปิดในแท็บใหม่"
+                                title="เปิดในแท็บใหม่"
+                            >
+                                <Maximize2 className="w-4 h-4" />
+                            </a>
+                        )}
+                        <button
+                            type="button"
+                            className="p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors"
+                            onClick={onClose}
+                            aria-label="Close detail modal"
+                        >
+                            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
-                <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 mb-4">
-                    <div className="flex items-start justify-between gap-4">
+                <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 sm:p-4 mb-3 sm:mb-4">
+                    <div className="flex flex-col xs:flex-row xs:items-start xs:justify-between gap-2">
                         <div>
                             <p className="text-xs text-muted-foreground">ตัวชี้วัด</p>
-                            <p className="text-[20px] leading-none font-bold text-[hsl(var(--foreground))] mt-1">{title}</p>
+                            <p className="text-lg sm:text-[20px] leading-none font-bold text-[hsl(var(--foreground))] mt-1">{title}</p>
                         </div>
                         {dateRangeItem && (
-                            <div className="text-right">
+                            <div className="xs:text-right">
                                 <p className="text-xs text-muted-foreground">ช่วงวันที่</p>
-                                <p className="text-[20px] leading-none font-semibold text-[hsl(var(--foreground))] mt-1">
+                                <p className="text-sm sm:text-base leading-snug font-semibold text-[hsl(var(--foreground))] mt-1">
                                     {dateRangeItem.value}
                                 </p>
                             </div>
                         )}
                     </div>
 
-                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                    <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 items-end">
                         <div>
                             <p className="text-xs text-muted-foreground">ค่าปัจจุบัน</p>
-                            <p className="text-2xl leading-none font-bold text-[hsl(var(--foreground))] mt-2">{value}</p>
+                            <p className="text-xl sm:text-2xl leading-none font-bold text-[hsl(var(--foreground))] mt-2">{value}</p>
                             {trend && (
                                 <div
                                     className={cn(
@@ -146,7 +173,7 @@ export function KPIDetailModal({
                             <div className="mt-1 text-right">
                                 <p className="text-xs text-muted-foreground">{trendDetailItem.label}</p>
                                 <p className={cn(
-                                    'mt-1 text-2xl leading-none font-semibold',
+                                    'mt-1 text-xl sm:text-2xl leading-none font-semibold',
                                     trendUp ? 'text-emerald-600' : 'text-rose-600'
                                 )}>
                                     {trendDetailItem.value}
@@ -155,7 +182,7 @@ export function KPIDetailModal({
                         )}
                     </div>
 
-                    <div className="mt-6 border-t border-[hsl(var(--border))] pt-4">
+                    <div className="mt-4 sm:mt-6 border-t border-[hsl(var(--border))] pt-3 sm:pt-4">
                         {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
                         {description && <p className="text-sm text-muted-foreground">{description}</p>}
                         {detailNote && <p className="text-sm text-muted-foreground">{detailNote}</p>}
@@ -163,7 +190,7 @@ export function KPIDetailModal({
                 </div>
 
                 {remainingDetailItems.length > 0 && (
-                    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 mb-4">
+                    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 sm:p-4 mb-3 sm:mb-4">
                         <p className="text-sm font-medium text-[hsl(var(--foreground))] mb-3">รายละเอียดเพิ่มเติม</p>
                         <div className="space-y-2">
                             {remainingDetailItems.map((item) => (
@@ -177,7 +204,7 @@ export function KPIDetailModal({
                 )}
 
                 {detailContent && (
-                    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 mb-4">
+                    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 sm:p-4 mb-3 sm:mb-4">
                         {detailContent}
                     </div>
                 )}

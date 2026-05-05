@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAccountProducts } from '@/lib/data/accounting';
+import { getAccountProducts, getAccountPurchaseItems, getAccountType } from '@/lib/data/accounting';
 import { formatErrorResponse, logError } from '@/lib/errors';
 import { createCachedQuery, CacheDuration } from '@/lib/cache';
 
@@ -29,9 +29,19 @@ export async function GET(
       branches = branches[0].split(',');
     }
 
+    // ตรวจสอบ account_type เพื่อเรียกใช้ function ที่ถูกต้อง
+    const accountType = await getAccountType(accountCode);
+    
     const cachedQuery = createCachedQuery(
-      () => getAccountProducts(dateRange, accountCode, branches),
-      ['reports', 'accounting', 'products', accountCode, startDate, endDate, ...branches],
+      () => {
+        // INCOME/REVENUE ใช้ sales query, EXPENSES ใช้ purchase query
+        if (accountType === 'INCOME' || accountType === 'REVENUE') {
+          return getAccountProducts(dateRange, accountCode, branches);
+        } else {
+          return getAccountPurchaseItems(dateRange, accountCode, branches);
+        }
+      },
+      ['reports', 'accounting', accountType === 'INCOME' || accountType === 'REVENUE' ? 'products' : 'purchases', accountCode, startDate, endDate, ...branches],
       CacheDuration.MEDIUM
     );
 

@@ -90,14 +90,23 @@ export interface ProductAccountData {
 }
 
 export interface AccountProductItem {
+  docDate: string;
+  docNo: string;
+  accountCode?: string;
+  accountName?: string;
+  bookName: string;
+  branchName: string;
+  debit: number;
+  credit: number;
+  amount: number;
   itemCode: string;
   itemName: string;
   categoryCode: string;
   categoryName: string;
-  orderCount: number;
-  totalQtySold: number;
-  totalSales: number;
-  totalProfit: number;
+  unitCode: string;
+  qty: number;
+  price: number;
+  itemAmount: number;
 }
 
 export interface ChartOfAccountItem {
@@ -228,6 +237,18 @@ export interface TopSupplier {
   lastPurchaseDate: string;
 }
 
+export interface PurchaseAnalysisData {
+  categoryName: string;
+  docDate: string;
+  docNo: string;
+  itemCode: string;
+  itemName: string;
+  unitCode: string;
+  qty: number;
+  price: number;
+  totalAmount: number;
+}
+
 export interface PurchaseByCategory {
   categoryCode: string;
   categoryName: string;
@@ -236,6 +257,7 @@ export interface PurchaseByCategory {
   totalQty: number;
   totalPurchaseValue: number;
   uniqueItems?: number;
+  orderCount?: number;
 }
 
 export interface PurchaseByBrand {
@@ -271,6 +293,59 @@ export interface AveragePurchasePrice {
   maxPrice: number;
   supplierCount: number;
   totalQtyPurchased?: number;
+}
+
+// Purchase + Journal Types
+export interface SupplierPODetail {
+  docDate: string;
+  docNo: string;
+  supplierCode: string;
+  supplierName: string;
+  accountCode: string;
+  accountName: string;
+  categoryCode: string;
+  categoryName: string;
+  itemCode: string;
+  itemName: string;
+  unitCode: string;
+  qty: number;
+  price: number;
+  totalAmount: number;
+}
+
+export interface PurchaseAccountData {
+  categoryCode: string;
+  categoryName: string;
+  accountType: 'EXPENSES' | 'ASSETS' | 'LIABILITIES';
+  accountCode: string;
+  accountName: string;
+  expenses: number;
+  assets: number;
+  liabilities: number;
+  totalPurchaseValue: number;
+  totalQty: number;
+}
+
+export interface PurchaseChartOfAccountItem {
+  accountCode: string;
+  accountName: string;
+  accountType: string;
+  netAmount: number;
+  docCount: number;
+}
+
+export interface PurchaseItemsByAccount {
+  docDate: string;
+  docNo: string;
+  itemCode: string;
+  itemName: string;
+  categoryCode: string;
+  categoryName: string;
+  brandName: string;
+  unitCode: string;
+  qty: number;
+  price: number;
+  totalAmount: number;
 }
 
 // ============================================
@@ -320,11 +395,9 @@ export interface LowStockItem {
   branchName: string;
   currentStock: number;
   qtyOnHand: number;
-  reorderPoint: number;
   stockValue: number;
-  shortage?: number;
-  shortagePercent?: number;
-  valueShortage?: number;
+  avgDailySales: number;
+  daysOnHand: number;
 }
 
 export interface OverstockItem {
@@ -335,11 +408,9 @@ export interface OverstockItem {
   branchName: string;
   currentStock: number;
   qtyOnHand: number;
-  maxStockLevel: number;
   stockValue: number;
-  excess?: number;
-  excessPercent?: number;
-  valueExcess: number;
+  avgDailySales: number;
+  daysOnHand: number;
 }
 
 export interface SlowMovingItem {

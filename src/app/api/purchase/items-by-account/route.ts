@@ -1,0 +1,43 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getPurchaseItemsByAccount } from '@/lib/data/purchase';
+import { createCachedQuery, CacheDuration } from '@/lib/cache';
+import { formatErrorResponse, logError } from '@/lib/errors';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+    const accountCode = searchParams.get('account_code') || 'ALL';
+
+    if (!startDate || !endDate) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required parameters: start_date, end_date' },
+        { status: 400 }
+      );
+    }
+
+    let branches = searchParams.getAll('branch');
+    if (branches.length === 0) {
+      branches = ['ALL'];
+    } else if (branches.length === 1 && branches[0].includes(',')) {
+      branches = branches[0].split(',');
+    }
+
+    const cachedQuery = createCachedQuery(
+      () => getPurchaseItemsByAccount({ start: startDate, end: endDate }, accountCode, branches),
+      ['purchase', 'items-by-account', accountCode, startDate, endDate, ...branches],
+      CacheDuration.SHORT
+    );
+
+    const data = await cachedQuery();
+
+    return NextResponse.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    logError(error, 'GET /api/purchase/items-by-account');
+    return NextResponse.json(formatErrorResponse(error), { status: 500 });
+  }
+}

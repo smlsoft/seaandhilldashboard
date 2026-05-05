@@ -7,9 +7,10 @@ import type { PurchaseByCategory } from '@/lib/data/types';
 interface PurchaseByCategoryChartProps {
   data: PurchaseByCategory[];
   height?: string;
+  valueLabel?: string;
 }
 
-export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCategoryChartProps) {
+export function PurchaseByCategoryChart({ data, height = '400px', valueLabel = 'ยอดซื้อ' }: PurchaseByCategoryChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,17 +21,14 @@ export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCa
     // Sort by totalPurchaseValue descending and take top 10
     const sortedData = [...data].sort((a, b) => b.totalPurchaseValue - a.totalPurchaseValue).slice(0, 10);
 
-    const categories = sortedData.map(item => item.categoryName);
-    const amounts = sortedData.map(item => item.totalPurchaseValue);
-
     const option: echarts.EChartsOption = {
       tooltip: {
         trigger: 'item',
         formatter: (params: any) => {
-          const value = `฿${Number(params.value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`;
+          const value = `฿${Number(params.value).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`;
           return `<div>
             <div style="font-weight: bold; margin-bottom: 4px;">${params.name}</div>
-            <div>${params.marker} ยอดซื้อ: <strong>${value}</strong></div>
+            <div>${params.marker} ${valueLabel}: <strong>${value}</strong></div>
             <div style="margin-top: 4px;">สัดส่วน: ${params.percent.toFixed(1)}%</div>
           </div>`;
         },
@@ -47,7 +45,7 @@ export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCa
       },
       series: [
         {
-          name: 'ยอดซื้อ',
+          name: valueLabel,
           type: 'pie',
           radius: ['35%', '65%'],
           center: ['50%', '48%'],
@@ -83,14 +81,14 @@ export function PurchaseByCategoryChart({ data, height = '400px' }: PurchaseByCa
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
-  }, [data]);
+  }, [data, valueLabel]);
 
   if (data.length === 0) {
     return (

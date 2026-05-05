@@ -66,7 +66,7 @@ export function CustomersTable({ data, currentPage, totalPages, totalItems }: Cu
             header: 'Total Orders',
             sortable: true,
             align: 'right',
-            render: (item) => item.total_orders.toLocaleString(),
+            render: (item) => item.total_orders.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         },
         {
             key: 'total_spent',
@@ -75,7 +75,7 @@ export function CustomersTable({ data, currentPage, totalPages, totalItems }: Cu
             align: 'right',
             render: (item) => (
                 <span className="font-medium text-[hsl(var(--primary))]">
-                    ฿{item.total_spent.toLocaleString()}
+                    ฿{item.total_spent.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
             ),
         },

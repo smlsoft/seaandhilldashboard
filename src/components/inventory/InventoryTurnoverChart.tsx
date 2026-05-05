@@ -119,11 +119,11 @@ export function InventoryTurnoverChart({ data, height = '400px' }: InventoryTurn
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data]);

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard,
@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/SidebarContext';
 import { useComparison } from '@/lib/ComparisonContext';
+import { signOut, useSession } from '@/lib/auth-client';
 
 const menuItems = [
     { name: 'ภาพรวม', icon: LayoutDashboard, href: '/' },
@@ -32,7 +33,6 @@ const menuItems = [
     { name: 'การขาย', icon: ShoppingCart, href: '/sales' },
     { name: 'สินค้าคงคลัง', icon: Package, href: '/inventory' },
     { name: 'จัดซื้อ', icon: ClipboardList, href: '/purchase' },
-    { name: 'ลูกค้า', icon: Users, href: '/customers' },
 ];
 
 // Map main hrefs to comparison hrefs
@@ -42,7 +42,6 @@ const comparisonHrefMap: Record<string, string> = {
     '/sales': '/sales/comparison',
     '/inventory': '/inventory/comparison',
     '/purchase': '/purchase/comparison',
-    '/customers': '/customers/comparison',
 };
 
 // Report menu with submenus
@@ -77,29 +76,75 @@ const itemVariants = {
 };
 
 export function Sidebar() {
+    const { data: session } = useSession();
+    const user = session?.user;
     const pathname = usePathname();
-    const { isCollapsed, toggleSidebar } = useSidebar();
+    const router = useRouter();
+    const { isCollapsed, toggleSidebar, isMobileSidebarOpen, closeMobileSidebar, setIsCollapsed } = useSidebar();
     const { isComparisonMode } = useComparison();
     const [isReportOpen, setIsReportOpen] = useState(false);
+    const [isHydrated, setIsHydrated] = useState(false);
+
+    useEffect(() => {
+        setIsHydrated(true);
+    }, []);
+
+    const displayName = isHydrated ? (user?.name || 'Admin User') : 'Admin User';
+    const displayEmail = isHydrated ? (user?.email || 'admin@company.com') : 'admin@company.com';
+    const displayInitials = displayName.substring(0, 2).toUpperCase();
 
     // Check if any report submenu is active
     const isReportActive = reportMenu.subItems.some(item => pathname.startsWith(item.href));
 
+    const handleNavClick = () => {
+        // Close mobile overlay when navigating
+        closeMobileSidebar();
+    };
+
+    // Handle report menu click
+    const handleReportMenuClick = () => {
+        if (displayCollapsed) {
+            // If collapsed, expand sidebar, open report menu, and navigate to first report
+            setIsCollapsed(false);
+            setIsReportOpen(true);
+            router.push(reportMenu.subItems[0].href); // Navigate to รายงานบัญชี
+        } else {
+            // If expanded, just toggle report menu
+            setIsReportOpen(!isReportOpen);
+        }
+    };
+
+    // On mobile drawer, always show full content regardless of collapsed state
+    const displayCollapsed = isCollapsed && !isMobileSidebarOpen;
+
     return (
+        <>
+            {/* Mobile overlay backdrop */}
+            {isMobileSidebarOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+                    onClick={closeMobileSidebar}
+                />
+            )}
         <aside className={cn(
             "fixed inset-y-0 left-0 z-50 bg-[hsl(var(--card))] border-r border-[hsl(var(--border))] flex flex-col transition-all duration-300",
-            isCollapsed ? "w-20" : "w-72"
+            // Desktop: always visible, collapsible
+            "lg:translate-x-0",
+            // Mobile: hidden off-screen, slide in when open
+            isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+            // Width: on mobile always full (w-72), on desktop collapsible
+            isCollapsed ? "lg:w-20 w-72" : "w-72"
         )}>
             {/* Logo Section */}
             <div className="h-16 flex items-center justify-between px-4 border-b border-[hsl(var(--border))]">
                 <div className={cn(
                     "flex items-center gap-3 transition-all duration-300",
-                    isCollapsed && "justify-center w-full"
+                    displayCollapsed && "justify-center w-full"
                 )}>
                     <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))] to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0">
                         <PieChart className="h-5 w-5 text-white" />
                     </div>
-                    {!isCollapsed && (
+                    {!displayCollapsed && (
                         <span className="text-lg font-bold tracking-tight text-[hsl(var(--foreground))] whitespace-nowrap">
                             MIS Dashboard
                         </span>
@@ -107,10 +152,10 @@ export function Sidebar() {
                 </div>
             </div>
 
-            {/* Toggle Button */}
+            {/* Toggle Button — desktop only */}
             <button
                 onClick={toggleSidebar}
-                className="absolute -right-3 top-13 h-6 w-6 rounded-full bg-[hsl(var(--primary))] text-white shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
+                className="hidden lg:flex absolute -right-3 top-13 h-6 w-6 rounded-full bg-[hsl(var(--primary))] text-white shadow-lg items-center justify-center hover:scale-110 transition-transform z-50"
             >
                 {isCollapsed ? (
                     <ChevronRight className="h-4 w-4" />
@@ -122,7 +167,7 @@ export function Sidebar() {
             {/* Navigation */}
             <div className="flex-1 overflow-y-auto py-6 px-3 space-y-6">
                 <div>
-                    {!isCollapsed && (
+                    {!displayCollapsed && (
                         <p className="px-4 text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-3">
                             Menu
                         </p>
@@ -144,10 +189,11 @@ export function Sidebar() {
                                 <motion.div key={item.href} variants={itemVariants}>
                                     <Link
                                         href={actualHref}
-                                        title={isCollapsed ? item.name : undefined}
+                                        onClick={handleNavClick}
+                                        title={displayCollapsed ? item.name : undefined}
                                         className={cn(
                                             "flex items-center gap-3 py-3 text-sm font-medium rounded-xl transition-all duration-300 group",
-                                            isCollapsed ? "px-3 justify-center" : "px-4",
+                                            displayCollapsed ? "px-3 justify-center" : "px-4",
                                             isActive
                                                 ? "bg-[hsl(var(--primary))] text-white shadow-lg shadow-indigo-500/25"
                                                 : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
@@ -157,7 +203,7 @@ export function Sidebar() {
                                             "h-5 w-5 transition-colors flex-shrink-0",
                                             isActive ? "text-white" : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
                                         )} />
-                                        {!isCollapsed && (
+                                        {!displayCollapsed && (
                                             <>
                                                 <span className="flex-1">{item.name}</span>
                                                 {isActive && (
@@ -171,13 +217,13 @@ export function Sidebar() {
                         })}
 
                         {/* Report Dropdown Menu */}
-                        <motion.div variants={itemVariants} className="relative">
+                        <motion.div variants={itemVariants} className="relative group">
                             <button
-                                onClick={() => setIsReportOpen(!isReportOpen)}
-                                title={isCollapsed ? reportMenu.name : undefined}
+                                onClick={handleReportMenuClick}
+                                title={displayCollapsed ? reportMenu.name : undefined}
                                 className={cn(
                                     "w-full flex items-center gap-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 group",
-                                    isCollapsed ? "px-3 justify-center" : "px-4",
+                                    displayCollapsed ? "px-3 justify-center" : "px-4",
                                     isReportActive
                                         ? "bg-[hsl(var(--primary))] text-white shadow-lg shadow-indigo-500/25"
                                         : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
@@ -187,7 +233,7 @@ export function Sidebar() {
                                     "h-5 w-5 transition-colors flex-shrink-0",
                                     isReportActive ? "text-white" : "text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]"
                                 )} />
-                                {!isCollapsed && (
+                                {!displayCollapsed && (
                                     <>
                                         <span className="flex-1 text-left">{reportMenu.name}</span>
                                         <ChevronDown className={cn(
@@ -201,7 +247,7 @@ export function Sidebar() {
 
                             {/* Submenu */}
                             <AnimatePresence>
-                                {!isCollapsed && isReportOpen && (
+                                {!displayCollapsed && isReportOpen && (
                                     <motion.div 
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
@@ -215,6 +261,7 @@ export function Sidebar() {
                                                     <Link
                                                         key={subItem.href}
                                                         href={subItem.href}
+                                                        onClick={handleNavClick}
                                                         className={cn(
                                                             "flex items-center gap-3 py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 group",
                                                             isSubActive
@@ -235,27 +282,12 @@ export function Sidebar() {
                                 )}
                             </AnimatePresence>
 
-                            {/* Collapsed submenu tooltip */}
-                            {isCollapsed && (
-                                <div className="hidden group-hover:block absolute left-full ml-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-lg py-2 min-w-48 z-50">
-                                    {reportMenu.subItems.map((subItem) => (
-                                        <Link
-                                            key={subItem.href}
-                                            href={subItem.href}
-                                            className="flex items-center gap-5 py-4 px-4 text-sm text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
-                                        >
-                                            <subItem.icon className="h-4 w-4" />
-                                            {subItem.name}
-                                        </Link>
-                                    ))}
-                                </div>
-                            )}
                         </motion.div>
                     </motion.nav>
                 </div>
 
                 <div>
-                    {!isCollapsed && (
+                    {!displayCollapsed && (
                         <p className="px-4 text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-3">
                             Other
                         </p>
@@ -270,27 +302,29 @@ export function Sidebar() {
                             <motion.div key={item.href} variants={itemVariants}>
                                 <Link
                                     href={item.href}
-                                    title={isCollapsed ? item.name : undefined}
+                                    onClick={handleNavClick}
+                                    title={displayCollapsed ? item.name : undefined}
                                     className={cn(
                                         "flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))] transition-all duration-200 group",
-                                        isCollapsed ? "px-3 justify-center" : "px-4"
+                                        displayCollapsed ? "px-3 justify-center" : "px-4"
                                     )}
                                 >
                                     <item.icon className="h-5 w-5 text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))] transition-colors flex-shrink-0" />
-                                    {!isCollapsed && item.name}
+                                    {!displayCollapsed && item.name}
                                 </Link>
                             </motion.div>
                         ))}
                         <motion.div variants={itemVariants}>
                             <button
-                                title={isCollapsed ? "ออกจากระบบ" : undefined}
+                                title={displayCollapsed ? "ออกจากระบบ" : undefined}
+                                onClick={() => signOut({ fetchOptions: { onSuccess: () => { window.location.href = '/login'; } } })}
                                 className={cn(
                                     "w-full flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all duration-200 group",
-                                    isCollapsed ? "px-3 justify-center" : "px-4"
+                                    displayCollapsed ? "px-3 justify-center" : "px-4"
                                 )}
                             >
                                 <LogOut className="h-5 w-5 group-hover:scale-110 transition-transform flex-shrink-0" />
-                                {!isCollapsed && "ออกจากระบบ"}
+                                {!displayCollapsed && "ออกจากระบบ"}
                             </button>
                         </motion.div>
                     </motion.nav>
@@ -300,23 +334,30 @@ export function Sidebar() {
             {/* User Profile */}
             <div className={cn(
                 "p-4 m-3 mt-2 rounded-2xl bg-white/5 border border-white/5 backdrop-blur-sm transition-all duration-300",
-                isCollapsed && "p-2 m-2"
+                displayCollapsed && "p-2 m-2"
             )}>
                 <div className={cn(
                     "flex items-center",
-                    isCollapsed ? "justify-center" : "space-x-3"
+                    displayCollapsed ? "justify-center" : "space-x-3"
                 )}>
                     <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-inner ring-2 ring-white/10 flex-shrink-0">
-                        <span className="text-xs font-bold text-white">AD</span>
+                        <span className="text-xs font-bold text-white">
+                            {displayInitials}
+                        </span>
                     </div>
-                    {!isCollapsed && (
+                    {!displayCollapsed && (
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">Admin User</p>
-                            <p className="text-xs text-slate-400 truncate">admin@company.com</p>
+                            <p className="text-sm font-semibold text-white truncate">
+                                {displayName}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate">
+                                {displayEmail}
+                            </p>
                         </div>
                     )}
                 </div>
             </div>
         </aside>
+        </>
     );
 }

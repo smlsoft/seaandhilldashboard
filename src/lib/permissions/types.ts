@@ -68,6 +68,7 @@ export interface User {
   username: string;
   email: string;
   role: Role;
+  allowed_branches?: string[];
 }
 
 // Permission Check Result

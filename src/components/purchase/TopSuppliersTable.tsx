@@ -62,8 +62,8 @@ export function TopSuppliersTable({ data }: TopSuppliersTableProps) {
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 

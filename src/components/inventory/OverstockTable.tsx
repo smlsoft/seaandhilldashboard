@@ -11,32 +11,24 @@ interface OverstockChartProps {
   height?: string;
 }
 
-type ExtendedOverstockItem = OverstockItem & {
-  excess: number;
-  excessPercent: number;
+type ChartOverstockItem = OverstockItem & {
   status: string;
 };
 
-// Status categories - 3 levels
+// Status categories - 3 levels based on Days on Hand
 const STATUS_CONFIG = [
-  { name: 'วิกฤติ', label: 'วิกฤติ (≥50%)', color: '#dc2626', min: 50, max: Infinity },
-  { name: 'เตือน', label: 'เตือน (25-49%)', color: '#eab308', min: 25, max: 50 },
-  { name: 'ปกติ', label: 'ปกติ (<25%)', color: '#3b82f6', min: 0, max: 25 },
+  { name: 'วิกฤติ', label: 'วิกฤติ (>365 วัน)', color: '#dc2626' },
+  { name: 'เตือน', label: 'เตือน (180-365 วัน)', color: '#eab308' },
+  { name: 'ปกติ', label: 'ปกติ (<180 วัน)', color: '#3b82f6' },
 ];
 
 export function OverstockTable({ data, height = '300px' }: OverstockChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>('all');
 
-  // Calculate excess percent and status for each item
-  const getExcessPercent = (item: OverstockItem): number => {
-    if (item.maxStockLevel === 0) return 0;
-    return ((item.qtyOnHand - item.maxStockLevel) / item.maxStockLevel) * 100;
-  };
-
-  const getStatus = (excessPercent: number): string => {
-    if (excessPercent >= 50) return 'วิกฤติ';
-    if (excessPercent >= 25) return 'เตือน';
+  const getStatus = (daysOnHand: number): string => {
+    if (daysOnHand > 365) return 'วิกฤติ';
+    if (daysOnHand >= 180) return 'เตือน';
     return 'ปกติ';
   };
 
@@ -47,13 +39,10 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
   };
 
   // Transform data with status
-  const transformedData: ExtendedOverstockItem[] = data.map(item => {
-    const excessPercent = getExcessPercent(item);
+  const transformedData: ChartOverstockItem[] = data.map(item => {
     return {
       ...item,
-      excess: item.qtyOnHand - item.maxStockLevel,
-      excessPercent,
-      status: getStatus(excessPercent),
+      status: getStatus(item.daysOnHand),
     };
   });
 
@@ -139,39 +128,40 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
       }
     });
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.off('click');
       chart.dispose();
     };
   }, [data, statusCounts]);
 
-  // Table columns
-  const formatNumber = (value: number) => {
+  const formatNumber = (value: number | undefined | null) => {
+    if (value === undefined || value === null || isNaN(value)) return '0';
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | undefined | null) => {
+    if (value === undefined || value === null || isNaN(value)) return '0';
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 
-  const columns: ColumnDef<ExtendedOverstockItem>[] = [
+  const columns: ColumnDef<ChartOverstockItem>[] = [
     {
       key: 'status',
       header: 'สถานะ',
       sortable: false,
       align: 'left',
       className: 'w-10',
-      render: (item: ExtendedOverstockItem) => (
+      render: (item: ChartOverstockItem) => (
         <AlertCircle className={`h-4 w-4 ${getSeverityColor(item.status)}`} />
       ),
     },
@@ -181,7 +171,7 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
       sortable: true,
       align: 'left',
       className: 'w-100',
-      render: (item: ExtendedOverstockItem) => (
+      render: (item: ChartOverstockItem) => (
         <div>
           <div className="font-medium">{item.itemName}</div>
           <div className="text-xs text-muted-foreground">
@@ -196,37 +186,26 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
       sortable: true,
       align: 'right',
       className: 'w-10',
-      render: (item: ExtendedOverstockItem) => formatNumber(item.qtyOnHand),
+      render: (item: ChartOverstockItem) => formatNumber(item.qtyOnHand),
     },
     {
-      key: 'maxStockLevel',
-      header: 'สูงสุด',
+      key: 'avgDailySales',
+      header: 'ยอดขาย/วัน',
       sortable: true,
       align: 'right',
       className: 'w-10',
-      render: (item: ExtendedOverstockItem) => formatNumber(item.maxStockLevel),
+      render: (item: ChartOverstockItem) => formatNumber(item.avgDailySales),
     },
+
     {
-      key: 'excessPercent',
-      header: 'เกิน %',
-      sortable: true,
-      align: 'right',
-      className: 'w-10',
-      render: (item: ExtendedOverstockItem) => (
-        <span className={`font-medium ${getSeverityColor(item.status)}`}>
-          {item.excessPercent.toFixed(1)}%
-        </span>
-      ),
-    },
-    {
-      key: 'valueExcess',
-      header: 'มูลค่าส่วนเกิน',
+      key: 'stockValue',
+      header: 'มูลค่าจม',
       sortable: true,
       align: 'right',
       className: 'w-15',
-      render: (item: ExtendedOverstockItem) => (
-        <span className={`font-medium ${getSeverityColor(item.status)}`}>
-          ฿{formatCurrency(item.valueExcess)}
+      render: (item: ChartOverstockItem) => (
+        <span className="font-medium text-muted-foreground">
+          ฿{formatCurrency(item.stockValue)}
         </span>
       ),
     },
@@ -325,9 +304,7 @@ export function OverstockTable({ data, height = '300px' }: OverstockChartProps) 
               columns={columns}
               itemsPerPage={5}
               emptyMessage="ไม่มีข้อมูล"
-              defaultSortKey="valueExcess"
-              defaultSortOrder="desc"
-              keyExtractor={(item: ExtendedOverstockItem) => `${item.itemCode}-${item.branchName}`}
+              keyExtractor={(item: ChartOverstockItem) => `${item.itemCode}-${item.branchName}`}
             />
           </div>
         </div>

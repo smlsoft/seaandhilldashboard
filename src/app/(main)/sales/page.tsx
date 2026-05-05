@@ -133,13 +133,14 @@ export default function SalesPage() {
 
   const formatCurrency = (value: number) => {
     return `฿${value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     })}`;
   };
 
   const salesCategoryColumns: KPIRecordsColumn[] = [
-    { key: 'categoryName', label: 'หมวดหมู่' },
+    { key: 'categoryCode', label: 'รหัสผังบัญชี' },
+    { key: 'categoryName', label: 'ผังบัญชี' },
     { key: 'totalQtySold', label: 'จำนวนขาย', align: 'right' },
     { key: 'totalSales', label: 'ยอดขายรวม', align: 'right' },
   ];
@@ -147,6 +148,7 @@ export default function SalesPage() {
   const salesByCategorySummary = Array.from(
     salesByCategory.reduce((map, item) => {
       const existing = map.get(item.categoryName) || {
+        categoryCode: item.categoryCode,
         categoryName: item.categoryName,
         totalQtySold: 0,
         totalSales: 0,
@@ -156,29 +158,50 @@ export default function SalesPage() {
       existing.totalSales += item.totalSales;
       map.set(item.categoryName, existing);
       return map;
-    }, new Map<string, { categoryName: string; totalQtySold: number; totalSales: number }>())
+    }, new Map<string, { categoryCode: string; categoryName: string; totalQtySold: number; totalSales: number }>())
       .values()
   ).sort((a, b) => b.totalSales - a.totalSales);
 
   const salesCategoryRows: KPIRecordsRow[] = salesByCategorySummary.map((item) => ({
     id: item.categoryName,
     cells: {
-      categoryName: item.categoryName,
-      totalQtySold: item.totalQtySold.toLocaleString('th-TH'),
+      categoryCode: item.categoryCode,
+      categoryName: (
+        <Link 
+          href={`/reports/sales?report=by-category&categoryCode=${encodeURIComponent(item.categoryCode)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+        >
+          {item.categoryName}
+        </Link>
+      ),
+      totalQtySold: item.totalQtySold.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       totalSales: formatCurrency(item.totalSales),
     },
   }));
 
   const salesOrderColumns: KPIRecordsColumn[] = [
-    { key: 'categoryName', label: 'หมวดหมู่' },
+    { key: 'categoryCode', label: 'รหัสผังบัญชี' },
+    { key: 'categoryName', label: 'ผังบัญชี' },
     { key: 'orderCount', label: 'จำนวนออเดอร์', align: 'right' },
   ];
 
   const salesOrderRows: KPIRecordsRow[] = salesByCategorySummaryData.map((item) => ({
     id: item.categoryName,
     cells: {
-      categoryName: item.categoryName,
-      orderCount: item.orderCount.toLocaleString('th-TH'),
+      categoryCode: <span className="font-mono text-xs">{item.categoryCode}</span>,
+      categoryName: (
+        <Link 
+          href={`/reports/sales?report=by-category&categoryCode=${encodeURIComponent(item.categoryCode)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+        >
+          {item.categoryName}
+        </Link>
+      ),
+      orderCount: item.orderCount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     },
   }));
 
@@ -231,10 +254,10 @@ export default function SalesPage() {
               ]}
               detailContent={
                 <KPIRecordsDetailContent
-                  title="ยอดขายรวมตามหมวด"
+                  title="ยอดขายรวมตามผังบัญชี"
                   columns={salesCategoryColumns}
                   rows={salesCategoryRows}
-                  reportHref="/reports/sales#by-category"
+                  reportHref="/reports/sales?report=by-category"
                   headerPrefix=""
                 />
               }
@@ -263,7 +286,7 @@ export default function SalesPage() {
             />
             <KPICard
               title="จำนวนออเดอร์"
-              value={kpis.totalOrders.value.toLocaleString('th-TH')}
+              value={kpis.totalOrders.value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               trend={formatGrowthPercentage(kpis.totalOrders.growthPercentage || 0)}
               trendUp={kpis.totalOrders.trend === 'up'}
               icon={ShoppingCart}
@@ -275,10 +298,10 @@ export default function SalesPage() {
               ]}
               detailContent={
                 <KPIRecordsDetailContent
-                  title="จำนวนออเดอร์ตามหมวด"
+                  title="จำนวนออเดอร์ตามผังบัญชี"
                   columns={salesOrderColumns}
                   rows={salesOrderRows}
-                  reportHref="/reports/sales#by-category"
+                  reportHref="/reports/sales?report=by-category"
                   headerPrefix=""
                 />
               }

@@ -10,41 +10,32 @@ interface LowStockTableProps {
   itemsPerPage?: number;
 }
 
-type ExtendedLowStockItem = LowStockItem & {
-  shortage: number;
-  shortagePercent: number;
-};
-
 export function LowStockTable({ data, height = 'auto', itemsPerPage = 10 }: LowStockTableProps) {
-  // Transform data to calculate shortage
-  const transformedData: ExtendedLowStockItem[] = data.map(item => ({
-    ...item,
-    shortage: item.reorderPoint - item.qtyOnHand,
-    shortagePercent: ((item.reorderPoint - item.qtyOnHand) / item.reorderPoint) * 100,
-  }));
+  // Use raw data since calculations are now done in the backend
+  const transformedData = data;
 
-  const formatNumber = (value: number) => {
+  const formatNumber = (value: number | undefined | null) => {
+    if (value === undefined || value === null || isNaN(value)) return '0';
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 
-  const getUrgencyColor = (shortagePercent: number): string => {
-    if (shortagePercent >= 75) return 'text-red-600';
-    if (shortagePercent >= 50) return 'text-orange-600';
-    if (shortagePercent >= 25) return 'text-yellow-600';
-    return 'text-green-600';
+  const getUrgencyColor = (daysOnHand: number): string => {
+    if (daysOnHand <= 2) return 'text-red-600';
+    if (daysOnHand <= 5) return 'text-orange-600';
+    return 'text-yellow-600';
   };
 
-  const columns: ColumnDef<ExtendedLowStockItem>[] = [
+  const columns: ColumnDef<LowStockItem>[] = [
     {
-      key: 'shortagePercent',
+      key: 'status',
       header: 'สถานะ',
       sortable: false,
       align: 'left',
-      render: (item: ExtendedLowStockItem) => (
-        <AlertTriangle className={`h-4 w-4 ${getUrgencyColor(item.shortagePercent)}`} />
+      render: (item: LowStockItem) => (
+        <AlertTriangle className={`h-4 w-4 ${getUrgencyColor(item.daysOnHand)}`} />
       ),
     },
     {
@@ -52,7 +43,7 @@ export function LowStockTable({ data, height = 'auto', itemsPerPage = 10 }: LowS
       header: 'สินค้า',
       sortable: true,
       align: 'left',
-      render: (item: ExtendedLowStockItem) => (
+      render: (item: LowStockItem) => (
         <div>
           <div className="font-medium">{item.itemName}</div>
           <div className="text-xs text-muted-foreground">
@@ -63,33 +54,33 @@ export function LowStockTable({ data, height = 'auto', itemsPerPage = 10 }: LowS
     },
     {
       key: 'branchName',
-      header: 'สาขา',
+      header: 'คลัง',
       sortable: true,
       align: 'left',
-      render: (item: ExtendedLowStockItem) => <span className="text-xs">{item.branchName}</span>,
+      render: (item: LowStockItem) => <span className="text-xs">{item.branchName}</span>,
     },
     {
       key: 'qtyOnHand',
       header: 'คงเหลือ',
       sortable: true,
       align: 'right',
-      render: (item: ExtendedLowStockItem) => formatNumber(item.qtyOnHand),
+      render: (item: LowStockItem) => formatNumber(item.qtyOnHand),
     },
     {
-      key: 'reorderPoint',
-      header: 'จุด Reorder',
+      key: 'avgDailySales',
+      header: 'ยอดขาย/วัน',
       sortable: true,
       align: 'right',
-      render: (item: ExtendedLowStockItem) => formatNumber(item.reorderPoint),
+      render: (item: LowStockItem) => formatNumber(item.avgDailySales),
     },
     {
-      key: 'shortage',
-      header: 'ขาด',
+      key: 'daysOnHand',
+      header: 'เหลือขาย (วัน)',
       sortable: true,
       align: 'right',
-      render: (item: ExtendedLowStockItem) => (
-        <span className={`font-medium ${getUrgencyColor(item.shortagePercent)}`}>
-          {formatNumber(item.shortage)}
+      render: (item: LowStockItem) => (
+        <span className={`font-medium ${getUrgencyColor(item.daysOnHand)}`}>
+          {item.daysOnHand === 999999 ? '-' : formatNumber(item.daysOnHand)}
         </span>
       ),
     },
@@ -102,8 +93,8 @@ export function LowStockTable({ data, height = 'auto', itemsPerPage = 10 }: LowS
         columns={columns}
         itemsPerPage={itemsPerPage}
         emptyMessage="ไม่มีสินค้าใกล้หมด"
-        defaultSortKey="shortage"
-        defaultSortOrder="desc"
+        defaultSortKey="daysOnHand"
+        defaultSortOrder="asc"
         keyExtractor={(item) => `${item.itemCode}-${item.branchName}`}
       />
     </div>

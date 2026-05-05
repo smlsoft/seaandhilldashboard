@@ -252,7 +252,7 @@ export function getSalesAnalysisQuery(startDate: string, endDate: string): strin
   return `
   SELECT
   COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
-    toDate(si.doc_datetime) as docDate,
+    toDate(toTimeZone(si.doc_datetime, 'Asia/Bangkok')) as docDate,
     si.doc_no as docNo,
     sid.item_code as itemCode,
     sid.item_name as itemName,

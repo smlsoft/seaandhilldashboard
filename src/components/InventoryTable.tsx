@@ -79,13 +79,13 @@ export function InventoryTable({ data, currentPage, totalPages }: InventoryTable
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[hsl(var(--foreground))]">
-                                        {item.current_stock.toLocaleString()}
+                                        {item.current_stock.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-[hsl(var(--muted-foreground))]">
-                                        ฿{Math.round(item.avg_cost).toLocaleString()}
+                                        ฿{Math.round(item.avg_cost).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                                        ฿{Math.round(item.total_value).toLocaleString()}
+                                        ฿{Math.round(item.total_value).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <button className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] opacity-0 group-hover:opacity-100 transition-opacity">

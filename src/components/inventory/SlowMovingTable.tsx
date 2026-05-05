@@ -12,23 +12,16 @@ export function SlowMovingTable({ data, height = 'auto' }: SlowMovingTableProps)
 
   const formatNumber = (value: number) => {
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
-  };
-
-  const getStockDaysColor = (days: number): string => {
-    if (days >= 365) return 'text-red-600';
-    if (days >= 180) return 'text-orange-600';
-    if (days >= 90) return 'text-yellow-600';
-    return 'text-green-600';
   };
 
   const columns: ColumnDef<SlowMovingItem>[] = [
@@ -76,17 +69,6 @@ export function SlowMovingTable({ data, height = 'auto' }: SlowMovingTableProps)
       align: 'right',
       render: (item: SlowMovingItem) => (
         <span className="font-medium">฿{formatCurrency(item.inventoryValue)}</span>
-      ),
-    },
-    {
-      key: 'daysOfStock',
-      header: 'วันคงคลัง',
-      sortable: true,
-      align: 'right',
-      render: (item: SlowMovingItem) => (
-        <span className={getStockDaysColor(item.daysOfStock)}>
-          {item.daysOfStock >= 999 ? '∞' : formatNumber(Math.round(item.daysOfStock))} วัน
-        </span>
       ),
     },
   ];

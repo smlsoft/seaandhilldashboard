@@ -32,7 +32,7 @@ export function ARStatusChart({ data, height = '350px' }: ARStatusChartProps) {
           let result = `<div style="font-weight: bold; margin-bottom: 8px;">${status}</div>`;
 
           params.forEach((param: any) => {
-            const value = `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`;
+            const value = `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`;
             result += `<div style="margin-bottom: 4px;">
               ${param.marker} ${param.seriesName}: <strong>${value}</strong>
             </div>`;
@@ -114,11 +114,11 @@ export function ARStatusChart({ data, height = '350px' }: ARStatusChartProps) {
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data]);

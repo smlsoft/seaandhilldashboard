@@ -34,8 +34,8 @@ export function PurchaseTrendChart({ data, height = '400px' }: PurchaseTrendChar
 
           params.forEach((param: any) => {
             const value = param.seriesName === 'ยอดซื้อ'
-              ? `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`
-              : `${param.value.toLocaleString('th-TH')} รายการ`;
+              ? `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+              : `${param.value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} รายการ`;
 
             result += `<div style="margin-bottom: 4px;">
               ${param.marker} ${param.seriesName}: <strong>${value}</strong>
@@ -117,11 +117,11 @@ export function PurchaseTrendChart({ data, height = '400px' }: PurchaseTrendChar
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data]);

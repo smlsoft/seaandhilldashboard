@@ -51,7 +51,7 @@ const defaultValueFormatter = (value: number): string => {
   if (value >= 1000) {
     return `${(value / 1000).toFixed(0)}K`;
   }
-  return value.toLocaleString('th-TH');
+  return value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 export function HorizontalBarChart({
@@ -108,7 +108,7 @@ export function HorizontalBarChart({
               <div style="font-weight: 600; margin-bottom: 6px;">${rankLabel}${itemData.name}</div>
               ${itemData.subLabel ? `<div style="color: #666; font-size: 12px; margin-bottom: 4px;">${itemData.subLabel}</div>` : ''}
               <div style="margin-top: 8px;">
-                <div>ยอด: <b style="color: #3b82f6;">฿${itemData.value.toLocaleString('th-TH')}</b></div>
+                <div>ยอด: <b style="color: #3b82f6;">฿${itemData.value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
                 <div>สัดส่วน: <b>${percentage}%</b></div>
               </div>
             </div>
@@ -195,11 +195,11 @@ export function HorizontalBarChart({
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data, valueFormatter, labelFormatter, tooltipFormatter, getBarColor, showPercentage, barWidth, fontSize, gridLeft, gridRight]);

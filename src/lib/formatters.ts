@@ -4,8 +4,10 @@
 
 /**
  * Format number as Thai currency (฿)
+ * Shows decimals only when value has decimal part
  */
-export const formatCurrency = (value: number): string => {
+export const formatCurrency = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) return '0.00';
     return value.toLocaleString('th-TH', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -13,12 +15,38 @@ export const formatCurrency = (value: number): string => {
 };
 
 /**
- * Format number with no decimal places
+ * Format number with smart decimal display
+ * Shows up to 2 decimals only when value has decimal part
  */
-export const formatNumber = (value: number): string => {
+export const formatNumber = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) return '0.00';
     return value.toLocaleString('th-TH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+};
+
+/**
+ * Format integer (count/whole numbers only - no decimals)
+ * Use for: orderCount, customerCount, itemCount, docCount, etc.
+ */
+export const formatInteger = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) return '0';
+    return Math.floor(value).toLocaleString('th-TH', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
+    });
+};
+
+/**
+ * Format quantity (may have decimals for weight/volume units)
+ * Shows up to 2 decimals when needed
+ */
+export const formatQuantity = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) return '0.00';
+    return value.toLocaleString('th-TH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
     });
 };
 
@@ -48,6 +76,7 @@ export const formatMonth = (dateStr: string): string => {
 /**
  * Format number as percentage with 1 decimal place
  */
-export const formatPercent = (value: number): string => {
+export const formatPercent = (value: number | undefined | null): string => {
+    if (value === undefined || value === null || isNaN(value)) return '0.0%';
     return value.toFixed(1) + '%';
 };

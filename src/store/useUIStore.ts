@@ -18,6 +18,11 @@ interface UIStore {
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
 
+  // --- Mobile Sidebar ---
+  isMobileSidebarOpen: boolean;
+  openMobileSidebar: () => void;
+  closeMobileSidebar: () => void;
+
   // --- Comparison Mode ---
   isComparisonMode: boolean;
   toggleComparisonMode: () => void;
@@ -33,6 +38,11 @@ export const useUIStore = create<UIStore>()(
         set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
       setSidebarCollapsed: (collapsed) =>
         set({ isSidebarCollapsed: collapsed }),
+
+      // Mobile Sidebar
+      isMobileSidebarOpen: false,
+      openMobileSidebar: () => set({ isMobileSidebarOpen: true }),
+      closeMobileSidebar: () => set({ isMobileSidebarOpen: false }),
 
       // Comparison Mode
       isComparisonMode: false,

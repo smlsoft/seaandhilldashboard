@@ -36,8 +36,13 @@ export function SimpleKPICard({
         if (Math.abs(val) >= 1_000_000) return `฿${(val / 1_000_000).toFixed(2)}M`;
         if (Math.abs(val) >= 1_000) return `฿${(val / 1_000).toFixed(1)}K`;
         return `฿${val.toFixed(0)}`;
-      case 'number':
-        return val.toLocaleString('th-TH', { maximumFractionDigits: 0 });
+      case 'number': {
+        const hasDecimals = val % 1 !== 0;
+        return val.toLocaleString('th-TH', { 
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2 
+        });
+      }
       case 'percent':
         return `${val.toFixed(1)}%`;
       case 'decimal':

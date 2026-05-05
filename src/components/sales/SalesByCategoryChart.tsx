@@ -59,7 +59,7 @@ export function SalesByCategoryChart({ data, height = '400px' }: SalesByCategory
       tooltip: {
         trigger: 'item',
         formatter: (params: any) => {
-          const value = `฿${Number(params.value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`;
+          const value = `฿${Number(params.value).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`;
           return `<div>
             <div style="font-weight: bold; margin-bottom: 4px;">${params.name}</div>
             <div>${params.marker} ยอดขาย: <strong>${value}</strong></div>

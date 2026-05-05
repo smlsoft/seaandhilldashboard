@@ -168,7 +168,7 @@ export function ComparisonTable({ data }: ComparisonTableProps) {
                   whileHover={{ scale: 1.05 }}
                 >
                   <div className="font-semibold">{formatMillion(branch.totalSales)}</div>
-                  <div className="text-xs text-muted-foreground">{branch.totalOrders.toLocaleString()} บิล</div>
+                  <div className="text-xs text-muted-foreground">{branch.totalOrders.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บิล</div>
                 </motion.td>
                 <motion.td
                   className={cn(
@@ -208,7 +208,7 @@ export function ComparisonTable({ data }: ComparisonTableProps) {
                 <motion.td className="px-4 py-3 text-right" whileHover={{ scale: 1.05 }}>
                   <div className="flex items-center justify-end gap-1">
                     <Users className="h-3 w-3 text-muted-foreground" />
-                    <span className="font-medium">{branch.totalTransactions.toLocaleString()}</span>
+                    <span className="font-medium">{branch.totalTransactions.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </motion.td>
                 <motion.td className="px-4 py-3 text-right font-medium text-violet-600" whileHover={{ scale: 1.05 }}>

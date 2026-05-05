@@ -26,6 +26,7 @@ interface KPICardProps {
     detailItems?: KPIDetailItem[];
     detailContent?: ReactNode;
     detailActionButton?: KPIDetailActionButton;
+    expandHref?: string;
 }
 
 
@@ -184,6 +185,7 @@ export function KPICard({
     detailItems,
     detailContent,
     detailActionButton,
+    expandHref,
 }: KPICardProps) {
     const [showQueryPopup, setShowQueryPopup] = useState(false);
     const [showDetailPopup, setShowDetailPopup] = useState(false);
@@ -321,6 +323,7 @@ export function KPICard({
                 detailItems={detailItems}
                 detailContent={detailContent}
                 detailActionButton={detailActionButton}
+                expandHref={expandHref}
             />
         </>
     );

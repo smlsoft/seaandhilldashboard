@@ -497,8 +497,8 @@ export default function ComparisonPage() {
                     { label: 'ยอดขาย', value: fmtM(topBranch.totalSales) },
                     { label: 'กำไรสุทธิ', value: fmtM(topBranch.netProfit) },
                     { label: 'Margin', value: `${topBranch.profitMargin.toFixed(1)}%` },
-                    { label: 'ต่อบิล', value: `฿${Math.round(topBranch.avgTicketSize).toLocaleString()}` },
-                    { label: 'ลูกค้า', value: topBranch.uniqueCustomers.toLocaleString() },
+                    { label: 'ต่อบิล', value: `฿${Math.round(topBranch.avgTicketSize).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+                    { label: 'ลูกค้า', value: topBranch.uniqueCustomers.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
                     { label: 'Turnover', value: `${topBranch.inventoryTurnover.toFixed(2)}x` },
                   ].map((item, idx) => (
                     <motion.div

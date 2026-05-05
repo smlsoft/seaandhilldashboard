@@ -84,7 +84,7 @@ export function SalesTable({ data, currentPage, totalPages }: SalesTableProps) {
                                         {item.sale_name}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[hsl(var(--foreground))]">
-                                        ฿{item.total_amount.toLocaleString()}
+                                        ฿{item.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <span className={`px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full border ${item.status_cancel === 'Y'

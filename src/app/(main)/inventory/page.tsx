@@ -118,16 +118,18 @@ export default function InventoryPage() {
   };
 
   const formatCurrency = (value: number) => {
+    const hasDecimals = value % 1 !== 0;
     return `฿${value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     })}`;
   };
 
   const formatNumber = (value: number) => {
+    const hasDecimals = value % 1 !== 0;
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 
@@ -237,7 +239,7 @@ export default function InventoryPage() {
       <ErrorBoundary>
         <DataCard
           title="การเคลื่อนไหวสต็อก"
-          description="จำนวนสินค้ารับเข้าและจ่ายออกรายวัน"
+          description="จำนวนสินค้าซื้อเข้าและขายออกรายวัน"
           linkTo="/reports/inventory#stock-movement"
           queryInfo={{
             query: getStockMovementQuery(dateRange),
@@ -254,12 +256,12 @@ export default function InventoryPage() {
       </motion.div>
 
       {/* Low Stock & Overstock */}
-      <motion.div variants={itemVariants} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        <ErrorBoundary>
+      <motion.div variants={itemVariants} >
+       {/* <ErrorBoundary>
           <DataCard
             className="h-full"
             title="สินค้าใกล้หมด"
-            description="รายการสินค้าที่ต่ำกว่าจุด Reorder Point"
+            description="รายการสินค้าที่คงเหลือใช้งานได้ ≤ 7 วัน (อิงสถิติช่วงเวลาที่เลือก)"
             linkTo="/reports/inventory#low-stock"
             queryInfo={{
               query: getLowStockItemsQuery(dateRange),
@@ -272,13 +274,13 @@ export default function InventoryPage() {
               <LowStockTable data={lowStockItems} height="500px" itemsPerPage={13} />
             )}
           </DataCard>
-        </ErrorBoundary>
+        </ErrorBoundary>*/}
 
         <ErrorBoundary>
           <DataCard
             className="h-full"
-            title="สินค้าเกินคลัง"
-            description="รายการสินค้าที่เกินระดับสูงสุด"
+            title="สินค้าาไม่เคลื่อนไหว"
+            description="รายการสินค้าที่ไม่ได้ขายมานานกว่า > 90 วัน (อิงสถิติช่วงเวลาที่เลือก)"
             linkTo="/reports/inventory#overstock"
             queryInfo={{
               query: getOverstockItemsQuery(dateRange),

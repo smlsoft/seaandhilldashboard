@@ -28,6 +28,8 @@ import {
   getExpenseBreakdownQuery,
   getProfitLossByProductCategoryQuery,
   getAccountProductsQuery,
+  getAccountPurchaseItemsQuery,
+  getAccountTypeQuery,
   getChartOfAccountsListQuery,
 } from './accounting-queries';
 
@@ -308,7 +310,7 @@ export async function getExpenseBreakdown(dateRange: DateRange, branchSync?: str
 }
 
 /**
- * Get products for a specific category (same source as revenue breakdown)
+ * Get transaction documents with items for a specific account code (Sales/Revenue)
  */
 export async function getAccountProducts(
   dateRange: DateRange,
@@ -320,17 +322,77 @@ export async function getAccountProducts(
     const result = await clickhouse.query({ query, format: 'JSONEachRow' });
     const data = await result.json();
     return data.map((row: any) => ({
-      itemCode: row.itemCode ?? '',
-      itemName: row.itemName ?? '',
+      docDate: row.docDate ?? '',
+      docNo: row.docNo ?? '',
+      bookName: row.bookName ?? '-',
+      branchName: row.branchName ?? '-',
+      debit: Number(row.debit ?? 0),
+      credit: Number(row.credit ?? 0),
+      amount: Number(row.amount ?? 0),
+      itemCode: row.itemCode ?? '-',
+      itemName: row.itemName ?? 'ไม่มีรายการสินค้า',
       categoryCode: row.categoryCode ?? 'N/A',
       categoryName: row.categoryName ?? 'ไม่ระบุหมวดหมู่',
-      orderCount: Number(row.orderCount) || 0,
-      totalQtySold: Number(row.totalQtySold) || 0,
-      totalSales: Number(row.totalSales) || 0,
-      totalProfit: Number(row.totalProfit) || 0,
+      unitCode: row.unitCode ?? '-',
+      qty: Number(row.qty ?? 0),
+      price: Number(row.price ?? 0),
+      itemAmount: Number(row.itemAmount ?? 0),
     }));
   } catch (error) {
     console.error('Error fetching account products:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get transaction documents with items for a specific account code (Purchase/Expense)
+ */
+export async function getAccountPurchaseItems(
+  dateRange: DateRange,
+  accountCode: string,
+  branchSync?: string[]
+): Promise<import('./types').AccountProductItem[]> {
+  try {
+    const query = getAccountPurchaseItemsQuery(dateRange, accountCode, branchSync);
+    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const data = await result.json();
+    return data.map((row: any) => ({
+      docDate: row.docDate ?? '',
+      docNo: row.docNo ?? '',
+      bookName: row.bookName ?? '-',
+      branchName: row.branchName ?? '-',
+      debit: Number(row.debit ?? 0),
+      credit: Number(row.credit ?? 0),
+      amount: Number(row.amount ?? 0),
+      itemCode: row.itemCode ?? '-',
+      itemName: row.itemName ?? 'ไม่มีรายการสินค้า',
+      categoryCode: row.categoryCode ?? 'N/A',
+      categoryName: row.categoryName ?? 'ไม่ระบุหมวดหมู่',
+      unitCode: row.unitCode ?? '-',
+      qty: Number(row.qty ?? 0),
+      price: Number(row.price ?? 0),
+      itemAmount: Number(row.itemAmount ?? 0),
+    }));
+  } catch (error) {
+    console.error('Error fetching account purchase items:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get account type for a specific account code
+ */
+export async function getAccountType(accountCode: string): Promise<string> {
+  try {
+    const query = getAccountTypeQuery(accountCode);
+    const result = await clickhouse.query({ query, format: 'JSONEachRow' });
+    const data = await result.json();
+    if (data.length === 0 || !data[0].account_type) {
+      return 'UNKNOWN';
+    }
+    return data[0].account_type as string;
+  } catch (error) {
+    console.error('Error fetching account type:', error);
     throw error;
   }
 }

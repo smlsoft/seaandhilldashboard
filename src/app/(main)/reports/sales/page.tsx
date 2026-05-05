@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { TableSkeleton } from '@/components/LoadingSkeleton';
 import { PaginatedTable, type ColumnDef } from '@/components/PaginatedTable';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { ReportTypeSelector, type ReportOption } from '@/components/ReportTypeSelector';
 import { ReportFilter } from '@/components/ReportFilter';
 import { UnifiedComparisonTable, type BranchInfo, type ComparisonColumnDef } from '@/components/UnifiedComparisonTable';
@@ -25,7 +27,7 @@ import {
 } from 'lucide-react';
 import { getDateRange } from '@/lib/dateRanges';
 import { exportStyledReport } from '@/lib/exportExcel';
-import { exportStyledPdfReport } from '@/lib/exportPdf';
+import { exportStyledPdfReport, prewarmPdfFonts } from '@/lib/exportPdf';
 import { formatCurrency, formatNumber, formatDate, formatPercent } from '@/lib/formatters';
 import { useReportHash } from '@/hooks/useReportHash';
 import type {
@@ -110,10 +112,33 @@ export default function SalesReportPage() {
   // Handle URL hash for report selection
   useReportHash(reportOptions, setSelectedReport);
 
-  // Reset category filter when switching reports
+  // ✅ อ่าน URL query params เมื่อเข้าหน้า (จากการกด drill-down ใน Dashboard)
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const reportParam  = searchParams.get('report');
+    const startDateParam = searchParams.get('start_date');
+    const endDateParam   = searchParams.get('end_date');
+
+    // เซ็ต report type ถ้ามีใน params
+    if (reportParam && reportOptions.some(opt => opt.value === reportParam)) {
+      setSelectedReport(reportParam as ReportType);
+    }
+
+    // เซ็ต date range ถ้ามีใน params
+    if (startDateParam && endDateParam) {
+      setDateRange({ start: startDateParam, end: endDateParam });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // รันแค่ครั้งเดียวตอน mount
   useEffect(() => {
     setSelectedCategory('ALL');
+    setCategoryFilter('all');
   }, [selectedReport]);
+
+  // Pre-warm PDF font cache in background when page mounts
+  useEffect(() => {
+    prewarmPdfFonts();
+  }, []);
 
   const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
     queryKey: ['salesReportData', selectedReport, dateRange, selectedBranches],
@@ -674,13 +699,43 @@ export default function SalesReportPage() {
   // Get current report option
   const currentReport = reportOptions.find(opt => opt.value === selectedReport);
 
-  // Get unique categories from salesByCategory
+  // Custom category sort order
+  const CATEGORY_ORDER = [
+    'รายได้-เครื่องดื่ม',
+    'รายได้เครื่องดื่ม-บัคเก็ต คอกเทล',
+    'รายได้-อาหาร',
+    'รายได้-สินค้าที่ระลึก',
+    'รายได้-สินค้าและบริการอื่น',
+    'ส่วนลดจ่าย',
+    'รายได้อื่น',
+    'คอกเบียรับ',
+    'รายได้ส่งเสริมการขาย',
+    'รายได้จากทีมบริหาร',
+    'รายได้อื่น-จากการเช่ารถยนต์',
+  ];
+
+  const sortByCustomOrder = (a: string, b: string) => {
+    const ai = CATEGORY_ORDER.indexOf(a);
+    const bi = CATEGORY_ORDER.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b, 'th-TH');
+  };
+
+  // Get unique categories from salesByCategory (for by-category report)
   const uniqueCategories = Array.from(
     new Set(salesByCategory.map(item => JSON.stringify({ 
       code: item.categoryCode, 
       name: item.categoryName 
     })))
-  ).map(str => JSON.parse(str));
+  ).map(str => JSON.parse(str) as { code: string; name: string })
+   .sort((a, b) => sortByCustomOrder(a.name, b.name));
+
+  // Get unique categories from salesAnalysis (for sales-trend report)
+  const uniqueAnalysisCategories = Array.from(
+    new Set(salesAnalysis.map(item => item.categoryName).filter(Boolean))
+  ).sort(sortByCustomOrder);
 
   // Filter salesByCategory by selected category
   const filteredSalesByCategory = selectedCategory === 'ALL' 
@@ -915,24 +970,36 @@ export default function SalesReportPage() {
     switch (selectedReport) {
       case 'sales-trend':
         return () => {
-          const dataWithAvg = trendData.map(item => ({
-            ...item,
-            avgOrderValue: item.orderCount > 0 ? item.sales / item.orderCount : 0
-          }));
-          exportStyledReport({
-            data: dataWithAvg,
-            headers: { date: 'วันที่', sales: 'ยอดขาย', orderCount: 'จำนวนออเดอร์', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
-            filename: 'แนวโน้มยอดขาย',
-            sheetName: 'Sales Trend',
-            title: 'รายงานแนวโน้มยอดขาย',
+          const categoryName = categoryFilter === 'all' ? 'ทั้งหมด' : categoryFilter;
+          const filteredData = categoryFilter === 'all'
+            ? salesAnalysis
+            : salesAnalysis.filter(item => item.categoryName === categoryFilter);
+
+          return exportStyledReport({
+            data: filteredData,
+            headers: { 
+              categoryName: 'หมวดสินค้า', 
+              docDate: 'เอกสารวันที่', 
+              docNo: 'เอกสารเลขที่', 
+              itemCode: 'รหัสสินค้า', 
+              itemName: 'ชื่อสินค้า', 
+              unitCode: 'หน่วยนับ', 
+              qty: 'จำนวน', 
+              price: 'ราคา', 
+              discountAmount: 'มูลค่าส่วนลด',
+              totalAmount: 'รวมมูลค่า' 
+            },
+            filename: `รายงานวิเคราะห์ยอดขาย_${categoryName}`,
+            sheetName: 'Sales Analysis',
+            title: `รายงานวิเคราะห์ยอดขาย - ${categoryName}`,
             subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-            currencyColumns: ['sales', 'avgOrderValue'],
-            numberColumns: ['orderCount'],
+            currencyColumns: ['price', 'discountAmount', 'totalAmount'],
+            numberColumns: ['qty'],
             summaryConfig: {
               columns: {
-                sales: 'sum',
-                orderCount: 'sum',
-                avgOrderValue: 'sum'
+                qty: 'sum',
+                discountAmount: 'sum',
+                totalAmount: 'sum'
               }
             }
           });
@@ -1070,23 +1137,35 @@ export default function SalesReportPage() {
     switch (selectedReport) {
       case 'sales-trend':
         return () => {
-          const dataWithAvg = trendData.map(item => ({
-            ...item,
-            avgOrderValue: item.orderCount > 0 ? item.sales / item.orderCount : 0
-          }));
-          exportStyledPdfReport({
-            data: dataWithAvg,
-            headers: { date: 'วันที่', sales: 'ยอดขาย', orderCount: 'จำนวนออเดอร์', avgOrderValue: 'ยอดเฉลี่ย/ออเดอร์' },
-            filename: 'แนวโน้มยอดขาย',
-            title: 'รายงานแนวโน้มยอดขาย',
+          const categoryName = categoryFilter === 'all' ? 'ทั้งหมด' : categoryFilter;
+          const filteredData = categoryFilter === 'all'
+            ? salesAnalysis
+            : salesAnalysis.filter(item => item.categoryName === categoryFilter);
+
+          return exportStyledPdfReport({
+            data: filteredData,
+            headers: { 
+              categoryName: 'หมวดสินค้า', 
+              docDate: 'เอกสารวันที่', 
+              docNo: 'เอกสารเลขที่', 
+              itemCode: 'รหัสสินค้า', 
+              itemName: 'ชื่อสินค้า', 
+              unitCode: 'หน่วยนับ', 
+              qty: 'จำนวน', 
+              price: 'ราคา', 
+              discountAmount: 'มูลค่าส่วนลด',
+              totalAmount: 'รวมมูลค่า' 
+            },
+            filename: `รายงานวิเคราะห์ยอดขาย_${categoryName}`,
+            title: `รายงานวิเคราะห์ยอดขาย - ${categoryName}`,
             subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-            currencyColumns: ['sales', 'avgOrderValue'],
-            numberColumns: ['orderCount'],
+            currencyColumns: ['price', 'discountAmount', 'totalAmount'],
+            numberColumns: ['qty'],
             summaryConfig: {
               columns: {
-                sales: 'sum',
-                orderCount: 'sum',
-                avgOrderValue: 'sum'
+                qty: 'sum',
+                discountAmount: 'sum',
+                totalAmount: 'sum'
               }
             }
           });
@@ -1272,19 +1351,30 @@ export default function SalesReportPage() {
                 <label htmlFor="category-filter" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
                   หมวดหมู่:
                 </label>
-                <select
-                  id="category-filter"
+                <SearchableSelect
                   value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-                >
-                  <option value="ALL">ทั้งหมด</option>
-                  {uniqueCategories.map((cat) => (
-                    <option key={cat.code} value={cat.code}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedCategory}
+                  options={[
+                    { value: 'ALL', label: 'ทั้งหมด' },
+                    ...uniqueCategories.map((cat) => ({ value: cat.code, label: cat.name })),
+                  ]}
+                  className="w-full sm:w-[250px]"
+                />
+              </div>
+            ) : selectedReport === 'sales-trend' ? (
+              <div className="flex items-center gap-2">
+                <label htmlFor="analysis-category-filter" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                  หมวดหมู่:
+                </label>
+                <SearchableSelect
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  options={[
+                    { value: 'all', label: 'ทั้งหมด' },
+                    ...uniqueAnalysisCategories.map((name) => ({ value: name, label: name })),
+                  ]}
+                  className="w-full sm:w-[250px]"
+                />
               </div>
             ) : undefined
           }

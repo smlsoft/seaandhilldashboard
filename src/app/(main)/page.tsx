@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDateRangeStore } from '@/store/useDateRangeStore';
 import ReactECharts from 'echarts-for-react';
 import { motion } from 'framer-motion';
@@ -15,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useBranchStore } from '@/store/useBranchStore';
 import { getDateRange } from '@/lib/dateRanges';
 import type { DateRange } from '@/lib/data/types';
+import { suggestComparisonType, getComparisonLabel } from '@/lib/comparison';
 
 // Custom ECharts Theme
 const theme = {
@@ -46,8 +48,23 @@ const theme = {
 };
 
 export default function Dashboard() {
+  const router = useRouter();
   const { dateRange, setDateRange } = useDateRangeStore();
   const selectedBranches = useBranchStore((s) => s.selectedBranches);
+  const [showAll, setShowAll] = useState(false);
+
+  // helper: format growth value → "ไม่มีข้อมูล" ถ้าเป็น null
+  const formatGrowthTrend = (growth: number | null | undefined): string | undefined => {
+    if (growth === null || growth === undefined) return undefined; // ซ่อน badge
+    return `${growth > 0 ? '+' : ''}${growth.toFixed(1)}%`;
+  };
+  const formatGrowthDetail = (growth: number | null | undefined): string => {
+    if (growth === null || growth === undefined) return 'ไม่มีข้อมูล';
+    return `${growth > 0 ? '+' : ''}${growth.toFixed(1)}%`;
+  };
+
+  // description ที่ dynamic ตามช่วงวันที่ที่เลือก
+  const comparisonLabel = getComparisonLabel(suggestComparisonType(dateRange));
 
   const { data, isLoading: loading } = useQuery({
     queryKey: ['dashboardData', dateRange, selectedBranches],
@@ -77,6 +94,34 @@ export default function Dashboard() {
       };
     },
   });
+
+  // ดึงรายการขายทั้งหมด (เอาตามวันที่ที่ filter) — ทำงานเมื่อ showAll = true
+  const { data: allSalesData, isFetching: allSalesLoading } = useQuery({
+    queryKey: ['dashboardAllSales', dateRange, selectedBranches],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
+      params.append('startDate', dateRange.start);
+      params.append('endDate', dateRange.end);
+      params.append('salesLimit', '500'); // ดึงสูงสุด 500 รายการ
+      const res = await fetch(`/api/dashboard?${params.toString()}`);
+      const json = await res.json();
+      return json.recentSales || [];
+    },
+    enabled: showAll, // fetch เฉพาะเมื่อกด "ดูทั้งหมด"
+    staleTime: 60_000,
+  });
+
+  // reset showAll เมื่อเปลี่ยน dateRange
+  const prevDateRangeRef = React.useRef(dateRange);
+  React.useEffect(() => {
+    if (prevDateRangeRef.current !== dateRange) {
+      setShowAll(false);
+      prevDateRangeRef.current = dateRange;
+    }
+  }, [dateRange]);
 
   // Framer motion variants
   const containerVariants = {
@@ -201,54 +246,54 @@ export default function Dashboard() {
       <motion.div variants={itemVariants} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="ยอดขายรวม"
-          value={`฿${data?.totalSales?.toLocaleString() || 0}`}
+          value={`฿${data?.totalSales?.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0}`}
           icon={DollarSign}
-          trend={data?.salesGrowth ? `${data.salesGrowth > 0 ? '+' : ''}${data.salesGrowth.toFixed(1)}%` : undefined}
-          trendUp={data?.salesGrowth > 0}
-          description="เทียบกับเดือนที่แล้ว"
+          trend={formatGrowthTrend(data?.salesGrowth)}
+          trendUp={data?.salesGrowth != null ? data.salesGrowth > 0 : undefined}
+          description={comparisonLabel}
           detailTitle="รายละเอียดยอดขายรวม"
           detailItems={[
             { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
-            { label: 'การเติบโต', value: data?.salesGrowth !== undefined ? `${data.salesGrowth.toFixed(1)}%` : '-' },
+            { label: 'การเติบโต', value: formatGrowthDetail(data?.salesGrowth) },
           ]}
         />
         <KPICard
           title="คำสั่งซื้อ"
-          value={data?.totalOrders?.toLocaleString() || 0}
+          value={data?.totalOrders?.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0}
           icon={ShoppingCart}
-          trend={data?.ordersGrowth ? `${data.ordersGrowth > 0 ? '+' : ''}${data.ordersGrowth.toFixed(1)}%` : undefined}
-          trendUp={data?.ordersGrowth > 0}
-          description="เทียบกับเดือนที่แล้ว"
+          trend={formatGrowthTrend(data?.ordersGrowth)}
+          trendUp={data?.ordersGrowth != null ? data.ordersGrowth > 0 : undefined}
+          description={comparisonLabel}
           detailTitle="รายละเอียดจำนวนคำสั่งซื้อ"
           detailItems={[
             { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
-            { label: 'การเติบโต', value: data?.ordersGrowth !== undefined ? `${data.ordersGrowth.toFixed(1)}%` : '-' },
+            { label: 'การเติบโต', value: formatGrowthDetail(data?.ordersGrowth) },
           ]}
         />
         <KPICard
           title="ลูกค้า"
-          value={data?.totalCustomers?.toLocaleString() || 0}
+          value={data?.totalCustomers?.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0}
           icon={Users}
-          trend={data?.customersGrowth ? `${data.customersGrowth > 0 ? '+' : ''}${data.customersGrowth.toFixed(1)}%` : undefined}
-          trendUp={data?.customersGrowth > 0}
-          description="เทียบกับเดือนที่แล้ว"
+          trend={formatGrowthTrend(data?.customersGrowth)}
+          trendUp={data?.customersGrowth != null ? data.customersGrowth > 0 : undefined}
+          description={comparisonLabel}
           detailTitle="รายละเอียดจำนวนลูกค้า"
           detailItems={[
             { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
-            { label: 'การเติบโต', value: data?.customersGrowth !== undefined ? `${data.customersGrowth.toFixed(1)}%` : '-' },
+            { label: 'การเติบโต', value: formatGrowthDetail(data?.customersGrowth) },
           ]}
         />
         <KPICard
           title="มูลค่าเฉลี่ย"
-          value={`฿${Math.round(data?.avgOrderValue || 0).toLocaleString()}`}
+          value={`฿${Math.round(data?.avgOrderValue || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           icon={Package}
-          trend={data?.avgOrderGrowth ? `${data.avgOrderGrowth > 0 ? '+' : ''}${data.avgOrderGrowth.toFixed(1)}%` : undefined}
-          trendUp={data?.avgOrderGrowth > 0}
+          trend={formatGrowthTrend(data?.avgOrderGrowth)}
+          trendUp={data?.avgOrderGrowth != null ? data.avgOrderGrowth > 0 : undefined}
           description="ต่อคำสั่งซื้อ"
           detailTitle="รายละเอียดมูลค่าเฉลี่ยต่อออเดอร์"
           detailItems={[
             { label: 'ช่วงวันที่', value: `${dateRange.start} ถึง ${dateRange.end}` },
-            { label: 'การเติบโต', value: data?.avgOrderGrowth !== undefined ? `${data.avgOrderGrowth.toFixed(1)}%` : '-' },
+            { label: 'การเติบโต', value: formatGrowthDetail(data?.avgOrderGrowth) },
           ]}
         />
       </motion.div>
@@ -311,13 +356,26 @@ export default function Dashboard() {
                 <DataCard
                   title="รายการขายล่าสุด"
                   action={
-                    <button className="text-xs font-medium text-[hsl(var(--primary))] hover:underline">
-                      ดูทั้งหมด
+                    <button
+                      onClick={() => setShowAll((prev) => !prev)}
+                      className="text-xs font-medium text-[hsl(var(--primary))] hover:underline transition-colors"
+                    >
+                      {showAll ? 'แสดงน้อยลง' : 'ดูทั้งหมด'}
                     </button>
                   }
                   className="lg:col-span-2"
                 >
-                  <RecentSales sales={data?.recentSales || []} />
+                  {showAll && allSalesLoading ? (
+                    <div className="flex items-center justify-center py-10 text-sm text-[hsl(var(--muted-foreground))]">
+                      <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      กำลังโหลดรายการทั้งหมด...
+                    </div>
+                  ) : (
+                    <RecentSales sales={showAll ? (allSalesData || []) : (data?.recentSales || [])} showAll={showAll} />
+                  )}
                 </DataCard>
               </div>
               <div>

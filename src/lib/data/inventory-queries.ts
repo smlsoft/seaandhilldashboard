@@ -65,12 +65,19 @@ FROM (
 }
 
 export function getStockMovementQuery(dateRange: DateRange): string {
-    return `SELECT
-  toStartOfDay(doc_datetime) as date,
-  sumIf(qty, qty > 0) as qtyIn,
-  sumIf(abs(qty), qty < 0) as qtyOut
-FROM stock_transaction
-WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+    return `-- Stock Movement: Purchases (Value) vs Sales (Value)
+SELECT
+  toStartOfDay(st.doc_datetime) AS date,
+  greatest(0, abs(sum(CASE WHEN pt.doc_no != '' THEN st.amount ELSE 0 END))) AS purchaseValue,
+  greatest(0, abs(sum(CASE WHEN si.doc_no != '' THEN st.amount ELSE 0 END))) AS saleValue
+FROM stock_transaction st
+LEFT JOIN (
+  SELECT DISTINCT doc_no, branch_sync FROM purchase_transaction WHERE status_cancel != 'Cancel'
+) pt ON st.doc_no = pt.doc_no AND st.branch_sync = pt.branch_sync
+LEFT JOIN (
+  SELECT DISTINCT doc_no, branch_sync FROM saleinvoice_transaction WHERE status_cancel != 'Cancel'
+) si ON st.doc_no = si.doc_no AND st.branch_sync = si.branch_sync
+WHERE st.doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
 GROUP BY date
 ORDER BY date ASC`;
 }

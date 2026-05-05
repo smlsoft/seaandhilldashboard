@@ -69,6 +69,7 @@ export class ClickHouseAdapter extends BaseAdapter {
         try {
             const result = await this.clickhouseClient.query({
                 query: options.query,
+                query_params: options.query_params,
                 format: options.format || 'JSONEachRow',
             });
 

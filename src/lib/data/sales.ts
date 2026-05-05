@@ -63,6 +63,20 @@ function buildDateTimeRangeParams(dateRange: DateRange): {
   };
 }
 
+/**
+ * Build date-time range parameters for BETWEEN queries (inclusive end)
+ * Returns start_date at 00:00:00 and end_date at 23:59:59
+ */
+function buildDateTimeRangeParamsInclusive(dateRange: DateRange): {
+  start_date: string;
+  end_date: string;
+} {
+  return {
+    start_date: `${dateRange.start} 00:00:00`,
+    end_date: `${dateRange.end} 23:59:59`,
+  };
+}
+
 // ============================================================================
 // Data Fetching Functions
 // ============================================================================
@@ -74,6 +88,8 @@ export async function getSalesKPIs(dateRange: DateRange, branchSync?: string[]):
   try {
     const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+    const prevDateParams = buildDateTimeRangeParamsInclusive(previousPeriod);
 
     // Total Sales
     const salesQuery = `
@@ -143,10 +159,10 @@ export async function getSalesKPIs(dateRange: DateRange, branchSync?: string[]):
     `;
 
     const params = {
-      start_date: dateRange.start,
-      end_date: dateRange.end,
-      previous_start: previousPeriod.start,
-      previous_end: previousPeriod.end,
+      start_date: dateParams.start_date,
+      end_date: dateParams.end_date,
+      previous_start: prevDateParams.start_date,
+      previous_end: prevDateParams.end_date,
       ...branchFilter.params
     };
 
@@ -244,6 +260,7 @@ export async function getSalesTrendData(dateRange: DateRange, branchSync?: strin
 export async function getTopProducts(dateRange: DateRange, branchSync?: string[]): Promise<TopProduct[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
@@ -268,8 +285,7 @@ export async function getTopProducts(dateRange: DateRange, branchSync?: string[]
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -298,6 +314,7 @@ export async function getTopProducts(dateRange: DateRange, branchSync?: string[]
 export async function getSalesByBranch(dateRange: DateRange, branchSync?: string[]): Promise<SalesByBranch[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
@@ -317,8 +334,7 @@ export async function getSalesByBranch(dateRange: DateRange, branchSync?: string
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -343,6 +359,7 @@ export async function getSalesByBranch(dateRange: DateRange, branchSync?: string
 export async function getSalesBySalesperson(dateRange: DateRange, branchSync?: string[]): Promise<SalesBySalesperson[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
@@ -365,8 +382,7 @@ export async function getSalesBySalesperson(dateRange: DateRange, branchSync?: s
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -446,6 +462,7 @@ export async function getTopCustomers(dateRange: DateRange, branchSync?: string[
 export async function getARStatus(dateRange: DateRange, branchSync?: string[]): Promise<ARStatus[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
@@ -466,8 +483,7 @@ export async function getARStatus(dateRange: DateRange, branchSync?: string[]): 
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -551,9 +567,11 @@ export async function getSalesByCategory(dateRange: DateRange, branchSync?: stri
 export async function getSalesByCategorySummary(dateRange: DateRange, branchSync?: string[]): Promise<SalesByCategory[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
+        COALESCE(NULLIF(sid.item_category_code, ''), 'N/A') as categoryCode,
         COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
         sum(sid.sum_amount) as totalSales,
         count(DISTINCT si.doc_no) as orderCount
@@ -562,15 +580,14 @@ export async function getSalesByCategorySummary(dateRange: DateRange, branchSync
       WHERE si.status_cancel != 'Cancel'
         AND si.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
         ${branchFilter.sql.replace(/branch_sync/g, 'si.branch_sync')}
-      GROUP BY categoryName
+      GROUP BY categoryCode, categoryName
       ORDER BY totalSales DESC
     `;
 
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -579,7 +596,10 @@ export async function getSalesByCategorySummary(dateRange: DateRange, branchSync
     const data = await result.json();
     return data.map((row: any) => ({
       branchName: 'All', // Placeholder as this is aggregated
+      categoryCode: row.categoryCode || 'N/A',
       categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      itemCode: '',  // Not applicable in summary
+      itemName: '',  // Not applicable in summary
       orderCount: Number(row.orderCount) || 0,
       totalQtySold: 0, // Not fetched in summary
       totalSales: Number(row.totalSales) || 0,
@@ -598,11 +618,12 @@ export async function getSalesByCategorySummary(dateRange: DateRange, branchSync
 export async function getSalesAnalysisData(dateRange: DateRange, branchSync?: string[]): Promise<SalesAnalysisData[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
         COALESCE(NULLIF(sid.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
-        toDate(si.doc_datetime) as docDate,
+        toDate(toTimeZone(si.doc_datetime, 'Asia/Bangkok')) as docDate,
         si.doc_no as docNo,
         sid.item_code as itemCode,
         sid.item_name as itemName,
@@ -622,8 +643,7 @@ export async function getSalesAnalysisData(dateRange: DateRange, branchSync?: st
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',

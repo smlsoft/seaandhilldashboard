@@ -184,13 +184,25 @@ export default function PurchaseComparisonPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   /* ─── Formatting ─── */
-  const fmt = (v: number) => `฿${v.toLocaleString('th-TH', { maximumFractionDigits: 0 })}`;
+  const fmt = (v: number) => {
+    const hasDecimals = v % 1 !== 0;
+    return `฿${v.toLocaleString('th-TH', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2 
+    })}`;
+  };
   const fmtShort = (v: number) => {
     if (Math.abs(v) >= 1_000_000) return `฿${(v / 1_000_000).toFixed(2)}M`;
     if (Math.abs(v) >= 1_000) return `฿${(v / 1_000).toFixed(1)}K`;
     return `฿${v.toFixed(0)}`;
   };
-  const fmtNum = (v: number) => v.toLocaleString('th-TH', { maximumFractionDigits: 0 });
+  const fmtNum = (v: number) => {
+    const hasDecimals = v % 1 !== 0;
+    return v.toLocaleString('th-TH', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2 
+    });
+  };
   const shortName = (name: string) => name.replace(/บริษัท\s*|จำกัด/g, '').trim().substring(0, 25);
 
   /* ─── Computed: totals ─── */

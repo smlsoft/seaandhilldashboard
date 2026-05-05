@@ -11,6 +11,7 @@ import { DatabaseConfig, DatabaseType } from './db-config';
 export interface QueryOptions {
     query: string;
     params?: any[];
+    query_params?: Record<string, any>;
     format?: string;
 }
 

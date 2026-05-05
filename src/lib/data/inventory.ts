@@ -49,89 +49,110 @@ function buildBranchFilter(branches?: string[]): { sql: string; params: Record<s
 // ============================================================================
 
 /**
- * Get Inventory KPIs: Total inventory value, items in stock, low stock alerts, overstock alerts
- * Note: stock_transaction table has qty (>0=in, <0=out), cost, amount
- * We calculate current stock by summing qty per item
+ * Get Inventory KPIs: Total purchase value, purchased items, low stock alerts, overstock alerts
+ * Note: Now fetches PURCHASE QUANTITY in the selected date range, not cumulative balance
+ * stock_transaction table has qty (>0=in, <0=out), cost, amount
  */
 export async function getInventoryKPIs(dateRange: DateRange, branchSync?: string[]): Promise<InventoryKPIs> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const stBranchFilter = branchFilter.sql ? branchFilter.sql.replace(/branch_sync/g, 'st.branch_sync') : '';
+    const plainBranchFilter = branchFilter.sql || '';
 
-    // Calculate current stock per item by summing qty (in/out movements)
-    // Total Inventory Value (sum of qty * cost for items with positive stock)
+    // Total Purchase Value in date range (qty * cost for purchases only)
     let valueQuery = `
       SELECT
-        sum(total_value) as current_value
+        sum(purchase_value) as current_value
       FROM (
         SELECT
-          item_code,
-          sum(qty) as total_qty,
-          sum(qty * cost) as total_value
-        FROM stock_transaction
-        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-        ${branchFilter.sql}
+          st.item_code,
+          sumIf(st.qty, st.qty > 0) as total_purchase_qty,
+          sumIf(st.qty * st.cost, st.qty > 0) as purchase_value
+        FROM stock_transaction st
+        INNER JOIN (
+          SELECT DISTINCT doc_no, branch_sync
+          FROM purchase_transaction
+          WHERE status_cancel != 'Cancel'
+          ${plainBranchFilter}
+        ) pt ON st.doc_no = pt.doc_no AND st.branch_sync = pt.branch_sync
+        WHERE st.doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${stBranchFilter}
     `;
 
     valueQuery += `
-        GROUP BY item_code
-        HAVING total_qty > 0
+        GROUP BY st.item_code
+        HAVING total_purchase_qty > 0
       )
     `;
 
-    // Total Items in Stock (items with positive stock balance)
+    // Total Unique Items purchased in date range
     let itemsQuery = `
       SELECT
         count(*) as current_value
       FROM (
         SELECT
-          item_code,
-          sum(qty) as total_qty
-        FROM stock_transaction
-        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-        ${branchFilter.sql}
+          st.item_code,
+          sumIf(st.qty, st.qty > 0) as total_purchase_qty
+        FROM stock_transaction st
+        INNER JOIN (
+          SELECT DISTINCT doc_no, branch_sync
+          FROM purchase_transaction
+          WHERE status_cancel != 'Cancel'
+          ${plainBranchFilter}
+        ) pt ON st.doc_no = pt.doc_no AND st.branch_sync = pt.branch_sync
+        WHERE st.doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${stBranchFilter}
     `;
 
     itemsQuery += `
-        GROUP BY item_code
-        HAVING total_qty > 0
+        GROUP BY st.item_code
+        HAVING total_purchase_qty > 0
       )
     `;
 
-    // Low Stock Items - items with stock <= 10 units
+    // Low Stock Items - items with Days on Hand <= 7
     let lowStockQuery = `
       SELECT
         count(*) as current_value
       FROM (
         SELECT
           item_code,
-          sum(qty) as total_qty
+          sum(qty) as total_qty,
+          abs(sumIf(qty, qty < 0 AND toDate(doc_datetime) >= toDate('${dateRange.start}'))) as total_out,
+          greatest(1, dateDiff('day', toDate('${dateRange.start}'), toDate('${dateRange.end}'))) as days_period,
+          total_out / days_period as avg_daily_out,
+          if(avg_daily_out > 0, total_qty / avg_daily_out, 999999) as days_on_hand
         FROM stock_transaction
-        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        WHERE toDate(doc_datetime) <= toDate('${dateRange.end}')
         ${branchFilter.sql}
     `;
 
     lowStockQuery += `
         GROUP BY item_code
-        HAVING total_qty > 0 AND total_qty <= 10
+        HAVING total_qty > 0 AND avg_daily_out > 0 AND days_on_hand <= 7
       )
     `;
 
-    // Overstock Items - items with stock > 1000 units
+    // Overstock Items - items with Days on Hand > 90
     let overstockQuery = `
       SELECT
         count(*) as current_value
       FROM (
         SELECT
           item_code,
-          sum(qty) as total_qty
+          sum(qty) as total_qty,
+          abs(sumIf(qty, qty < 0 AND toDate(doc_datetime) >= toDate('${dateRange.start}'))) as total_out,
+          greatest(1, dateDiff('day', toDate('${dateRange.start}'), toDate('${dateRange.end}'))) as days_period,
+          total_out / days_period as avg_daily_out,
+          if(avg_daily_out > 0, total_qty / avg_daily_out, 999999) as days_on_hand
         FROM stock_transaction
-        WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        WHERE toDate(doc_datetime) <= toDate('${dateRange.end}')
         ${branchFilter.sql}
     `;
 
     overstockQuery += `
         GROUP BY item_code
-        HAVING total_qty > 1000
+        HAVING total_qty > 0 AND days_on_hand > 90
       )
     `;
 
@@ -182,23 +203,59 @@ export async function getInventoryKPIs(dateRange: DateRange, branchSync?: string
 }
 
 /**
- * Get Stock Movement (IN/OUT) over time
+ * Get Stock Movement (Purchases IN / Sales OUT) over time
+ * 
+ * Logic:
+ *   purchaseQty = net qty from purchase documents (buying received − returns to supplier)
+ *   saleQty     = abs(net qty from sale documents) (sold − customer returns)
+ *
+ * By joining stock_transaction with purchase_transaction / saleinvoice_transaction
+ * we isolate only genuine business flows and cancel out returns within each type.
  */
 export async function getStockMovement(dateRange: DateRange, branchSync?: string[]): Promise<StockMovement[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
-    let query = `
-      SELECT
-        toStartOfDay(doc_datetime) as date,
-        sumIf(qty, qty > 0) as qtyIn,
-        sumIf(abs(qty), qty < 0) as qtyOut
-      FROM stock_transaction
-      WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
-      ${branchFilter.sql}
-    `;
+    // Branch filter for stock_transaction, purchase_transaction, and saleinvoice_transaction
+    // The columns are just branch_sync inside their respective subqueries.
+    const stBranchFilter = branchFilter.sql ? branchFilter.sql.replace(/branch_sync/g, 'st.branch_sync') : '';
+    const plainBranchFilter = branchFilter.sql || '';
 
-    query += `
+    const query = `
+      SELECT
+        toStartOfDay(st.doc_datetime) AS date,
+
+        -- Value from purchase documents (abs to handle negative/positive amounts)
+        greatest(0,
+          abs(sum(CASE WHEN pt.doc_no != '' THEN st.amount ELSE 0 END))
+        ) AS purchaseValue,
+
+        -- Value from sale documents (abs to handle negative/positive amounts)
+        greatest(0,
+          abs(sum(CASE WHEN si.doc_no != '' THEN st.amount ELSE 0 END))
+        ) AS saleValue
+
+      FROM stock_transaction st
+
+      -- Join to purchase docs (non-cancelled)
+      LEFT JOIN (
+        SELECT DISTINCT doc_no, branch_sync
+        FROM purchase_transaction
+        WHERE status_cancel != 'Cancel'
+        ${plainBranchFilter}
+      ) pt ON st.doc_no = pt.doc_no AND st.branch_sync = pt.branch_sync
+
+      -- Join to sale docs (non-cancelled)
+      LEFT JOIN (
+        SELECT DISTINCT doc_no, branch_sync
+        FROM saleinvoice_transaction
+        WHERE status_cancel != 'Cancel'
+        ${plainBranchFilter}
+      ) si ON st.doc_no = si.doc_no AND st.branch_sync = si.branch_sync
+
+      WHERE st.doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+        ${stBranchFilter}
+
       GROUP BY date
       ORDER BY date ASC
     `;
@@ -216,14 +273,17 @@ export async function getStockMovement(dateRange: DateRange, branchSync?: string
     const data = await result.json();
     return data.map((row: any) => ({
       date: row.date,
-      qtyIn: Number(row.qtyIn) || 0,
-      qtyOut: Number(row.qtyOut) || 0,
+      qtyIn:  0, // Kept for compatibility 
+      qtyOut: 0,
+      valueIn:  Number(row.purchaseValue) || 0,   // มูลค่าซื้อเข้า
+      valueOut: Number(row.saleValue)     || 0,   // มูลค่าขายออก
     }));
   } catch (error) {
     console.error('Error fetching stock movement:', error);
     throw error;
   }
 }
+
 
 /**
  * Get Low Stock Items (items with stock balance <= 10 units)
@@ -241,18 +301,20 @@ export async function getLowStockItems(dateRange: DateRange, branchSync?: string
         any(wh_name) as whName,
         any(wh_name) as branchName,
         sum(qty) as currentStock,
-        10 as reorderPoint,
-        if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
+        if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg,
+        abs(sumIf(qty, qty < 0 AND toDate(doc_datetime) >= toDate('${dateRange.start}'))) as totalOut,
+        greatest(1, dateDiff('day', toDate('${dateRange.start}'), toDate('${dateRange.end}'))) as daysPeriod,
+        totalOut / daysPeriod as avgDailySales,
+        if(avgDailySales > 0, currentStock / avgDailySales, 999999) as daysOnHand
       FROM stock_transaction
-      WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      WHERE toDate(doc_datetime) <= toDate('${dateRange.end}')
       ${branchFilter.sql}
     `;
 
     query += `
       GROUP BY item_code
-      HAVING currentStock > 0 AND currentStock <= 10
-      ORDER BY currentStock ASC
-      LIMIT 50
+      HAVING currentStock > 0 AND avgDailySales > 0 AND daysOnHand <= 7
+      ORDER BY daysOnHand ASC
     `;
 
     const result = await clickhouse.query({
@@ -275,8 +337,9 @@ export async function getLowStockItems(dateRange: DateRange, branchSync?: string
       branchName: row.branchName || '-',
       currentStock: Number(row.currentStock) || 0,
       qtyOnHand: Number(row.currentStock) || 0,
-      reorderPoint: Number(row.reorderPoint) || 10,
       stockValue: Number(row.currentStock) * Number(row.costAvg) || 0,
+      avgDailySales: Number(row.avgDailySales) || 0,
+      daysOnHand: Number(row.daysOnHand) || 0,
     }));
   } catch (error) {
     console.error('Error fetching low stock items:', error);
@@ -299,18 +362,20 @@ export async function getOverstockItems(dateRange: DateRange, branchSync?: strin
         any(item_brand_name) as brandName,
         any(wh_name) as branchName,
         sum(qty) as currentStock,
-        1000 as maxStockLevel,
-        if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg
+        if(sum(qty) > 0, sum(qty * cost) / sum(qty), 0) as costAvg,
+        abs(sumIf(qty, qty < 0 AND toDate(doc_datetime) >= toDate('${dateRange.start}'))) as totalOut,
+        greatest(1, dateDiff('day', toDate('${dateRange.start}'), toDate('${dateRange.end}'))) as daysPeriod,
+        totalOut / daysPeriod as avgDailySales,
+        if(avgDailySales > 0, currentStock / avgDailySales, 999999) as daysOnHand
       FROM stock_transaction
-      WHERE doc_datetime BETWEEN '${dateRange.start}' AND '${dateRange.end}'
+      WHERE toDate(doc_datetime) <= toDate('${dateRange.end}')
       ${branchFilter.sql}
     `;
 
     query += `
       GROUP BY item_code
-      HAVING currentStock > 1000
-      ORDER BY currentStock DESC
-      LIMIT 50
+      HAVING currentStock > 0 AND daysOnHand > 90
+      ORDER BY daysOnHand DESC
     `;
 
     const result = await clickhouse.query({
@@ -327,7 +392,6 @@ export async function getOverstockItems(dateRange: DateRange, branchSync?: strin
     return data.map((row: any) => {
       const currentStock = Number(row.currentStock) || 0;
       const costAvg = Number(row.costAvg) || 0;
-      const maxStockLevel = Number(row.maxStockLevel) || 1000;
       return {
         itemCode: row.itemCode,
         itemName: row.itemName,
@@ -336,9 +400,9 @@ export async function getOverstockItems(dateRange: DateRange, branchSync?: strin
         branchName: row.branchName || '-',
         currentStock: currentStock,
         qtyOnHand: currentStock,
-        maxStockLevel: maxStockLevel,
         stockValue: currentStock * costAvg,
-        valueExcess: (currentStock - maxStockLevel) * costAvg,
+        avgDailySales: Number(row.avgDailySales) || 0,
+        daysOnHand: Number(row.daysOnHand) || 0,
       };
     });
   } catch (error) {

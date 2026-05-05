@@ -11,8 +11,8 @@ interface TopCustomersTableProps {
 export function TopCustomersTable({ data, height = '400px' }: TopCustomersTableProps) {
   const formatFullCurrency = (value: number) => {
     return value.toLocaleString('th-TH', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   };
 

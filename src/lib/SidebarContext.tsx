@@ -17,6 +17,9 @@ export interface SidebarContextType {
   isCollapsed: boolean;
   setIsCollapsed: (value: boolean) => void;
   toggleSidebar: () => void;
+  isMobileSidebarOpen: boolean;
+  openMobileSidebar: () => void;
+  closeMobileSidebar: () => void;
 }
 
 /**
@@ -24,12 +27,22 @@ export interface SidebarContextType {
  * Now reads from Zustand `useUIStore` instead of React Context.
  */
 export function useSidebar(): SidebarContextType {
-  const { isSidebarCollapsed, setSidebarCollapsed, toggleSidebar } = useUIStore();
+  const {
+    isSidebarCollapsed,
+    setSidebarCollapsed,
+    toggleSidebar,
+    isMobileSidebarOpen,
+    openMobileSidebar,
+    closeMobileSidebar,
+  } = useUIStore();
 
   return {
     isCollapsed: isSidebarCollapsed,
     setIsCollapsed: setSidebarCollapsed,
     toggleSidebar,
+    isMobileSidebarOpen,
+    openMobileSidebar,
+    closeMobileSidebar,
   };
 }
 

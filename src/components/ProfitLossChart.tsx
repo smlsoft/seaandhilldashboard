@@ -22,7 +22,7 @@ export function ProfitLossChart({ data }: ProfitLossChartProps) {
                 let tooltip = `<div class="font-bold mb-2">${params[0].axisValue}</div>`;
                 params.forEach((param: any) => {
                     const color = param.color;
-                    const value = param.value.toLocaleString();
+                    const value = param.value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     tooltip += `
                         <div class="flex items-center justify-between gap-4">
                             <div class="flex items-center gap-2">
@@ -79,7 +79,7 @@ export function ProfitLossChart({ data }: ProfitLossChartProps) {
             axisLabel: {
                 color: '#64748b',
                 fontSize: 12,
-                formatter: (value: number) => `฿${(value / 1000).toLocaleString()}k`
+                formatter: (value: number) => `฿${(value / 1000).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}k`
             }
         },
         series: [

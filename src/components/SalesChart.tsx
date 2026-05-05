@@ -9,7 +9,7 @@ export function SalesChart({ data }: { data: any[] }) {
             formatter: function (params: any) {
                 const date = params[0].axisValue;
                 const value = params[0].data;
-                return `${date}<br/>Sales: ฿${value.toLocaleString()}`;
+                return `${date}<br/>Sales: ฿${value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             },
             backgroundColor: '#fff',
             borderColor: '#f1f5f9',
@@ -49,7 +49,7 @@ export function SalesChart({ data }: { data: any[] }) {
             axisLabel: {
                 color: '#64748b',
                 fontSize: 12,
-                formatter: (value: number) => `฿${value.toLocaleString()}`
+                formatter: (value: number) => `฿${value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             }
         },
         series: [

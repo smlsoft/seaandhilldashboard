@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, ReactNode, useEffect } from 'react';
-import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Database } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database } from 'lucide-react';
 
 export interface ColumnDef<T> {
   key: string;
@@ -10,6 +10,7 @@ export interface ColumnDef<T> {
   align?: 'left' | 'center' | 'right';
   render?: (item: T, index: number) => ReactNode;
   className?: string;
+  width?: string;
   // เพิ่ม summary render function
   summaryRender?: (data: T[]) => ReactNode;
 }
@@ -75,6 +76,7 @@ export function PaginatedTable<T = any>({
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(defaultSortOrder);
   const [internalPage, setInternalPage] = useState(1);
+  const [pageSize, setPageSize] = useState(itemsPerPage);
 
   // Reset pagination when data changes (e.g., filter applied)
   useEffect(() => {
@@ -82,6 +84,13 @@ export function PaginatedTable<T = any>({
       setInternalPage(1);
     }
   }, [data.length, manualPagination]);
+
+  // Reset to page 1 when page size changes
+  useEffect(() => {
+    if (!manualPagination) {
+      setInternalPage(1);
+    }
+  }, [pageSize, manualPagination]);
 
   // Use external page if manual, otherwise internal
   const currentPage = manualPagination ? externalPage : internalPage;
@@ -131,16 +140,16 @@ export function PaginatedTable<T = any>({
 
   // Pagination Logic
   const totalPages = manualPagination
-    ? Math.ceil(totalItems / itemsPerPage)
-    : Math.ceil(sortedData.length / itemsPerPage);
+    ? Math.ceil(totalItems / pageSize)
+    : Math.ceil(sortedData.length / pageSize);
 
   const startIndex = manualPagination
-    ? (currentPage - 1) * itemsPerPage
-    : (currentPage - 1) * itemsPerPage; // used for display 'Showing x-y'
+    ? (currentPage - 1) * pageSize
+    : (currentPage - 1) * pageSize; // used for display 'Showing x-y'
 
   const endIndex = manualPagination
-    ? Math.min(startIndex + itemsPerPage, totalItems)
-    : startIndex + itemsPerPage;
+    ? Math.min(startIndex + pageSize, totalItems)
+    : startIndex + pageSize;
 
   // If manual, data is already sliced (usually), but if we sorted client-side, using sortedData is fine (it's length 20).
   // If manual, do NOT slice.
@@ -152,6 +161,16 @@ export function PaginatedTable<T = any>({
       onPageChange?.(targetPage);
     } else {
       setInternalPage(targetPage);
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    // Reset to page 1 when changing page size
+    if (!manualPagination) {
+      setInternalPage(1);
+    } else {
+      onPageChange?.(1);
     }
   };
 
@@ -219,7 +238,8 @@ export function PaginatedTable<T = any>({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border ${getAlignClass(column.align)} ${column.className || ''} ${column.sortable ? 'cursor-pointer select-none group hover:bg-muted/80 transition-colors' : ''}`}
+                  style={column.width ? { width: column.width } : undefined}
+                  className={`px-2 py-2 sm:px-4 sm:py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border ${getAlignClass(column.align)} ${column.className || ''} ${column.sortable ? 'cursor-pointer select-none group hover:bg-muted/80 transition-colors' : ''}`}
                   onClick={() => column.sortable && handleSort(column.key)}
                 >
                   <div className={`flex items-center gap-1.5 ${column.align === 'right' ? 'justify-end' : column.align === 'center' ? 'justify-center' : 'justify-start'}`}>
@@ -240,7 +260,7 @@ export function PaginatedTable<T = any>({
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`px-4 py-3 text-sm ${getAlignClass(column.align)} ${column.className || ''}`}
+                    className={`px-2 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm overflow-hidden ${getAlignClass(column.align)} ${column.className || ''}`}
                   >
                     {column.render
                       ? column.render(item, startIndex + index)
@@ -262,7 +282,7 @@ export function PaginatedTable<T = any>({
                       <td
                         key={column.key}
                         colSpan={summaryConfig.labelColSpan || 1}
-                        className={`px-4 py-3 text-sm font-bold ${getAlignClass(column.align)}`}
+                        className={`px-2 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-bold ${getAlignClass(column.align)}`}
                       >
                         {summaryConfig.label || 'รวมทั้งหมด'}
                       </td>
@@ -279,7 +299,7 @@ export function PaginatedTable<T = any>({
                   return (
                     <td
                       key={column.key}
-                      className={`px-4 py-3 text-sm ${getAlignClass(column.align)}`}
+                      className={`px-2 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm ${getAlignClass(column.align)}`}
                     >
                       {summaryValue ? summaryValue(data) : ''}
                     </td>
@@ -293,25 +313,54 @@ export function PaginatedTable<T = any>({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-2 py-3 pr-10 sticky bottom-0 z-30 bg-white border-t border-border mt-auto">
-          <div className="text-xs text-muted-foreground">
-            แสดง {startIndex + 1}-{Math.min(endIndex, sortedData.length)} จาก {sortedData.length} รายการ
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-3 sticky bottom-0 z-30 bg-background border-t border-border mt-auto">
+          {/* Left: Items per page selector */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="whitespace-nowrap">แสดง</span>
+            <select
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="px-2 py-1 text-xs border border-border rounded-md bg-background hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+            >
+              <option value={10}>10</option>
+              <option value={15}>15</option>
+              <option value={20}>20</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="whitespace-nowrap">จาก {sortedData.length} รายการ</span>
           </div>
 
-          <div className="flex items-center gap-1 mr-4">
+
+          {/* Right: Pagination controls */}
+          <div className={`flex items-center gap-1 ${paginationClassName || ''}`}>
+            {/* First page */}
+            <button
+              onClick={() => goToPage(1)}
+              disabled={currentPage === 1}
+              className="p-2 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="หน้าแรก"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+
+            {/* Previous page */}
             <button
               onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage === 1}
               className="p-2 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="ก่อนหน้า"
             >
-              <ChevronLeft className="h-5 w-4" />
+              <ChevronLeft className="h-4 w-4" />
             </button>
 
+            {/* Page numbers */}
             {getPageNumbers().map((page) => (
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-                className={`min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
+                className={`min-w-[36px] min-h-[36px] px-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                   }`}
@@ -320,12 +369,24 @@ export function PaginatedTable<T = any>({
               </button>
             ))}
 
+            {/* Next page */}
             <button
               onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="p-1.5 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-2 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="ถัดไป"
             >
               <ChevronRight className="h-4 w-4" />
+            </button>
+
+            {/* Last page */}
+            <button
+              onClick={() => goToPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="หน้าสุดท้าย"
+            >
+              <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
         </div>

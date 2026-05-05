@@ -11,7 +11,9 @@ import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { ErrorBoundary, ErrorDisplay } from '@/components/ErrorBoundary';
 import { TableSkeleton } from '@/components/LoadingSkeleton';
 import { PaginatedTable, type ColumnDef } from '@/components/PaginatedTable';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { ReportTypeSelector, type ReportOption } from '@/components/ReportTypeSelector';
+import { ProfitLossDetailTable, type PLDetailRow } from '@/components/accounting/ProfitLossDetailTable';
 import {
   TrendingDown,
   Scale,
@@ -90,13 +92,13 @@ const reportOptions: ReportOption<ReportType>[] = [
   },
   {
     value: 'revenue-breakdown',
-    label: 'รายได้ตามหมวด',
+    label: 'รายได้ตามผังบัญชี',
     icon: PieChart,
     description: 'สัดส่วนรายได้แยกตามประเภทบัญชี',
   },
   {
     value: 'expense-breakdown',
-    label: 'ค่าใช้จ่ายตามหมวด',
+    label: 'ค่าใช้จ่ายตามผังบัญชี',
     icon: PieChart,
     description: 'สัดส่วนค่าใช้จ่ายแยกตามประเภทบัญชี',
   },
@@ -129,7 +131,15 @@ function AccountingReportContent() {
     return filterFromUrl || 'all';
   });
 
-  const [selectedAccountCode, setSelectedAccountCode] = useState<string>('');
+  const [selectedAccountCode, setSelectedAccountCode] = useState<string>(() => {
+    return searchParams.get('accountCode') || '';
+  });
+
+  const [plViewMode, setPlViewMode] = useState<'normal' | 'comparison'>('normal');
+  const [plPeriodType, setPlPeriodType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [plSelectedPeriods, setPlSelectedPeriods] = useState<string[]>([]);
+  const [plCompareA, setPlCompareA] = useState<string>('');
+  const [plCompareB, setPlCompareB] = useState<string>('');
 
   // Reset selected account code when switching away from revenue-breakdown / expense-breakdown / chart-of-accounts or when filters change
   useEffect(() => {
@@ -143,6 +153,10 @@ function AccountingReportContent() {
     const reportFromUrl = searchParams.get('report');
     if (reportFromUrl) {
       setSelectedReport(reportFromUrl as ReportType);
+    }
+    const accountCodeFromUrl = searchParams.get('accountCode');
+    if (accountCodeFromUrl) {
+      setSelectedAccountCode(accountCodeFromUrl);
     }
     const filterFromUrl = searchParams.get('accountType');
     if (filterFromUrl) {
@@ -182,6 +196,7 @@ function AccountingReportContent() {
         case 'ap-aging':
           endpoint = `/api/accounting/ap-aging?${params}`;
           break;
+        case 'revenue-breakdown':
         case 'expense-breakdown':
           endpoint = `/api/accounting/revenue-expense-breakdown?${params}`;
           break;
@@ -209,6 +224,29 @@ function AccountingReportContent() {
   const expenseBreakdown: CategoryBreakdown[] = (selectedReport === 'expense-breakdown' || selectedReport === 'revenue-breakdown') ? (reportData?.expenses || []) : [];
   const chartOfAccountsList: ChartOfAccountItem[] = selectedReport === 'chart-of-accounts' ? (reportData || []) : [];
 
+  // ---- Detailed P&L (by account code + month) ----
+  const { data: plDetailRows = [], isLoading: plDetailLoading } = useQuery<PLDetailRow[]>({
+    queryKey: ['plDetail', dateRange, selectedBranches],
+    queryFn: async () => {
+      const params = new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end });
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
+      const res = await fetch(`/api/accounting/profit-loss-detail?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch P&L detail');
+      const json = await res.json();
+      return (json.data || []).map((r: any) => ({
+        accountType: r.accountType,
+        accountCode: r.accountCode,
+        accountName: r.accountName,
+        plGroup: r.plGroup || r.accountType,
+        month: r.month,
+        amount: Number(r.amount) || 0,
+      })) as PLDetailRow[];
+    },
+    enabled: selectedReport === 'profit-loss',
+  });
+
   // Separate query for account products (triggered when user selects an account)
   const { data: accountProducts, isLoading: productsLoading } = useQuery<AccountProductItem[]>({
     queryKey: ['accountProducts', selectedAccountCode, dateRange, selectedBranches],
@@ -228,6 +266,45 @@ function AccountingReportContent() {
       return result.data as AccountProductItem[];
     },
     enabled: (selectedReport === 'chart-of-accounts' || selectedReport === 'revenue-breakdown' || selectedReport === 'expense-breakdown') && !!selectedAccountCode,
+  });
+
+  // Query for all details (when no account is selected)
+  const { data: allRevenueDetails, isLoading: allRevenueLoading } = useQuery<AccountProductItem[]>({
+    queryKey: ['allRevenueDetails', dateRange, selectedBranches],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        account_type: 'INCOME',
+      });
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
+      const response = await fetch(`/api/reports/accounting/all-details?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch all revenue details');
+      const result = await response.json();
+      return result.data as AccountProductItem[];
+    },
+    enabled: selectedReport === 'revenue-breakdown' && !selectedAccountCode,
+  });
+
+  const { data: allExpenseDetails, isLoading: allExpenseLoading } = useQuery<AccountProductItem[]>({
+    queryKey: ['allExpenseDetails', dateRange, selectedBranches],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        account_type: 'EXPENSES',
+      });
+      if (!selectedBranches.includes('ALL')) {
+        selectedBranches.forEach((b) => params.append('branch', b));
+      }
+      const response = await fetch(`/api/reports/accounting/all-details?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch all expense details');
+      const result = await response.json();
+      return result.data as AccountProductItem[];
+    },
+    enabled: selectedReport === 'expense-breakdown' && !selectedAccountCode,
   });
 
   const fetchReportData = () => { refetch(); };
@@ -477,42 +554,19 @@ function AccountingReportContent() {
   // Render report content based on selected type
   const renderReportContent = () => {
     switch (selectedReport) {
-      case 'profit-loss':
+      case 'profit-loss': {
         return (
-          <PaginatedTable
-            data={profitLossData}
-            columns={profitLossColumns}
-            itemsPerPage={12}
-            emptyMessage="ไม่มีข้อมูลงบกำไรขาดทุน"
-            defaultSortKey="month"
-            defaultSortOrder="desc"
-            keyExtractor={(item: ProfitLossData) => item.month}
-            showSummary={true}
-            summaryConfig={{
-              labelColSpan: 1,
-              values: {
-                revenue: (data) => (
-                  <span className="text-green-600 font-bold">
-                    ฿{formatCurrency(data.reduce((sum, item) => sum + item.revenue, 0))}
-                  </span>
-                ),
-                expenses: (data) => (
-                  <span className="text-red-600 font-bold">
-                    ฿{formatCurrency(data.reduce((sum, item) => sum + item.expenses, 0))}
-                  </span>
-                ),
-                netProfit: (data) => {
-                  const total = data.reduce((sum, item) => sum + item.netProfit, 0);
-                  return (
-                    <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      ฿{formatCurrency(total)}
-                    </span>
-                  );
-                },
-              },
-            }}
+          <ProfitLossDetailTable
+            rows={plDetailRows}
+            loading={plDetailLoading}
+            viewMode={plViewMode}
+            periodType={plPeriodType}
+            selectedPeriods={plSelectedPeriods}
+            comparePeriodA={plCompareA}
+            comparePeriodB={plCompareB}
           />
         );
+      }
 
       case 'balance-sheet':
         return (
@@ -635,6 +689,20 @@ function AccountingReportContent() {
         ];
         const productColumns: ColumnDef<AccountProductItem>[] = [
           {
+            key: 'docDate',
+            header: 'วันที่',
+            sortable: true,
+            align: 'center',
+            render: (item) => formatDate(item.docDate),
+          },
+          {
+            key: 'docNo',
+            header: 'เลขที่เอกสาร',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.docNo}</span>,
+          },
+          {
             key: 'itemCode',
             header: 'รหัสสินค้า',
             sortable: true,
@@ -646,55 +714,62 @@ function AccountingReportContent() {
             header: 'ชื่อสินค้า',
             sortable: true,
             align: 'left',
-          },
-          {
-            key: 'categoryName',
-            header: 'หมวดสินค้า',
-            sortable: true,
-            align: 'left',
             render: (item) => (
-              <span className="px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
-                {item.categoryName}
+              <span className={item.itemName === 'ไม่มีรายการสินค้า' ? 'text-muted-foreground italic' : ''}>
+                {item.itemName}
               </span>
             ),
           },
           {
-            key: 'orderCount',
-            header: 'ออเดอร์ (ต่อสินค้า)',
+            key: 'qty',
+            header: 'จำนวน',
             sortable: true,
             align: 'right',
-            render: (item) => formatNumber(item.orderCount),
+            render: (item) => item.qty > 0 ? (item.qty).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-',
           },
           {
-            key: 'totalQtySold',
-            header: 'จำนวนขาย',
+            key: 'price',
+            header: 'ราคา',
             sortable: true,
             align: 'right',
-            render: (item) => formatNumber(item.totalQtySold),
+            render: (item) => item.price > 0 ? formatCurrency(item.price) : '-',
           },
           {
-            key: 'totalSales',
-            header: 'ยอดขาย',
+            key: 'debit',
+            header: 'เดบิต',
             sortable: true,
             align: 'right',
             render: (item) => (
-              <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span>
+              <span className="font-medium text-orange-600">
+                {item.debit > 0 ? `฿${formatCurrency(item.debit)}` : '-'}
+              </span>
             ),
           },
           {
-            key: 'totalProfit',
-            header: 'กำไร',
+            key: 'credit',
+            header: 'เครดิต',
             sortable: true,
             align: 'right',
             render: (item) => (
-              <span className={item.totalProfit >= 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
-                ฿{formatCurrency(item.totalProfit)}
+              <span className="font-medium text-blue-600">
+                {item.credit > 0 ? `฿${formatCurrency(item.credit)}` : '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดสุทธิ',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={`font-semibold ${item.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ฿{formatCurrency(Math.abs(item.amount))}
               </span>
             ),
           },
         ];
 
-        // Dropdown selected → show products for that account
+        // Dropdown selected → show documents for that account
         if (selectedAccountCode) {
           return productsLoading ? (
             <TableSkeleton rows={8} />
@@ -703,25 +778,54 @@ function AccountingReportContent() {
               data={accountProducts || []}
               columns={productColumns}
               itemsPerPage={15}
-              emptyMessage="ไม่พบสินค้าในผังบัญชีนี้"
-              defaultSortKey="totalSales"
+              emptyMessage="ไม่พบเอกสารในผังบัญชีนี้"
+              defaultSortKey="docDate"
               defaultSortOrder="desc"
-              keyExtractor={(item, index) => `${item.itemCode}-${index}`}
+              keyExtractor={(item, index) => `${item.docNo}-${item.itemCode}-${index}`}
               showSummary={true}
               summaryConfig={{
-                labelColSpan: 3,
+                labelColSpan: 4,
                 values: {
-                  orderCount: () => <span className="text-muted-foreground">-</span>,
-                  totalQtySold: (data) => <span className="font-medium">{formatNumber(data.reduce((s, i) => s + i.totalQtySold, 0))}</span>,
-                  totalSales: (data) => (
-                    <span className="font-bold text-green-600">
-                      ฿{formatCurrency(data.reduce((s, i) => s + i.totalSales, 0))}
-                    </span>
-                  ),
-                  totalProfit: (data) => {
-                    const total = data.reduce((s, i) => s + i.totalProfit, 0);
+                  qty: (data) => <span className="font-medium">{data.reduce((s, i) => s + i.qty, 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+                  price: () => <span className="text-muted-foreground">-</span>,
+                  debit: (data) => {
+                    const uniqueDocs = new Map();
+                    data.forEach(item => {
+                      if (!uniqueDocs.has(item.docNo)) {
+                        uniqueDocs.set(item.docNo, item.debit);
+                      }
+                    });
+                    const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
                     return (
-                      <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      <span className="font-bold text-orange-600">
+                        ฿{formatCurrency(total)}
+                      </span>
+                    );
+                  },
+                  credit: (data) => {
+                    const uniqueDocs = new Map();
+                    data.forEach(item => {
+                      if (!uniqueDocs.has(item.docNo)) {
+                        uniqueDocs.set(item.docNo, item.credit);
+                      }
+                    });
+                    const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                    return (
+                      <span className="font-bold text-blue-600">
+                        ฿{formatCurrency(total)}
+                      </span>
+                    );
+                  },
+                  amount: (data) => {
+                    const uniqueDocs = new Map();
+                    data.forEach(item => {
+                      if (!uniqueDocs.has(item.docNo)) {
+                        uniqueDocs.set(item.docNo, item.amount);
+                      }
+                    });
+                    const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                    return (
+                      <span className="font-bold text-green-600">
                         ฿{formatCurrency(total)}
                       </span>
                     );
@@ -732,25 +836,139 @@ function AccountingReportContent() {
           );
         }
 
-        // ทั้งหมด → show accounts summary
+        // ทั้งหมด → show all details with account name
+        if (allRevenueLoading) {
+          return <TableSkeleton rows={15} />;
+        }
+
+        const allRevenueColumns: ColumnDef<AccountProductItem>[] = [
+          {
+            key: 'docDate',
+            header: 'วันที่',
+            sortable: true,
+            align: 'center',
+            render: (item) => formatDate(item.docDate),
+          },
+          {
+            key: 'docNo',
+            header: 'เลขที่เอกสาร',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.docNo}</span>,
+          },
+          {
+            key: 'accountName',
+            header: 'ผังบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <div className="flex flex-col">
+                <span className="font-medium text-sm">{item.accountName}</span>
+                <span className="font-mono text-xs text-muted-foreground">{item.accountCode}</span>
+              </div>
+            ),
+          },
+          {
+            key: 'itemCode',
+            header: 'รหัสสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.itemCode}</span>,
+          },
+          {
+            key: 'itemName',
+            header: 'ชื่อสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <span className={item.itemName === 'ไม่มีรายการสินค้า' ? 'text-muted-foreground italic' : ''}>
+                {item.itemName}
+              </span>
+            ),
+          },
+          {
+            key: 'qty',
+            header: 'จำนวน',
+            sortable: true,
+            align: 'right',
+            render: (item) => item.qty > 0 ? (item.qty).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-',
+          },
+          {
+            key: 'price',
+            header: 'ราคา',
+            sortable: true,
+            align: 'right',
+            render: (item) => item.price > 0 ? formatCurrency(item.price) : '-',
+          },
+          {
+            key: 'credit',
+            header: 'เครดิต',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className="font-medium text-blue-600">
+                {item.credit > 0 ? `฿${formatCurrency(item.credit)}` : '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดสุทธิ',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={`font-semibold ${item.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ฿{formatCurrency(Math.abs(item.amount))}
+              </span>
+            ),
+          },
+        ];
+
         return (
           <PaginatedTable
-            data={revenueBreakdown}
-            columns={revenueListColumns}
-            itemsPerPage={15}
+            data={allRevenueDetails || []}
+            columns={allRevenueColumns}
+            itemsPerPage={20}
             emptyMessage="ไม่มีข้อมูลรายได้"
-            defaultSortKey="amount"
+            defaultSortKey="docDate"
             defaultSortOrder="desc"
-            keyExtractor={(item: CategoryBreakdown, index: number) => `${item.accountGroup}-${index}`}
+            keyExtractor={(item, index) => `${item.docNo}-${item.accountCode || 'na'}-${item.itemCode}-${index}`}
             showSummary={true}
             summaryConfig={{
-              labelColSpan: 1,
+              labelColSpan: 5,
               values: {
-                amount: (data) => (
-                  <span className="font-bold text-green-600">
-                    ฿{formatCurrency(data.reduce((s, i) => s + i.amount, 0))}
-                  </span>
-                ),
+                qty: (data) => <span className="font-medium">{data.reduce((s, i) => s + i.qty, 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+                price: () => <span className="text-muted-foreground">-</span>,
+                credit: (data) => {
+                  const uniqueDocs = new Map();
+                  data.forEach(item => {
+                    const key = `${item.docNo}-${item.accountCode || 'na'}`;
+                    if (!uniqueDocs.has(key)) {
+                      uniqueDocs.set(key, item.credit);
+                    }
+                  });
+                  const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum+ val, 0);
+                  return (
+                    <span className="font-bold text-blue-600">
+                      ฿{formatCurrency(total)}
+                    </span>
+                  );
+                },
+                amount: (data) => {
+                  const uniqueDocs = new Map();
+                  data.forEach(item => {
+                    const key = `${item.docNo}-${item.accountCode || 'na'}`;
+                    if (!uniqueDocs.has(key)) {
+                      uniqueDocs.set(key, item.amount);
+                    }
+                  });
+                  const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                  return (
+                    <span className="font-bold text-green-600">
+                      ฿{formatCurrency(total)}
+                    </span>
+                  );
+                },
               },
             }}
           />
@@ -798,6 +1016,20 @@ function AccountingReportContent() {
         ];
         const expenseProductColumns: ColumnDef<AccountProductItem>[] = [
           {
+            key: 'docDate',
+            header: 'วันที่',
+            sortable: true,
+            align: 'center',
+            render: (item) => formatDate(item.docDate),
+          },
+          {
+            key: 'docNo',
+            header: 'เลขที่เอกสาร',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.docNo}</span>,
+          },
+          {
             key: 'itemCode',
             header: 'รหัสสินค้า',
             sortable: true,
@@ -809,55 +1041,62 @@ function AccountingReportContent() {
             header: 'ชื่อสินค้า',
             sortable: true,
             align: 'left',
-          },
-          {
-            key: 'categoryName',
-            header: 'หมวดสินค้า',
-            sortable: true,
-            align: 'left',
             render: (item) => (
-              <span className="px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
-                {item.categoryName}
+              <span className={item.itemName === 'ไม่มีรายการสินค้า' ? 'text-muted-foreground italic' : ''}>
+                {item.itemName}
               </span>
             ),
           },
           {
-            key: 'orderCount',
-            header: 'ออเดอร์ (ต่อสินค้า)',
+            key: 'qty',
+            header: 'จำนวน',
             sortable: true,
             align: 'right',
-            render: (item) => formatNumber(item.orderCount),
+            render: (item) => item.qty > 0 ? (item.qty).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-',
           },
           {
-            key: 'totalQtySold',
-            header: 'จำนวนขาย',
+            key: 'price',
+            header: 'ราคา',
             sortable: true,
             align: 'right',
-            render: (item) => formatNumber(item.totalQtySold),
+            render: (item) => item.price > 0 ? formatCurrency(item.price) : '-',
           },
           {
-            key: 'totalSales',
-            header: 'ยอดขาย',
+            key: 'debit',
+            header: 'เดบิต',
             sortable: true,
             align: 'right',
             render: (item) => (
-              <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span>
+              <span className="font-medium text-orange-600">
+                {item.debit > 0 ? `฿${formatCurrency(item.debit)}` : '-'}
+              </span>
             ),
           },
           {
-            key: 'totalProfit',
-            header: 'กำไร',
+            key: 'credit',
+            header: 'เครดิต',
             sortable: true,
             align: 'right',
             render: (item) => (
-              <span className={item.totalProfit >= 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
-                ฿{formatCurrency(item.totalProfit)}
+              <span className="font-medium text-blue-600">
+                {item.credit > 0 ? `฿${formatCurrency(item.credit)}` : '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดสุทธิ',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={`font-semibold ${item.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ฿{formatCurrency(Math.abs(item.amount))}
               </span>
             ),
           },
         ];
 
-        // Dropdown selected → show products for that account
+        // Dropdown selected → show documents for that account
         if (selectedAccountCode) {
           return productsLoading ? (
             <TableSkeleton rows={8} />
@@ -866,54 +1105,170 @@ function AccountingReportContent() {
               data={accountProducts || []}
               columns={expenseProductColumns}
               itemsPerPage={15}
-              emptyMessage="ไม่พบสินค้าในผังบัญชีนี้"
-              defaultSortKey="totalSales"
+              emptyMessage="ไม่พบเอกสารในผังบัญชีนี้"
+              defaultSortKey="docDate"
               defaultSortOrder="desc"
-              keyExtractor={(item, index) => `${item.itemCode}-${index}`}
+              keyExtractor={(item, index) => `${item.docNo}-${item.itemCode}-${index}`}
               showSummary={true}
               summaryConfig={{
-                labelColSpan: 3,
+                labelColSpan: 4,
                 values: {
-                  orderCount: () => <span className="text-muted-foreground">-</span>,
-                  totalQtySold: (data) => <span className="font-medium">{formatNumber(data.reduce((s, i) => s + i.totalQtySold, 0))}</span>,
-                  totalSales: (data) => (
-                    <span className="font-bold text-green-600">
-                      ฿{formatCurrency(data.reduce((s, i) => s + i.totalSales, 0))}
+                  qty: (data) => <span className="font-medium">{data.reduce((s, i) => s + i.qty, 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+                  price: () => <span className="text-muted-foreground">-</span>,
+                  debit: (data) => (
+                    <span className="font-bold text-orange-600">
+                      ฿{formatCurrency(data.reduce((s, i) => s + i.debit, 0))}
                     </span>
                   ),
-                  totalProfit: (data) => {
-                    const total = data.reduce((s, i) => s + i.totalProfit, 0);
-                    return (
-                      <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                        ฿{formatCurrency(total)}
-                      </span>
-                    );
-                  },
+                  credit: (data) => (
+                    <span className="font-bold text-blue-600">
+                      ฿{formatCurrency(data.reduce((s, i) => s + i.credit, 0))}
+                    </span>
+                  ),
+                  amount: (data) => (
+                    <span className="font-bold text-red-600">
+                      ฿{formatCurrency(Math.abs(data.reduce((s, i) => s + i.amount, 0)))}
+                    </span>
+                  ),
                 },
               }}
             />
           );
         }
 
-        // ทั้งหมด → show expense account summary
+        // ทั้งหมด → show all expense details with account name
+        if (allExpenseLoading) {
+          return <TableSkeleton rows={15} />;
+        }
+
+        const allExpenseColumns: ColumnDef<AccountProductItem>[] = [
+          {
+            key: 'docDate',
+            header: 'วันที่',
+            sortable: true,
+            align: 'center',
+            render: (item) => formatDate(item.docDate),
+          },
+          {
+            key: 'docNo',
+            header: 'เลขที่เอกสาร',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.docNo}</span>,
+          },
+          {
+            key: 'accountName',
+            header: 'ผังบัญชี',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <div className="flex flex-col">
+                <span className="font-medium text-sm">{item.accountName}</span>
+                <span className="font-mono text-xs text-muted-foreground">{item.accountCode}</span>
+              </div>
+            ),
+          },
+          {
+            key: 'itemCode',
+            header: 'รหัสสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.itemCode}</span>,
+          },
+          {
+            key: 'itemName',
+            header: 'ชื่อสินค้า',
+            sortable: true,
+            align: 'left',
+            render: (item) => (
+              <span className={item.itemName === 'ไม่มีรายการสินค้า' ? 'text-muted-foreground italic' : ''}>
+                {item.itemName}
+              </span>
+            ),
+          },
+          {
+            key: 'qty',
+            header: 'จำนวน',
+            sortable: true,
+            align: 'right',
+            render: (item) => item.qty > 0 ? (item.qty).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-',
+          },
+          {
+            key: 'price',
+            header: 'ราคา',
+            sortable: true,
+            align: 'right',
+            render: (item) => item.price > 0 ? formatCurrency(item.price) : '-',
+          },
+          {
+            key: 'debit',
+            header: 'เดบิต',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className="font-medium text-orange-600">
+                {item.debit > 0 ? `฿${formatCurrency(item.debit)}` : '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดสุทธิ',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={`font-semibold ${item.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ฿{formatCurrency(Math.abs(item.amount))}
+              </span>
+            ),
+          },
+        ];
+
         return (
           <PaginatedTable
-            data={expenseBreakdown}
-            columns={expenseListColumns}
-            itemsPerPage={15}
+            data={allExpenseDetails || []}
+            columns={allExpenseColumns}
+            itemsPerPage={20}
             emptyMessage="ไม่มีข้อมูลค่าใช้จ่าย"
-            defaultSortKey="amount"
+            defaultSortKey="docDate"
             defaultSortOrder="desc"
-            keyExtractor={(item: CategoryBreakdown, index: number) => `${item.accountGroup}-${index}`}
+            keyExtractor={(item, index) => `${item.docNo}-${item.accountCode || 'na'}-${item.itemCode}-${index}`}
             showSummary={true}
             summaryConfig={{
-              labelColSpan: 1,
+              labelColSpan: 5,
               values: {
-                amount: (data) => (
-                  <span className="font-bold text-red-600">
-                    ฿{formatCurrency(data.reduce((s, i) => s + i.amount, 0))}
-                  </span>
-                ),
+                qty: (data) => <span className="font-medium">{data.reduce((s, i) => s + i.qty, 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+                price: () => <span className="text-muted-foreground">-</span>,
+                debit: (data) => {
+                  const uniqueDocs = new Map();
+                  data.forEach(item => {
+                    const key = `${item.docNo}-${item.accountCode || 'na'}`;
+                    if (!uniqueDocs.has(key)) {
+                      uniqueDocs.set(key, item.debit);
+                    }
+                  });
+                  const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                  return (
+                    <span className="font-bold text-orange-600">
+                      ฿{formatCurrency(total)}
+                    </span>
+                  );
+                },
+                amount: (data) => {
+                  const uniqueDocs = new Map();
+                  data.forEach(item => {
+                    const key = `${item.docNo}-${item.accountCode}`;
+                    if (!uniqueDocs.has(key)) {
+                      uniqueDocs.set(key, item.amount);
+                    }
+                  });
+                  const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                  return (
+                    <span className="font-bold text-red-600">
+                      ฿{formatCurrency(Math.abs(total))}
+                    </span>
+                  );
+                },
               },
             }}
           />
@@ -981,6 +1336,20 @@ function AccountingReportContent() {
         ];
         const productColumns: import('@/components/PaginatedTable').ColumnDef<AccountProductItem>[] = [
           {
+            key: 'docDate',
+            header: 'วันที่',
+            sortable: true,
+            align: 'center',
+            render: (item) => formatDate(item.docDate),
+          },
+          {
+            key: 'docNo',
+            header: 'เลขที่เอกสาร',
+            sortable: true,
+            align: 'left',
+            render: (item) => <span className="font-mono text-xs">{item.docNo}</span>,
+          },
+          {
             key: 'itemCode',
             header: 'รหัสสินค้า',
             sortable: true,
@@ -992,47 +1361,56 @@ function AccountingReportContent() {
             header: 'ชื่อสินค้า',
             sortable: true,
             align: 'left',
-          },
-          {
-            key: 'categoryName',
-            header: 'หมวดสินค้า',
-            sortable: true,
-            align: 'left',
             render: (item) => (
-              <span className="px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
-                {item.categoryName}
+              <span className={item.itemName === 'ไม่มีรายการสินค้า' ? 'text-muted-foreground italic' : ''}>
+                {item.itemName}
               </span>
             ),
           },
           {
-            key: 'orderCount',
-            header: 'ออเดอร์',
-            sortable: true,
-            align: 'right',
-            render: (item) => formatNumber(item.orderCount),
-          },
-          {
-            key: 'totalQtySold',
+            key: 'qty',
             header: 'จำนวน',
             sortable: true,
             align: 'right',
-            render: (item) => formatNumber(item.totalQtySold),
+            render: (item) => item.qty > 0 ? (item.qty).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-',
           },
           {
-            key: 'totalSales',
-            header: 'ยอดขาย',
+            key: 'price',
+            header: 'ราคา',
             sortable: true,
             align: 'right',
-            render: (item) => <span className="text-green-600 font-medium">฿{formatCurrency(item.totalSales)}</span>,
+            render: (item) => item.price > 0 ? formatCurrency(item.price) : '-',
           },
           {
-            key: 'totalProfit',
-            header: 'กำไร',
+            key: 'debit',
+            header: 'เดบิต',
             sortable: true,
             align: 'right',
             render: (item) => (
-              <span className={item.totalProfit >= 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
-                ฿{formatCurrency(item.totalProfit)}
+              <span className="font-medium text-orange-600">
+                {item.debit > 0 ? `฿${formatCurrency(item.debit)}` : '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'credit',
+            header: 'เครดิต',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className="font-medium text-blue-600">
+                {item.credit > 0 ? `฿${formatCurrency(item.credit)}` : '-'}
+              </span>
+            ),
+          },
+          {
+            key: 'amount',
+            header: 'ยอดสุทธิ',
+            sortable: true,
+            align: 'right',
+            render: (item) => (
+              <span className={`font-semibold ${item.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ฿{formatCurrency(Math.abs(item.amount))}
               </span>
             ),
           },
@@ -1104,23 +1482,54 @@ function AccountingReportContent() {
                     data={accountProducts || []}
                     columns={productColumns}
                     itemsPerPage={15}
-                    emptyMessage="ไม่พบสินค้าในผังบัญชีนี้"
-                    defaultSortKey="totalSales"
+                    emptyMessage="ไม่พบเอกสารในผังบัญชีนี้"
+                    defaultSortKey="docDate"
                     defaultSortOrder="desc"
-                    keyExtractor={(item, index) => `${item.itemCode}-${index}`}
+                    keyExtractor={(item, index) => `${item.docNo}-${item.itemCode}-${index}`}
                     showSummary={true}
                     summaryConfig={{
-                      labelColSpan: 5,
+                      labelColSpan: 4,
                       values: {
-                        totalSales: (data) => (
-                          <span className="font-bold text-green-600">
-                            ฿{formatCurrency(data.reduce((s, i) => s + i.totalSales, 0))}
-                          </span>
-                        ),
-                        totalProfit: (data) => {
-                          const total = data.reduce((s, i) => s + i.totalProfit, 0);
+                        qty: (data) => <span className="font-medium">{data.reduce((s, i) => s + i.qty, 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>,
+                        price: () => <span className="text-muted-foreground">-</span>,
+                        debit: (data) => {
+                          const uniqueDocs = new Map();
+                          data.forEach(item => {
+                            if (!uniqueDocs.has(item.docNo)) {
+                              uniqueDocs.set(item.docNo, item.debit);
+                            }
+                          });
+                          const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
                           return (
-                            <span className={`font-bold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                            <span className="font-bold text-orange-600">
+                              ฿{formatCurrency(total)}
+                            </span>
+                          );
+                        },
+                        credit: (data) => {
+                          const uniqueDocs = new Map();
+                          data.forEach(item => {
+                            if (!uniqueDocs.has(item.docNo)) {
+                              uniqueDocs.set(item.docNo, item.credit);
+                            }
+                          });
+                          const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                          return (
+                            <span className="font-bold text-blue-600">
+                              ฿{formatCurrency(total)}
+                            </span>
+                          );
+                        },
+                        amount: (data) => {
+                          const uniqueDocs = new Map();
+                          data.forEach(item => {
+                            if (!uniqueDocs.has(item.docNo)) {
+                              uniqueDocs.set(item.docNo, item.amount);
+                            }
+                          });
+                          const total = Array.from(uniqueDocs.values()).reduce((sum, val) => sum + val, 0);
+                          return (
+                            <span className="font-bold text-green-600">
                               ฿{formatCurrency(total)}
                             </span>
                           );
@@ -1140,23 +1549,211 @@ function AccountingReportContent() {
   // Get export function based on report type
   const getExportFunction = () => {
     switch (selectedReport) {
-      case 'profit-loss':
-        return () => exportStyledReport({
-          data: profitLossData,
-          headers: { month: 'เดือน', revenue: 'รายได้', expenses: 'ค่าใช้จ่าย', netProfit: 'กำไรสุทธิ' },
-          filename: 'รายงานงบกำไรขาดทุน',
-          sheetName: 'Profit & Loss',
-          title: 'รายงานงบกำไรขาดทุน',
-          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['revenue', 'expenses', 'netProfit'],
-          summaryConfig: {
-            columns: {
-              revenue: 'sum',
-              expenses: 'sum',
-              netProfit: 'sum',
-            }
+      case 'profit-loss': {
+        // Period filtering helpers (same logic as ProfitLossDetailTable)
+        const getPeriodKey = (monthStr: string) => {
+          if (plPeriodType === 'yearly') return monthStr.substring(0, 4);
+          return monthStr;
+        };
+        const getQuarterStr = (monthStr: string) => {
+          const y = monthStr.substring(0, 4);
+          const m = parseInt(monthStr.substring(5, 7), 10);
+          const q = Math.ceil(m / 3);
+          return `${y}-Q${q}`;
+        };
+        const isKeyInPeriodFilter = (pKey: string, filterStr: string) => {
+          if (plPeriodType === 'quarterly') {
+            return pKey.includes('-') && getQuarterStr(pKey) === filterStr;
           }
+          return pKey === filterStr;
+        };
+
+        // Get all available periods
+        const allAvailableKeys = Array.from(new Set(plDetailRows.map((r) => getPeriodKey(r.month)))).sort();
+
+        // Filter periods based on selection
+        let displayPeriods: string[] = [];
+        let periodsA: string[] = [];
+        let periodsB: string[] = [];
+
+        if (plViewMode === 'normal') {
+          if (plSelectedPeriods.length > 0) {
+            displayPeriods = allAvailableKeys.filter((p) =>
+              plSelectedPeriods.some((filter) => isKeyInPeriodFilter(p, filter))
+            );
+          } else {
+            displayPeriods = allAvailableKeys;
+          }
+        } else {
+          // comparison mode
+          if (plCompareA) {
+            periodsA = allAvailableKeys.filter((p) => isKeyInPeriodFilter(p, plCompareA));
+          }
+          if (plCompareB) {
+            periodsB = allAvailableKeys.filter((p) => isKeyInPeriodFilter(p, plCompareB));
+          }
+          displayPeriods = [...periodsA, ...periodsB];
+        }
+
+        const allMonthsExport = displayPeriods;
+        const empty = (m: string) => [m, ''] as [string, string];
+        
+        const buildPLRows = () => {
+          type Acc = { plGroup: string; accountCode: string; accountName: string; byMonth: Record<string, number> };
+          const map = new Map<string, Acc>();
+          for (const r of plDetailRows) {
+            const key = `${r.plGroup}__${r.accountCode}`;
+            const pKey = getPeriodKey(r.month);
+            if (!map.has(key)) map.set(key, { plGroup: r.plGroup, accountCode: r.accountCode, accountName: r.accountName, byMonth: {} });
+            const e = map.get(key)!;
+            e.byMonth[pKey] = (e.byMonth[pKey] || 0) + r.amount;
+          }
+          const income    = Array.from(map.values()).filter((a) => a.plGroup === 'INCOME').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          const cogs      = Array.from(map.values()).filter((a) => a.plGroup === 'COGS').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          const operating = Array.from(map.values()).filter((a) => a.plGroup === 'OPERATING').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          const other     = Array.from(map.values()).filter((a) => a.plGroup === 'OTHER_EXPENSE').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          
+          const sumMonth  = (accs: Acc[], m: string) => accs.reduce((s, a) => s + (a.byMonth[m] || 0), 0);
+          const sumForPeriods = (accs: Acc[], periods: string[]) => periods.reduce((sum, p) => sum + sumMonth(accs, p), 0);
+          const grandSum  = (accs: Acc[]) => sumForPeriods(accs, displayPeriods);
+          const diffAmount = (accs: Acc[]) => {
+            if (plViewMode !== 'comparison') return 0;
+            return sumForPeriods(accs, periodsB) - sumForPeriods(accs, periodsA);
+          };
+
+          const rows: Record<string, any>[] = [];
+          const blankRow = { accountCode: '', accountName: '', ...Object.fromEntries(allMonthsExport.map(empty)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) };
+          
+          // INCOME
+          rows.push({ accountCode: '', accountName: '── รายได้ ──', ...Object.fromEntries(allMonthsExport.map(empty)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+          for (const a of income) { 
+            const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+            const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+            rows.push({ 
+              accountCode: a.accountCode, 
+              accountName: a.accountName, 
+              ...Object.fromEntries(allMonthsExport.map((m) => [m, a.byMonth[m] || 0])), 
+              ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+            }); 
+          }
+          const revByM = Object.fromEntries(allMonthsExport.map((m) => [m, sumMonth(income, m)]));
+          const grandRev = plViewMode === 'normal' ? grandSum(income) : sumForPeriods(income, periodsA) + sumForPeriods(income, periodsB);
+          const diffRev = plViewMode === 'comparison' ? diffAmount(income) : undefined;
+          rows.push({ accountCode: '', accountName: 'รายได้รวม', ...revByM, ...(plViewMode === 'normal' ? { total: grandRev } : { totalSum: grandRev, diff: diffRev }) });
+          rows.push(blankRow);
+          
+          // COGS
+          rows.push({ accountCode: '', accountName: '── ต้นทุนขาย และหรือต้นทุนการให้บริการ ──', ...Object.fromEntries(allMonthsExport.map(empty)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+          for (const a of cogs) { 
+            const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+            const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+            rows.push({ 
+              accountCode: a.accountCode, 
+              accountName: a.accountName, 
+              ...Object.fromEntries(allMonthsExport.map((m) => [m, a.byMonth[m] || 0])), 
+              ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+            }); 
+          }
+          const cogsByM = Object.fromEntries(allMonthsExport.map((m) => [m, sumMonth(cogs, m)]));
+          const grandCOGS = plViewMode === 'normal' ? grandSum(cogs) : sumForPeriods(cogs, periodsA) + sumForPeriods(cogs, periodsB);
+          const diffCOGS = plViewMode === 'comparison' ? diffAmount(cogs) : undefined;
+          rows.push({ accountCode: '', accountName: 'รวมต้นทุนขาย และหรือต้นทุนการให้บริการ', ...cogsByM, ...(plViewMode === 'normal' ? { total: grandCOGS } : { totalSum: grandCOGS, diff: diffCOGS }) });
+          rows.push(blankRow);
+          
+          // GROSS PROFIT
+          const grossByM = Object.fromEntries(allMonthsExport.map((m) => [m, (revByM[m] || 0) - (cogsByM[m] || 0)]));
+          const grandGross = plViewMode === 'normal' 
+            ? grandRev - grandCOGS
+            : (sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB)) + (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA));
+          const diffGross = plViewMode === 'comparison'
+            ? (sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB)) - (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA))
+            : undefined;
+          rows.push({ accountCode: '', accountName: 'กำไรขั้นต้น', ...grossByM, ...(plViewMode === 'normal' ? { total: grandGross } : { totalSum: grandGross, diff: diffGross }) });
+          rows.push(blankRow);
+          
+          // OPERATING
+          rows.push({ accountCode: '', accountName: '── ค่าใช้จ่ายในการดำเนินงาน ──', ...Object.fromEntries(allMonthsExport.map(empty)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+          for (const a of operating) { 
+            const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+            const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+            rows.push({ 
+              accountCode: a.accountCode, 
+              accountName: a.accountName, 
+              ...Object.fromEntries(allMonthsExport.map((m) => [m, a.byMonth[m] || 0])), 
+              ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+            }); 
+          }
+          const opByM = Object.fromEntries(allMonthsExport.map((m) => [m, sumMonth(operating, m)]));
+          const grandOp = plViewMode === 'normal' ? grandSum(operating) : sumForPeriods(operating, periodsA) + sumForPeriods(operating, periodsB);
+          const diffOp = plViewMode === 'comparison' ? diffAmount(operating) : undefined;
+          rows.push({ accountCode: '', accountName: 'รวมค่าใช้จ่ายในการดำเนินงาน', ...opByM, ...(plViewMode === 'normal' ? { total: grandOp } : { totalSum: grandOp, diff: diffOp }) });
+          rows.push(blankRow);
+          
+          // OTHER EXPENSE
+          let grandOther = 0;
+          let diffOther: number | undefined = undefined;
+          const otherByM: Record<string, number> = Object.fromEntries(allMonthsExport.map((m) => [m, 0]));
+          if (other.length > 0) {
+            rows.push({ accountCode: '', accountName: '── ค่าใช้จ่ายอื่น ──', ...Object.fromEntries(allMonthsExport.map(empty)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+            for (const a of other) { 
+              const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+              const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+              rows.push({ 
+                accountCode: a.accountCode, 
+                accountName: a.accountName, 
+                ...Object.fromEntries(allMonthsExport.map((m) => [m, a.byMonth[m] || 0])), 
+                ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+              }); 
+            }
+            allMonthsExport.forEach((m) => { otherByM[m] = sumMonth(other, m); });
+            grandOther = plViewMode === 'normal' ? grandSum(other) : sumForPeriods(other, periodsA) + sumForPeriods(other, periodsB);
+            diffOther = plViewMode === 'comparison' ? diffAmount(other) : undefined;
+            rows.push({ accountCode: '', accountName: 'รวมค่าใช้จ่ายอื่น', ...otherByM, ...(plViewMode === 'normal' ? { total: grandOther } : { totalSum: grandOther, diff: diffOther }) });
+            rows.push(blankRow);
+          }
+          
+          // NET PROFIT
+          const netByM = Object.fromEntries(allMonthsExport.map((m) => [m, (grossByM[m] || 0) - (opByM[m] || 0) - (otherByM[m] || 0)]));
+          const grandNet = plViewMode === 'normal'
+            ? grandGross - grandOp - grandOther
+            : ((sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB) - sumForPeriods(operating, periodsB) - sumForPeriods(other, periodsB)) +
+               (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA) - sumForPeriods(operating, periodsA) - sumForPeriods(other, periodsA)));
+          const diffNet = plViewMode === 'comparison'
+            ? ((sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB) - sumForPeriods(operating, periodsB) - sumForPeriods(other, periodsB)) -
+               (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA) - sumForPeriods(operating, periodsA) - sumForPeriods(other, periodsA)))
+            : undefined;
+          rows.push({ accountCode: '', accountName: 'กำไร (ขาดทุน) สุทธิ', ...netByM, ...(plViewMode === 'normal' ? { total: grandNet } : { totalSum: grandNet, diff: diffNet }) });
+          return rows;
+        };
+        
+        const plExportRows = buildPLRows();
+        const baseHeaders: Record<string, string> = { 
+          accountCode: 'รหัสบัญชี', 
+          accountName: 'ผังบัญชี', 
+          ...Object.fromEntries(allMonthsExport.map((m) => [m, formatMonth(m)]))
+        };
+        const plHeaders = plViewMode === 'normal'
+          ? { ...baseHeaders, total: 'รวม' }
+          : { ...baseHeaders, totalSum: 'ผลรวม', diff: 'ผลต่าง' };
+        
+        const currencyCols = plViewMode === 'normal'
+          ? allMonthsExport.concat(['total'])
+          : allMonthsExport.concat(['totalSum', 'diff']);
+        
+        const subtitle = plViewMode === 'comparison' && plCompareA && plCompareB
+          ? withBranchSubtitle(`เปรียบเทียบ ${plCompareA} กับ ${plCompareB}`)
+          : withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`);
+        
+        return () => exportStyledReport({ 
+          data: plExportRows, 
+          headers: plHeaders, 
+          filename: 'รายงานงบกำไรขาดทุน', 
+          sheetName: 'Profit & Loss', 
+          title: 'รายงานงบกำไรขาดทุน', 
+          subtitle, 
+          currencyColumns: currencyCols 
         });
+      }
 
       case 'balance-sheet':
         return () => exportStyledReport({
@@ -1227,50 +1824,106 @@ function AccountingReportContent() {
         });
 
       case 'revenue-breakdown':
-        return () => exportStyledReport({
-          data: revenueBreakdown,
-          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดรายได้', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานรายได้ตามผังบัญชี',
-          sheetName: 'Revenue Breakdown',
-          title: 'รายงานรายได้ตามผังบัญชี',
-          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['amount'],
-          percentColumns: ['percentage'],
-          summaryConfig: { columns: { amount: 'sum' } }
-        });
+        return () => {
+          const dataToExport = selectedAccountCode ? (accountProducts || []) : (allRevenueDetails || []);
+          const filename = selectedAccountCode 
+            ? `รายงานรายได้-${selectedAccountCode}`
+            : 'รายงานรายได้ตามผังบัญชี-รายละเอียด';
+          const title = selectedAccountCode
+            ? `รายงานรายได้: ${selectedAccountCode}`
+            : 'รายงานรายได้ตามผังบัญชี (รายละเอียดทั้งหมด)';
+          
+          return exportStyledReport({
+            data: dataToExport,
+            headers: { 
+              docDate: 'วันที่', 
+              docNo: 'เลขที่เอกสาร', 
+              accountCode: 'รหัสบัญชี',
+              accountName: 'ผังบัญชี', 
+              itemCode: 'รหัสสินค้า', 
+              itemName: 'ชื่อสินค้า', 
+              qty: 'จำนวน', 
+              price: 'ราคา', 
+              credit: 'เครดิต', 
+              amount: 'ยอดสุทธิ' 
+            },
+            filename,
+            sheetName: 'Revenue Details',
+            title,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['qty'],
+            currencyColumns: ['price', 'credit', 'amount'],
+            summaryConfig: { 
+              columns: { 
+                qty: 'sum',
+                credit: 'sum',
+                amount: 'sum' 
+              } 
+            }
+          });
+        };
 
       case 'expense-breakdown':
-        return () => exportStyledReport({
-          data: expenseBreakdown,
-          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดค่าใช้จ่าย', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานค่าใช้จ่ายตามผังบัญชี',
-          sheetName: 'Expense Breakdown',
-          title: 'รายงานค่าใช้จ่ายตามผังบัญชี',
-          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['amount'],
-          percentColumns: ['percentage'],
-          summaryConfig: { columns: { amount: 'sum' } }
-        });
+        return () => {
+          const dataToExport = selectedAccountCode ? (accountProducts || []) : (allExpenseDetails || []);
+          const filename = selectedAccountCode 
+            ? `รายงานค่าใช้จ่าย-${selectedAccountCode}`
+            : 'รายงานค่าใช้จ่ายตามผังบัญชี-รายละเอียด';
+          const title = selectedAccountCode
+            ? `รายงานค่าใช้จ่าย: ${selectedAccountCode}`
+            : 'รายงานค่าใช้จ่ายตามผังบัญชี (รายละเอียดทั้งหมด)';
+          
+          return exportStyledReport({
+            data: dataToExport,
+            headers: { 
+              docDate: 'วันที่', 
+              docNo: 'เลขที่เอกสาร', 
+              accountCode: 'รหัสบัญชี',
+              accountName: 'ผังบัญชี', 
+              itemCode: 'รหัสสินค้า', 
+              itemName: 'ชื่อสินค้า', 
+              qty: 'จำนวน', 
+              price: 'ราคา', 
+              debit: 'เดบิต', 
+              amount: 'ยอดสุทธิ' 
+            },
+            filename,
+            sheetName: 'Expense Details',
+            title,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['qty'],
+            currencyColumns: ['price', 'debit', 'amount'],
+            summaryConfig: { 
+              columns: { 
+                qty: 'sum',
+                debit: 'sum',
+                amount: 'sum' 
+              } 
+            }
+          });
+        };
 
       case 'chart-of-accounts':
         if (!selectedAccountCode || !accountProducts?.length) return undefined;
         return () => exportStyledReport({
           data: accountProducts,
           headers: {
+            docDate: 'วันที่',
+            docNo: 'เลขที่เอกสาร',
             itemCode: 'รหัสสินค้า',
             itemName: 'ชื่อสินค้า',
             categoryName: 'หมวดสินค้า',
-            orderCount: 'จำนวนออเดอร์',
-            totalQtySold: 'จำนวนสินค้า',
+            unitCode: 'หน่วย',
+            qty: 'จำนวน',
+            price: 'ราคา',
             totalSales: 'ยอดขาย',
-            totalProfit: 'กำไร',
           },
           filename: `ยอดขายตามผังบัญชี-${selectedAccountCode}`,
           sheetName: 'Account Products',
           title: `ยอดขายตามผังบัญชี: ${selectedAccountCode}`,
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['totalSales', 'totalProfit'],
-          summaryConfig: { columns: { totalSales: 'sum', totalProfit: 'sum' } },
+          currencyColumns: ['price', 'totalSales'],
+          summaryConfig: { columns: { qty: 'sum', totalSales: 'sum' } },
         });
 
       default:
@@ -1280,22 +1933,210 @@ function AccountingReportContent() {
 
   const getExportPdfFunction = () => {
     switch (selectedReport) {
-      case 'profit-loss':
-        return () => exportStyledPdfReport({
-          data: profitLossData,
-          headers: { month: 'เดือน', revenue: 'รายได้', expenses: 'ค่าใช้จ่าย', netProfit: 'กำไรสุทธิ' },
-          filename: 'รายงานงบกำไรขาดทุน',
-          title: 'รายงานงบกำไรขาดทุน',
-          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['revenue', 'expenses', 'netProfit'],
-          summaryConfig: {
-            columns: {
-              revenue: 'sum',
-              expenses: 'sum',
-              netProfit: 'sum',
-            }
+      case 'profit-loss': {
+        // Period filtering helpers (same logic as ProfitLossDetailTable and Excel export)
+        const getPeriodKey = (monthStr: string) => {
+          if (plPeriodType === 'yearly') return monthStr.substring(0, 4);
+          return monthStr;
+        };
+        const getQuarterStr = (monthStr: string) => {
+          const y = monthStr.substring(0, 4);
+          const m = parseInt(monthStr.substring(5, 7), 10);
+          const q = Math.ceil(m / 3);
+          return `${y}-Q${q}`;
+        };
+        const isKeyInPeriodFilter = (pKey: string, filterStr: string) => {
+          if (plPeriodType === 'quarterly') {
+            return pKey.includes('-') && getQuarterStr(pKey) === filterStr;
           }
+          return pKey === filterStr;
+        };
+
+        // Get all available periods
+        const allAvailableKeys = Array.from(new Set(plDetailRows.map((r) => getPeriodKey(r.month)))).sort();
+
+        // Filter periods based on selection
+        let displayPeriods: string[] = [];
+        let periodsA: string[] = [];
+        let periodsB: string[] = [];
+
+        if (plViewMode === 'normal') {
+          if (plSelectedPeriods.length > 0) {
+            displayPeriods = allAvailableKeys.filter((p) =>
+              plSelectedPeriods.some((filter) => isKeyInPeriodFilter(p, filter))
+            );
+          } else {
+            displayPeriods = allAvailableKeys;
+          }
+        } else {
+          // comparison mode
+          if (plCompareA) {
+            periodsA = allAvailableKeys.filter((p) => isKeyInPeriodFilter(p, plCompareA));
+          }
+          if (plCompareB) {
+            periodsB = allAvailableKeys.filter((p) => isKeyInPeriodFilter(p, plCompareB));
+          }
+          displayPeriods = [...periodsA, ...periodsB];
+        }
+
+        const allMonthsExportPdf = displayPeriods;
+        const empty2 = (m: string) => [m, ''] as [string, string];
+        
+        const buildPLRowsPdf = () => {
+          type Acc = { plGroup: string; accountCode: string; accountName: string; byMonth: Record<string, number> };
+          const map = new Map<string, Acc>();
+          for (const r of plDetailRows) {
+            const key = `${r.plGroup}__${r.accountCode}`;
+            const pKey = getPeriodKey(r.month);
+            if (!map.has(key)) map.set(key, { plGroup: r.plGroup, accountCode: r.accountCode, accountName: r.accountName, byMonth: {} });
+            const e = map.get(key)!;
+            e.byMonth[pKey] = (e.byMonth[pKey] || 0) + r.amount;
+          }
+          const income    = Array.from(map.values()).filter((a) => a.plGroup === 'INCOME').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          const cogs      = Array.from(map.values()).filter((a) => a.plGroup === 'COGS').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          const operating = Array.from(map.values()).filter((a) => a.plGroup === 'OPERATING').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          const other     = Array.from(map.values()).filter((a) => a.plGroup === 'OTHER_EXPENSE').sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+          
+          const sumMonth  = (accs: Acc[], m: string) => accs.reduce((s, a) => s + (a.byMonth[m] || 0), 0);
+          const sumForPeriods = (accs: Acc[], periods: string[]) => periods.reduce((sum, p) => sum + sumMonth(accs, p), 0);
+          const grandSum  = (accs: Acc[]) => sumForPeriods(accs, displayPeriods);
+          const diffAmount = (accs: Acc[]) => {
+            if (plViewMode !== 'comparison') return 0;
+            return sumForPeriods(accs, periodsB) - sumForPeriods(accs, periodsA);
+          };
+
+          const rows: Record<string, any>[] = [];
+          const blankRow = { accountCode: '', accountName: '', ...Object.fromEntries(allMonthsExportPdf.map(empty2)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) };
+          
+          // INCOME
+          rows.push({ accountCode: '', accountName: '── รายได้ ──', ...Object.fromEntries(allMonthsExportPdf.map(empty2)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+          for (const a of income) { 
+            const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+            const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+            rows.push({ 
+              accountCode: a.accountCode, 
+              accountName: a.accountName, 
+              ...Object.fromEntries(allMonthsExportPdf.map((m) => [m, a.byMonth[m] || 0])), 
+              ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+            }); 
+          }
+          const revByM = Object.fromEntries(allMonthsExportPdf.map((m) => [m, sumMonth(income, m)]));
+          const grandRev = plViewMode === 'normal' ? grandSum(income) : sumForPeriods(income, periodsA) + sumForPeriods(income, periodsB);
+          const diffRev = plViewMode === 'comparison' ? diffAmount(income) : undefined;
+          rows.push({ accountCode: '', accountName: 'รายได้รวม', ...revByM, ...(plViewMode === 'normal' ? { total: grandRev } : { totalSum: grandRev, diff: diffRev }) });
+          rows.push(blankRow);
+          
+          // COGS
+          rows.push({ accountCode: '', accountName: '── ต้นทุนขาย และหรือต้นทุนการให้บริการ ──', ...Object.fromEntries(allMonthsExportPdf.map(empty2)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+          for (const a of cogs) { 
+            const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+            const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+            rows.push({ 
+              accountCode: a.accountCode, 
+              accountName: a.accountName, 
+              ...Object.fromEntries(allMonthsExportPdf.map((m) => [m, a.byMonth[m] || 0])), 
+              ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+            }); 
+          }
+          const cogsByM = Object.fromEntries(allMonthsExportPdf.map((m) => [m, sumMonth(cogs, m)]));
+          const grandCOGS = plViewMode === 'normal' ? grandSum(cogs) : sumForPeriods(cogs, periodsA) + sumForPeriods(cogs, periodsB);
+          const diffCOGS = plViewMode === 'comparison' ? diffAmount(cogs) : undefined;
+          rows.push({ accountCode: '', accountName: 'รวมต้นทุนขาย และหรือต้นทุนการให้บริการ', ...cogsByM, ...(plViewMode === 'normal' ? { total: grandCOGS } : { totalSum: grandCOGS, diff: diffCOGS }) });
+          rows.push(blankRow);
+          
+          // GROSS PROFIT
+          const grossByM = Object.fromEntries(allMonthsExportPdf.map((m) => [m, (revByM[m] || 0) - (cogsByM[m] || 0)]));
+          const grandGross = plViewMode === 'normal' 
+            ? grandRev - grandCOGS
+            : (sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB)) + (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA));
+          const diffGross = plViewMode === 'comparison'
+            ? (sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB)) - (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA))
+            : undefined;
+          rows.push({ accountCode: '', accountName: 'กำไรขั้นต้น', ...grossByM, ...(plViewMode === 'normal' ? { total: grandGross } : { totalSum: grandGross, diff: diffGross }) });
+          rows.push(blankRow);
+          
+          // OPERATING
+          rows.push({ accountCode: '', accountName: '── ค่าใช้จ่ายในการดำเนินงาน ──', ...Object.fromEntries(allMonthsExportPdf.map(empty2)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+          for (const a of operating) { 
+            const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+            const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+            rows.push({ 
+              accountCode: a.accountCode, 
+              accountName: a.accountName, 
+              ...Object.fromEntries(allMonthsExportPdf.map((m) => [m, a.byMonth[m] || 0])), 
+              ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+            }); 
+          }
+          const opByM = Object.fromEntries(allMonthsExportPdf.map((m) => [m, sumMonth(operating, m)]));
+          const grandOp = plViewMode === 'normal' ? grandSum(operating) : sumForPeriods(operating, periodsA) + sumForPeriods(operating, periodsB);
+          const diffOp = plViewMode === 'comparison' ? diffAmount(operating) : undefined;
+          rows.push({ accountCode: '', accountName: 'รวมค่าใช้จ่ายในการดำเนินงาน', ...opByM, ...(plViewMode === 'normal' ? { total: grandOp } : { totalSum: grandOp, diff: diffOp }) });
+          rows.push(blankRow);
+          
+          // OTHER EXPENSE
+          let grandOther = 0;
+          let diffOther: number | undefined = undefined;
+          const otherByM: Record<string, number> = Object.fromEntries(allMonthsExportPdf.map((m) => [m, 0]));
+          if (other.length > 0) {
+            rows.push({ accountCode: '', accountName: '── ค่าใช้จ่ายอื่น ──', ...Object.fromEntries(allMonthsExportPdf.map(empty2)), ...(plViewMode === 'normal' ? { total: '' } : { totalSum: '', diff: '' }) });
+            for (const a of other) { 
+              const t = plViewMode === 'normal' ? grandSum([a]) : sumForPeriods([a], periodsA) + sumForPeriods([a], periodsB);
+              const d = plViewMode === 'comparison' ? diffAmount([a]) : undefined;
+              rows.push({ 
+                accountCode: a.accountCode, 
+                accountName: a.accountName, 
+                ...Object.fromEntries(allMonthsExportPdf.map((m) => [m, a.byMonth[m] || 0])), 
+                ...(plViewMode === 'normal' ? { total: t } : { totalSum: t, diff: d })
+              }); 
+            }
+            allMonthsExportPdf.forEach((m) => { otherByM[m] = sumMonth(other, m); });
+            grandOther = plViewMode === 'normal' ? grandSum(other) : sumForPeriods(other, periodsA) + sumForPeriods(other, periodsB);
+            diffOther = plViewMode === 'comparison' ? diffAmount(other) : undefined;
+            rows.push({ accountCode: '', accountName: 'รวมค่าใช้จ่ายอื่น', ...otherByM, ...(plViewMode === 'normal' ? { total: grandOther } : { totalSum: grandOther, diff: diffOther }) });
+            rows.push(blankRow);
+          }
+          
+          // NET PROFIT
+          const netByM = Object.fromEntries(allMonthsExportPdf.map((m) => [m, (grossByM[m] || 0) - (opByM[m] || 0) - (otherByM[m] || 0)]));
+          const grandNet = plViewMode === 'normal'
+            ? grandGross - grandOp - grandOther
+            : ((sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB) - sumForPeriods(operating, periodsB) - sumForPeriods(other, periodsB)) +
+               (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA) - sumForPeriods(operating, periodsA) - sumForPeriods(other, periodsA)));
+          const diffNet = plViewMode === 'comparison'
+            ? ((sumForPeriods(income, periodsB) - sumForPeriods(cogs, periodsB) - sumForPeriods(operating, periodsB) - sumForPeriods(other, periodsB)) -
+               (sumForPeriods(income, periodsA) - sumForPeriods(cogs, periodsA) - sumForPeriods(operating, periodsA) - sumForPeriods(other, periodsA)))
+            : undefined;
+          rows.push({ accountCode: '', accountName: 'กำไร (ขาดทุน) สุทธิ', ...netByM, ...(plViewMode === 'normal' ? { total: grandNet } : { totalSum: grandNet, diff: diffNet }) });
+          return rows;
+        };
+        
+        const plExportRowsPdf = buildPLRowsPdf();
+        const baseHeadersPdf: Record<string, string> = { 
+          accountCode: 'รหัสบัญชี', 
+          accountName: 'ผังบัญชี', 
+          ...Object.fromEntries(allMonthsExportPdf.map((m) => [m, formatMonth(m)]))
+        };
+        const plHeadersPdf = plViewMode === 'normal'
+          ? { ...baseHeadersPdf, total: 'รวม' }
+          : { ...baseHeadersPdf, totalSum: 'ผลรวม', diff: 'ผลต่าง' };
+        
+        const currencyColsPdf = plViewMode === 'normal'
+          ? allMonthsExportPdf.concat(['total'])
+          : allMonthsExportPdf.concat(['totalSum', 'diff']);
+        
+        const subtitlePdf = plViewMode === 'comparison' && plCompareA && plCompareB
+          ? withBranchSubtitle(`เปรียบเทียบ ${plCompareA} กับ ${plCompareB}`)
+          : withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`);
+        
+        return () => exportStyledPdfReport({ 
+          data: plExportRowsPdf, 
+          headers: plHeadersPdf, 
+          filename: 'รายงานงบกำไรขาดทุน', 
+          title: 'รายงานงบกำไรขาดทุน', 
+          subtitle: subtitlePdf, 
+          currencyColumns: currencyColsPdf 
         });
+      }
 
       case 'balance-sheet':
         return () => exportStyledPdfReport({
@@ -1362,47 +2203,103 @@ function AccountingReportContent() {
         });
 
       case 'revenue-breakdown':
-        return () => exportStyledPdfReport({
-          data: revenueBreakdown,
-          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดรายได้', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานรายได้ตามผังบัญชี',
-          title: 'รายงานรายได้ตามผังบัญชี',
-          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['amount'],
-          percentColumns: ['percentage'],
-          summaryConfig: { columns: { amount: 'sum' } }
-        });
+        return () => {
+          const dataToExport = selectedAccountCode ? (accountProducts || []) : (allRevenueDetails || []);
+          const filename = selectedAccountCode 
+            ? `รายงานรายได้-${selectedAccountCode}`
+            : 'รายงานรายได้ตามผังบัญชี-รายละเอียด';
+          const title = selectedAccountCode
+            ? `รายงานรายได้: ${selectedAccountCode}`
+            : 'รายงานรายได้ตามผังบัญชี (รายละเอียดทั้งหมด)';
+          
+          return exportStyledPdfReport({
+            data: dataToExport,
+            headers: { 
+              docDate: 'วันที่', 
+              docNo: 'เลขที่เอกสาร', 
+              accountCode: 'รหัสบัญชี',
+              accountName: 'ผังบัญชี', 
+              itemCode: 'รหัสสินค้า', 
+              itemName: 'ชื่อสินค้า', 
+              qty: 'จำนวน', 
+              price: 'ราคา', 
+              credit: 'เครดิต', 
+              amount: 'ยอดสุทธิ' 
+            },
+            filename,
+            title,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['qty'],
+            currencyColumns: ['price', 'credit', 'amount'],
+            summaryConfig: { 
+              columns: { 
+                qty: 'sum',
+                credit: 'sum',
+                amount: 'sum' 
+              } 
+            }
+          });
+        };
 
       case 'expense-breakdown':
-        return () => exportStyledPdfReport({
-          data: expenseBreakdown,
-          headers: { accountGroup: 'รหัสบัญชี', accountName: 'ชื่อบัญชี', amount: 'ยอดค่าใช้จ่าย', percentage: 'สัดส่วน (%)' },
-          filename: 'รายงานค่าใช้จ่ายตามผังบัญชี',
-          title: 'รายงานค่าใช้จ่ายตามผังบัญชี',
-          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['amount'],
-          percentColumns: ['percentage'],
-          summaryConfig: { columns: { amount: 'sum' } }
-        });
+        return () => {
+          const dataToExport = selectedAccountCode ? (accountProducts || []) : (allExpenseDetails || []);
+          const filename = selectedAccountCode 
+            ? `รายงานค่าใช้จ่าย-${selectedAccountCode}`
+            : 'รายงานค่าใช้จ่ายตามผังบัญชี-รายละเอียด';
+          const title = selectedAccountCode
+            ? `รายงานค่าใช้จ่าย: ${selectedAccountCode}`
+            : 'รายงานค่าใช้จ่ายตามผังบัญชี (รายละเอียดทั้งหมด)';
+          
+          return exportStyledPdfReport({
+            data: dataToExport,
+            headers: { 
+              docDate: 'วันที่', 
+              docNo: 'เลขที่เอกสาร', 
+              accountCode: 'รหัสบัญชี',
+              accountName: 'ผังบัญชี', 
+              itemCode: 'รหัสสินค้า', 
+              itemName: 'ชื่อสินค้า', 
+              qty: 'จำนวน', 
+              price: 'ราคา', 
+              debit: 'เดบิต', 
+              amount: 'ยอดสุทธิ' 
+            },
+            filename,
+            title,
+            subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+            numberColumns: ['qty'],
+            currencyColumns: ['price', 'debit', 'amount'],
+            summaryConfig: { 
+              columns: { 
+                qty: 'sum',
+                debit: 'sum',
+                amount: 'sum' 
+              } 
+            }
+          });
+        };
 
       case 'chart-of-accounts':
         if (!selectedAccountCode || !accountProducts?.length) return undefined;
         return () => exportStyledPdfReport({
           data: accountProducts,
           headers: {
+            docDate: 'วันที่',
+            docNo: 'เลขที่เอกสาร',
             itemCode: 'รหัสสินค้า',
             itemName: 'ชื่อสินค้า',
             categoryName: 'หมวดสินค้า',
-            orderCount: 'จำนวนออเดอร์',
-            totalQtySold: 'จำนวนสินค้า',
+            unitCode: 'หน่วย',
+            qty: 'จำนวน',
+            price: 'ราคา',
             totalSales: 'ยอดขาย',
-            totalProfit: 'กำไร',
           },
           filename: `ยอดขายตามผังบัญชี-${selectedAccountCode}`,
           title: `ยอดขายตามผังบัญชี: ${selectedAccountCode}`,
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          currencyColumns: ['totalSales', 'totalProfit'],
-          summaryConfig: { columns: { totalSales: 'sum', totalProfit: 'sum' } },
+          currencyColumns: ['price', 'totalSales'],
+          summaryConfig: { columns: { qty: 'sum', totalSales: 'sum' } },
         });
 
       default:
@@ -1429,7 +2326,7 @@ function AccountingReportContent() {
     >
       {/* Header with integrated controls */}
       <motion.div variants={itemVariants} className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">
               รายงานบัญชี
@@ -1441,15 +2338,122 @@ function AccountingReportContent() {
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
         </div>
 
-        {/* Compact Report Type Selector */}
-        <ReportTypeSelector
-          value={selectedReport}
-          options={reportOptions}
-          onChange={(value) => {
-            setSelectedReport(value as ReportType);
-            setSelectedAccountCode('');
-          }}
-        />
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          {/* Compact Report Type Selector */}
+          <ReportTypeSelector
+            value={selectedReport}
+            options={reportOptions}
+            onChange={(value) => {
+              setSelectedReport(value as ReportType);
+              setSelectedAccountCode('');
+            }}
+          />
+          {selectedReport === 'profit-loss' && (
+            <div className="flex flex-wrap items-center gap-3  ml-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">มุมมอง:</span>
+                <SearchableSelect
+                  value={plViewMode}
+                  onChange={(v) => { setPlViewMode(v as 'normal' | 'comparison'); }}
+                  options={[
+                    { value: 'normal', label: 'ปกติ' },
+                    { value: 'comparison', label: 'เปรียบเทียบ' },
+                  ]}
+                  className="w-[120px]"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">ความถี่:</span>
+                <SearchableSelect
+                  value={plPeriodType}
+                  onChange={(v) => { 
+                    setPlPeriodType(v as 'monthly' | 'quarterly' | 'yearly'); 
+                    setPlSelectedPeriods([]); 
+                    setPlCompareA(''); 
+                    setPlCompareB(''); 
+                  }}
+                  options={[
+                    { value: 'monthly', label: 'รายเดือน' },
+                    { value: 'quarterly', label: 'รายไตรมาส' },
+                    { value: 'yearly', label: 'รายปี' },
+                  ]}
+                  className="w-[120px]"
+                />
+              </div>
+              {plViewMode === 'normal' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">ช่วง:</span>
+                  <SearchableSelect
+                    value={plSelectedPeriods.join(',')}
+                    onChange={(v) => setPlSelectedPeriods(v ? [v] : [])}
+                    options={[
+                      { value: '', label: 'ทั้งหมด' },
+                      ...Array.from(new Set(plDetailRows.map(r => {
+                        const pKey = r.month;
+                        if (plPeriodType === 'yearly') return pKey.substring(0, 4);
+                        if (plPeriodType === 'quarterly') {
+                          const y = pKey.substring(0, 4);
+                          const m = parseInt(pKey.substring(5, 7), 10);
+                          const q = Math.ceil(m / 3);
+                          return `${y}-Q${q}`;
+                        }
+                        return pKey;
+                      }))).sort().map(p => ({
+                        value: p,
+                        label: plPeriodType === 'yearly' ? p : plPeriodType === 'quarterly' ? `ไตรมาส ${p.split('-Q')[1]}/${p.split('-Q')[0]}` : formatMonth(p)
+                      }))
+                    ]}
+                    className="w-[150px]"
+                  />
+                </div>
+              )}
+              {plViewMode === 'comparison' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">เทียบ:</span>
+                  <SearchableSelect
+                    value={plCompareA}
+                    onChange={setPlCompareA}
+                    options={[
+                      { value: '', label: 'เลือกช่วง Q1' },
+                      ...Array.from(new Set(plDetailRows.map(r => {
+                        const pKey = r.month;
+                        if (plPeriodType === 'yearly') return pKey.substring(0, 4);
+                        if (plPeriodType === 'quarterly') {
+                          const y = pKey.substring(0, 4);
+                          const m = parseInt(pKey.substring(5, 7), 10);
+                          const q = Math.ceil(m / 3);
+                          return `${y}-Q${q}`;
+                        }
+                        return pKey;
+                      }))).sort().map(p => ({ value: p, label: plPeriodType === 'yearly' ? p : plPeriodType === 'quarterly' ? `ไตรมาส ${p.split('-Q')[1]}/${p.split('-Q')[0]}` : formatMonth(p) }))
+                    ]}
+                    className="w-[140px]"
+                  />
+                  <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">กับ</span>
+                  <SearchableSelect
+                    value={plCompareB}
+                    onChange={setPlCompareB}
+                    options={[
+                      { value: '', label: 'เลือกช่วง Q2' },
+                      ...Array.from(new Set(plDetailRows.map(r => {
+                        const pKey = r.month;
+                        if (plPeriodType === 'yearly') return pKey.substring(0, 4);
+                        if (plPeriodType === 'quarterly') {
+                          const y = pKey.substring(0, 4);
+                          const m = parseInt(pKey.substring(5, 7), 10);
+                          const q = Math.ceil(m / 3);
+                          return `${y}-Q${q}`;
+                        }
+                        return pKey;
+                      }))).sort().map(p => ({ value: p, label: plPeriodType === 'yearly' ? p : plPeriodType === 'quarterly' ? `ไตรมาส ${p.split('-Q')[1]}/${p.split('-Q')[0]}` : formatMonth(p) }))
+                    ]}
+                    className="w-[140px]"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </motion.div>
 
       {/* Error Display */}
@@ -1464,49 +2468,48 @@ function AccountingReportContent() {
           description={currentReport?.description || ''}
           headerExtra={selectedReport === 'balance-sheet' ? (
             <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">ประเภท:</label>
-              <select
+              <label className="text-sm text-muted-foreground whitespace-nowrap">ประเภท:</label>
+              <SearchableSelect
                 value={balanceSheetTypeFilter}
-                onChange={(e) => setBalanceSheetTypeFilter(e.target.value)}
-                className="text-sm border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                <option value="all">ทั้งหมด</option>
-                <option value="สินทรัพย์">สินทรัพย์</option>
-                <option value="หนี้สิน">หนี้สิน</option>
-                <option value="ส่วนของผู้ถือหุ้น">ส่วนของผู้ถือหุ้น</option>
-              </select>
+                onChange={setBalanceSheetTypeFilter}
+                options={[
+                  { value: 'all', label: 'ทั้งหมด' },
+                  { value: 'สินทรัพย์', label: 'สินทรัพย์' },
+                  { value: 'หนี้สิน', label: 'หนี้สิน' },
+                  { value: 'ส่วนของผู้ถือหุ้น', label: 'ส่วนของผู้ถือหุ้น' },
+                ]}
+                className="w-full sm:w-[200px]"
+              />
             </div>
           ) : selectedReport === 'revenue-breakdown' ? (
             <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">ผังบัญชี:</label>
-              <select
+              <label className="text-sm text-muted-foreground whitespace-nowrap">ผังบัญชี:</label>
+              <SearchableSelect
                 value={selectedAccountCode || 'ALL'}
-                onChange={(e) => setSelectedAccountCode(e.target.value === 'ALL' ? '' : e.target.value)}
-                className="text-sm border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                <option value="ALL">ทั้งหมด</option>
-                {revenueBreakdown.map((acc) => (
-                  <option key={acc.accountGroup} value={acc.accountGroup}>
-                    {acc.accountName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setSelectedAccountCode(value === 'ALL' ? '' : value)}
+                options={[
+                  { value: 'ALL', label: 'ทั้งหมด' },
+                  ...revenueBreakdown
+                    .filter((acc, i, arr) => arr.findIndex((a) => a.accountGroup === acc.accountGroup) === i)
+                    .map((acc) => ({ value: acc.accountGroup, label: acc.accountName })),
+                ]}
+                className="w-full sm:w-[250px]"
+              />
             </div>
           ) : selectedReport === 'expense-breakdown' ? (
             <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">ผังบัญชี:</label>
-              <select
+              <label className="text-sm text-muted-foreground whitespace-nowrap">ผังบัญชี:</label>
+              <SearchableSelect
                 value={selectedAccountCode || 'ALL'}
-                onChange={(e) => setSelectedAccountCode(e.target.value === 'ALL' ? '' : e.target.value)}
-                className="text-sm border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                <option value="ALL">ทั้งหมด</option>
-                {expenseBreakdown.map((acc) => (
-                  <option key={acc.accountGroup} value={acc.accountGroup}>
-                    {acc.accountName}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setSelectedAccountCode(value === 'ALL' ? '' : value)}
+                options={[
+                  { value: 'ALL', label: 'ทั้งหมด' },
+                  ...expenseBreakdown
+                    .filter((acc, i, arr) => arr.findIndex((a) => a.accountGroup === acc.accountGroup) === i)
+                    .map((acc) => ({ value: acc.accountGroup, label: acc.accountName })),
+                ]}
+                className="w-full sm:w-[250px]"
+              />
             </div>
           ) : undefined}
           queryInfo={selectedReport === 'profit-loss' ? {

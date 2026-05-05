@@ -1,12 +1,14 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Search, BarChart3, LayoutDashboard } from 'lucide-react';
+import { Search, BarChart3, LayoutDashboard, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDateTime } from '@/lib/utils';
 import { BranchSwitcher } from './layout/BranchSwitcher';
 import { cn } from '@/lib/utils';
 import { useComparison } from '@/lib/ComparisonContext';
+import { useSidebar } from '@/lib/SidebarContext';
+import { NotificationPanel } from './NotificationPanel';
 
 const pageNames: Record<string, string> = {
     '/': 'ภาพรวมธุรกิจ',
@@ -14,14 +16,12 @@ const pageNames: Record<string, string> = {
     '/purchase': 'จัดซื้อ',
     '/sales': 'การขาย',
     '/inventory': 'คลังสินค้า',
-    '/customers': 'ลูกค้า',
     '/settings': 'ตั้งค่า',
     '/comparison': 'เปรียบเทียบกิจการ',
     '/accounting/comparison': 'เปรียบเทียบการเงิน',
     '/sales/comparison': 'เปรียบเทียบการขาย',
     '/purchase/comparison': 'เปรียบเทียบจัดซื้อ',
     '/inventory/comparison': 'เปรียบเทียบคลังสินค้า',
-    '/customers/comparison': 'เปรียบเทียบลูกค้า',
     '/reports/sales': 'รายงานการขาย',
     '/reports/purchase': 'รายงานการจัดซื้อ',
     '/reports/inventory': 'รายงานคลังสินค้า',
@@ -36,7 +36,6 @@ const comparisonRouteMap: Record<string, string> = {
     '/sales': '/sales/comparison',
     '/inventory': '/inventory/comparison',
     '/purchase': '/purchase/comparison',
-    '/customers': '/customers/comparison',
 };
 
 // Reverse: comparison page back to main page
@@ -46,7 +45,6 @@ const mainRouteFromComparison: Record<string, string> = {
     '/sales/comparison': '/sales',
     '/inventory/comparison': '/inventory',
     '/purchase/comparison': '/purchase',
-    '/customers/comparison': '/customers',
 };
 
 export function Header() {
@@ -54,6 +52,7 @@ export function Header() {
     const router = useRouter();
     const [currentTime, setCurrentTime] = useState(new Date());
     const { isComparisonMode, setComparisonMode, toggleComparisonMode } = useComparison();
+    const { openMobileSidebar, isCollapsed } = useSidebar();
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -92,36 +91,49 @@ export function Header() {
     };
 
     return (
-        <header className="h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]/80 backdrop-blur-md sticky top-0 z-40 px-8 flex items-center justify-between">
-            {/* Left: Breadcrumbs or Page Title */}
-            <div className="flex items-center gap-4">
+        <header className={cn(
+            "h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]/80 backdrop-blur-md",
+            "fixed top-0 right-0 z-40 px-4 lg:px-8 flex items-center justify-between",
+            "transition-all duration-300",
+            isCollapsed ? "left-0 lg:left-20" : "left-0 lg:left-72"
+        )}>
+            {/* Left: Hamburger (mobile) + Page Title */}
+            <div className="flex items-center gap-3">
+                {/* Hamburger button — mobile/tablet only */}
+                <button
+                    type="button"
+                    onClick={openMobileSidebar}
+                    className="lg:hidden p-2 rounded-lg hover:bg-[hsl(var(--accent))] transition-colors"
+                    aria-label="Open menu"
+                >
+                    <Menu className="h-5 w-5" />
+                </button>
+
                 <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))]">
-                    {/* <span className="hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors">Dashboard</span>
-                    <span className="mx-2">/</span>*/}
                     <span className="font-medium text-[hsl(var(--foreground))]">{pageName}</span>
                 </div>
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 lg:gap-4">
                 {/* Branch Switcher */}
                 <BranchSwitcher />
 
-                {/* Search */}
+                {/* Search — hidden on mobile */}
                 <div className="relative hidden md:block">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
                     <input
                         type="text"
                         placeholder="ค้นหา..."
-                        className="h-9 w-64 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-all"
+                        className="h-9 w-48 lg:w-64 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-all"
                     />
                 </div>
 
-                {/* Comparison Toggle Button */}
+                {/* Comparison Toggle Button — icon only on mobile */}
                 <button
                     onClick={handleToggleComparison}
                     className={cn(
-                        "inline-flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors",
+                        "inline-flex items-center gap-2 h-9 px-2 lg:px-4 rounded-lg border text-sm font-medium transition-colors",
                         (isComparisonView || (isReportsPage && isComparisonMode))
                             ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                             : "border-[hsl(var(--border))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--accent-foreground))]"
@@ -141,14 +153,7 @@ export function Header() {
                 </button>
 
                 {/* Notifications */}
-                <button
-                    type="button"
-                    className="relative rounded-lg bg-[var(--background)] p-2 text-[var(--foreground-muted)] hover:bg-[var(--primary-light)] hover:text-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 transition-all"
-                    aria-label="Notifications"
-                >
-                    <Bell className="h-5 w-5" />
-                    <span className="absolute right-1.5 top-1.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-                </button>
+                <NotificationPanel />
             </div>
         </header>
     );

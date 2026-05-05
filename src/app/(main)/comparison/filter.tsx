@@ -41,7 +41,6 @@ export function ComparisonFilter() {
             value={value}
             onChange={handleRangeChange}
             defaultKey="THIS_MONTH"
-            className="bg-card rounded-lg shadow-sm border border-border p-1"
         />
     );
 }

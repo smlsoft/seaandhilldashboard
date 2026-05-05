@@ -12,7 +12,10 @@ export default function ConditionalLayout({
   const pathname = usePathname();
   
   // Full-screen routes without MainLayout (Header/Sidebar)
-  const isFullScreen = pathname?.startsWith('/chat-bot');
+  const isFullScreen =
+    pathname?.startsWith('/chat-bot') ||
+    pathname?.startsWith('/login') ||
+    pathname?.startsWith('/unauthorized');
   
   if (isFullScreen) {
     return <>{children}</>;

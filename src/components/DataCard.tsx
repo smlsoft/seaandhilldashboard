@@ -246,8 +246,8 @@ export function DataCard({ title, children, className, action, description, quer
                     className
                 )}
             >
-                <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-6 py-4">
-                    <div className="flex-1">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[hsl(var(--border))] px-3 py-3 sm:px-6 sm:py-4">
+                    <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-[hsl(var(--foreground))] tracking-tight">
                             {title}
                         </h3>
@@ -257,10 +257,10 @@ export function DataCard({ title, children, className, action, description, quer
                             </p>
                         )}
                     </div>
-                    <div className="flex items-center gap-3 ml-4">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                         {/* Header Extra (e.g., filters) */}
                         {headerExtra && (
-                            <div className="flex items-center">
+                            <div className="flex items-center flex-wrap gap-2">
                                 {headerExtra}
                             </div>
                         )}
@@ -268,7 +268,7 @@ export function DataCard({ title, children, className, action, description, quer
                         {hasExportActions && (
                             <div className="relative" ref={exportMenuRef}>
                                 <button
-                                    className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     title="ดาวน์โหลดรายงาน"
                                     onClick={toggleExportMenu}
                                     disabled={isExporting}
@@ -291,10 +291,12 @@ export function DataCard({ title, children, className, action, description, quer
                                                     e.stopPropagation();
                                                     setShowExportMenu(false);
                                                     setIsExporting(true);
+                                                    
+                                                    // Give UI thread time to render the loading spinner
+                                                    await new Promise(resolve => setTimeout(resolve, 100));
+                                                    
                                                     try {
                                                         await Promise.resolve(onExportExcel());
-                                                        // Add small delay for user feedback
-                                                        await new Promise(resolve => setTimeout(resolve, 500));
                                                     } finally {
                                                         setIsExporting(false);
                                                     }
@@ -317,10 +319,12 @@ export function DataCard({ title, children, className, action, description, quer
                                                     e.stopPropagation();
                                                     setShowExportMenu(false);
                                                     setIsExporting(true);
+                                                    
+                                                    // Give UI thread time to render the loading spinner
+                                                    await new Promise(resolve => setTimeout(resolve, 100));
+                                                    
                                                     try {
                                                         await Promise.resolve(onExportPDF());
-                                                        // Add small delay for user feedback
-                                                        await new Promise(resolve => setTimeout(resolve, 500));
                                                     } finally {
                                                         setIsExporting(false);
                                                     }
@@ -342,7 +346,7 @@ export function DataCard({ title, children, className, action, description, quer
                         {hasMenuItems && (
                             <div className="relative" ref={menuRef}>
                                 <button
-                                    className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
+                                    className="p-2 rounded-lg hover:bg-[hsl(var(--muted))] transition-all duration-200 cursor-pointer"
                                     title="เมนู"
                                     onClick={toggleMenu}
                                 >

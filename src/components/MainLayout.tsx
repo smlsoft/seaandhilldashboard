@@ -13,14 +13,16 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
   useBranchAutoSwitch();
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen overflow-x-hidden">
       <Sidebar />
       <div className={cn(
-        "flex-1 flex flex-col transition-all duration-300",
-        isCollapsed ? "ml-20" : "ml-72"
+        "min-h-screen flex flex-col transition-all duration-300",
+        // Desktop: shift right based on sidebar width
+        // Mobile: no margin (sidebar is overlay)
+        isCollapsed ? "lg:ml-20" : "lg:ml-72"
       )}>
         <Header />
-        <main className="flex-1 p-4 lg:p-8 max-w-7.5xl mx-auto w-full">
+        <main className="flex-1 mt-16 p-3 sm:p-4 lg:p-8 w-full overflow-x-hidden">
           {children}
         </main>
       </div>

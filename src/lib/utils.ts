@@ -10,20 +10,26 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format number with Thai locale
+ * Format number with Thai locale and smart decimal display
+ * Shows up to 2 decimals by default, but can be customized
  */
-export function formatNumber(num: number): string {
-    return new Intl.NumberFormat('th-TH').format(num);
+export function formatNumber(num: number, decimalPlaces: number = 2): string {
+    return new Intl.NumberFormat('th-TH', {
+        minimumFractionDigits: decimalPlaces,
+        maximumFractionDigits: decimalPlaces,
+    }).format(num);
 }
 
 /**
- * Format currency in Thai Baht
+ * Format currency in Thai Baht with smart decimal display
+ * Shows decimals only when value has decimal part
  */
 export function formatCurrency(amount: number): string {
+    const hasDecimals = amount % 1 !== 0;
     return new Intl.NumberFormat('th-TH', {
         style: 'currency',
         currency: 'THB',
-        minimumFractionDigits: 0,
+        minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     }).format(amount);
 }

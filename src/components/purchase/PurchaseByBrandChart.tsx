@@ -31,7 +31,7 @@ export function PurchaseByBrandChart({ data, height = '400px' }: PurchaseByBrand
         },
         formatter: (params: any) => {
           const brand = params[0].axisValue;
-          const value = `฿${Number(params[0].value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`;
+          const value = `฿${Number(params[0].value).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`;
           return `<div>
             <div style="font-weight: bold; margin-bottom: 4px;">${brand}</div>
             <div>${params[0].marker} ยอดซื้อ: <strong>${value}</strong></div>
@@ -88,11 +88,11 @@ export function PurchaseByBrandChart({ data, height = '400px' }: PurchaseByBrand
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data]);

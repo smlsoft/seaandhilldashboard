@@ -11,91 +11,137 @@ Font.register({
   family: 'Sarabun',
   fonts: [
     { src: '/fonts/Sarabun-Regular.ttf', fontWeight: 'normal' },
-    { src: '/fonts/Sarabun-Bold.ttf',    fontWeight: 'bold'   },
+    { src: '/fonts/Sarabun-Bold.ttf', fontWeight: 'bold' },
   ],
 });
 
-// Hyphenation callback — disable hyphenation for Thai text
-Font.registerHyphenationCallback((word) => [word]);
+// Hyphenation callback — disable hyphenation for Thai text to prevent text breaking
+Font.registerHyphenationCallback((word) => {
+  // Return the word as-is without breaking
+  return [word];
+});
+
+/**
+ * Pre-warm the PDF renderer by generating a tiny blank document.
+ * Call this early (e.g., on page mount) so fonts are cached before the user
+ * clicks the export button, eliminating the first-click delay.
+ */
+let _prewarmed = false;
+export async function prewarmPdfFonts(): Promise<void> {
+  if (_prewarmed) return;
+  _prewarmed = true;
+  try {
+    const warmDoc = (
+      <Document>
+        <Page size="A4" style={{ fontFamily: 'Sarabun', fontSize: 1 }}>
+          <Text> </Text>
+        </Page>
+      </Document>
+    );
+    // Trigger font fetch + parse — discard the result, we only want the side-effect
+    await pdf(warmDoc).toBlob();
+  } catch {
+    // Non-critical: silently ignore warm-up errors
+    _prewarmed = false;
+  }
+}
+
 
 const COLORS = {
   text: '#000000',
   border: '#222222',
-  grid: '#B8B8B8',
-  summaryBg: '#F3F3F3',
+  grid: '#D0D0D0',
+  headerBg: '#E8E8E8',
+  summaryBg: '#F5F5F5',
   white: '#FFFFFF',
+  sectionBg: '#FAFAFA',
 };
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 18,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
-    fontSize: 7,
+    paddingTop: 20,
+    paddingBottom: 24,
+    paddingHorizontal: 12,
+    fontSize: 8,
     fontFamily: 'Sarabun',
     backgroundColor: COLORS.white,
   },
   reportHeader: {
-    marginBottom: 2,
+    marginBottom: 4,
     alignItems: 'center',
+    width: '100%',
   },
   title: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: COLORS.text,
     textAlign: 'center',
-    marginBottom: 1,
+    marginBottom: 2,
+    width: '100%',
+    paddingHorizontal: 10,
+    maxWidth: '100%',
   },
   subtitle: {
-    fontSize: 8,
+    fontSize: 9,
     color: COLORS.text,
     textAlign: 'center',
-    marginBottom: 1,
+    marginBottom: 2,
+    width: '100%',
+    paddingHorizontal: 10,
+    maxWidth: '100%',
   },
   topRightBlock: {
     position: 'absolute',
-    top: 18,
-    right: 16,
+    top: 20,
+    right: 14,
     alignItems: 'flex-end',
+    width: 100,
   },
   topRightText: {
-    fontSize: 7,
+    fontSize: 8,
     color: COLORS.text,
+    fontFamily: 'Sarabun',
   },
   metaRow: {
-    marginTop: 4,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: COLORS.border,
     borderBottomStyle: 'solid',
-    paddingBottom: 4,
+    paddingBottom: 5,
+    width: '100%',
   },
   metaBlockLeft: {
-    width: '70%',
+    width: '75%',
+    paddingRight: 15,
   },
   metaBlockRight: {
     width: '28%',
     alignItems: 'flex-end',
   },
   metaText: {
-    fontSize: 7,
+    fontSize: 8,
     color: COLORS.text,
-    lineHeight: 1.3,
+    lineHeight: 1.4,
+    fontFamily: 'Sarabun',
+    maxWidth: '100%',
   },
   metaTextBold: {
-    fontSize: 7,
+    fontSize: 8,
     color: COLORS.text,
-    lineHeight: 1.3,
+    lineHeight: 1.4,
     fontWeight: 'bold',
+    fontFamily: 'Sarabun',
+    maxWidth: '100%',
   },
   table: {
     width: '100%',
-    //borderTopWidth: 1,
-    //borderTopColor: COLORS.border,
-    borderBottomWidth: 1,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    borderBottomWidth: 1.5,
     borderBottomColor: COLORS.border,
     borderStyle: 'solid',
   },
@@ -104,41 +150,83 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: COLORS.grid,
     borderBottomStyle: 'solid',
+    minHeight: 16,
   },
   headerRow: {
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.headerBg,
+    minHeight: 20,
   },
   summaryRow: {
     backgroundColor: COLORS.summaryBg,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     borderTopStyle: 'solid',
+    minHeight: 18,
+  },
+  sectionRow: {
+    backgroundColor: COLORS.sectionBg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    borderBottomStyle: 'solid',
+    minHeight: 16,
   },
   cell: {
-    paddingVertical: 2,
-    paddingHorizontal: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 5,
     flexGrow: 1,
     flexBasis: 0,
     flexShrink: 1,
+    justifyContent: 'center',
+  },
+  cellIndented: {
+    paddingVertical: 4,
+    paddingHorizontal: 5,
+    paddingLeft: 15,
+    flexGrow: 1,
+    flexBasis: 0,
+    flexShrink: 1,
+    justifyContent: 'center',
   },
   cellText: {
     fontFamily: 'Sarabun',
-    fontSize: 7,
+    fontSize: 8,
     color: COLORS.text,
+    lineHeight: 1.35,
+    letterSpacing: 0.1,
+  },
+  cellTextBold: {
+    fontFamily: 'Sarabun',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    lineHeight: 1.35,
+    letterSpacing: 0.15,
   },
   headerCellText: {
     fontFamily: 'Sarabun',
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: 'bold',
     color: COLORS.text,
+    lineHeight: 1.35,
+    letterSpacing: 0.15,
   },
   summaryCellText: {
     fontFamily: 'Sarabun',
-    fontSize: 7,
+    fontSize: 8.5,
     fontWeight: 'bold',
     color: COLORS.text,
+    lineHeight: 1.35,
+    letterSpacing: 0.15,
+  },
+  sectionHeaderText: {
+    fontFamily: 'Sarabun',
+    fontSize: 8.5,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    lineHeight: 1.35,
+    letterSpacing: 0.2,
   },
 });
 
@@ -176,22 +264,65 @@ function formatCellValue(
   currencyColumns: string[],
   percentColumns: string[]
 ): string {
+  // Handle null, undefined, or empty string
   if (value === null || value === undefined) return '-';
+  if (value === '') return '-';
 
-  const num = typeof value === 'number' ? value : parseFloat(value);
-
-  if (currencyColumns.includes(key) && !Number.isNaN(num)) {
-    return num.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Handle string values that shouldn't be formatted as numbers
+  if (typeof value === 'string') {
+    // Check if it's a section header or label
+    const trimmed = value.trim();
+    if (trimmed === '') return '-';
+    if (trimmed.includes('──') || trimmed.startsWith('รวม') || trimmed.includes('กำไร')) {
+      return trimmed;
+    }
+    // Try to parse as number if it's in a numeric column
+    if (numberColumns.includes(key) || currencyColumns.includes(key) || percentColumns.includes(key)) {
+      const num = parseFloat(value);
+      if (Number.isNaN(num)) return trimmed; // Return as-is if not a number
+      // Continue to format as number below
+      value = num;
+    } else {
+      return trimmed; // Return text as-is
+    }
   }
 
-  if (percentColumns.includes(key) && !Number.isNaN(num)) {
+  const num = typeof value === 'number' ? value : parseFloat(String(value));
+
+  // If it's not a number, return as string
+  if (Number.isNaN(num)) {
+    return String(value);
+  }
+
+  // Format currency columns
+  if (currencyColumns.includes(key)) {
+    if (num === 0) return '-';
+    const absNum = Math.abs(num);
+    const formatted = absNum.toLocaleString('th-TH', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+    return num < 0 ? `(${formatted})` : formatted;
+  }
+
+  // Format percent columns
+  if (percentColumns.includes(key)) {
+    if (num === 0) return '-';
     return `${num.toFixed(2)}%`;
   }
 
-  if (numberColumns.includes(key) && !Number.isNaN(num)) {
-    return num.toLocaleString('th-TH');
+  // Format number columns
+  if (numberColumns.includes(key)) {
+    if (num === 0) return '-';
+    const absNum = Math.abs(num);
+    const formatted = absNum.toLocaleString('th-TH', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+    return num < 0 ? `(${formatted})` : formatted;
   }
 
+  // Return as string for non-numeric values
   return String(value);
 }
 
@@ -199,29 +330,50 @@ function formatCellValue(
 function computeColumnWidths<T extends Record<string, any>>(
   headerKeys: string[],
   headerValues: string[],
-  data: T[]
+  data: T[],
+  numberColumns: string[],
+  currencyColumns: string[],
+  percentColumns: string[]
 ): number[] {
-  const MIN_WEIGHT = 4;
-  const sampledRows = data.slice(0, 50);
+  const MIN_WEIGHT = 6;
+  const sampledRows = data.slice(0, 100);
   const weights = headerValues.map((header, index) => {
     const key = headerKeys[index];
-    let maxLen = header.length;
+    
+    // Special handling for first two columns (code and name)
+    if (index === 0) {
+      // Account code column - fixed small width
+      return 9;
+    }
+    if (index === 1) {
+      // Account name column - larger fixed width for Thai text
+      return 38;
+    }
+    
+    // For other columns, calculate based on content
+    let maxLen = header.length * 1.3; // Thai characters need more space
 
     for (const row of sampledRows) {
       const value = row[key];
-      const str = value === null || value === undefined ? '-' : String(value);
-      if (str.length > maxLen) {
-        maxLen = str.length;
+      if (value === null || value === undefined || value === '') continue;
+      
+      // Format the value as it will appear in PDF
+      const formatted = formatCellValue(value, key, numberColumns, currencyColumns, percentColumns);
+      const len = formatted.length;
+      if (len > maxLen) {
+        maxLen = len;
       }
     }
 
-    const isMostlyNumeric = sampledRows.every((row) => {
-      const value = row[key];
-      if (value === null || value === undefined || value === '') return true;
-      return !Number.isNaN(parseFloat(String(value)));
-    });
-
-    return isMostlyNumeric ? Math.max(Math.min(maxLen, 12), MIN_WEIGHT) : Math.max(Math.min(maxLen, 28), MIN_WEIGHT);
+    const isNumberCol = numberColumns.includes(key) || currencyColumns.includes(key) || percentColumns.includes(key);
+    
+    // Numeric columns need space for formatted numbers with commas
+    if (isNumberCol) {
+      return Math.max(Math.min(maxLen * 0.95, 16), MIN_WEIGHT + 1);
+    }
+    
+    // Text columns
+    return Math.max(Math.min(maxLen * 0.85, 40), MIN_WEIGHT);
   });
 
   const total = weights.reduce((s, w) => s + w, 0);
@@ -302,10 +454,58 @@ export async function exportStyledPdfReport<T extends Record<string, any>>(optio
 
   const headerKeys = Object.keys(headers);
   const headerValues = Object.values(headers);
-  const colWidths = computeColumnWidths(headerKeys, headerValues, data);
+  const colWidths = computeColumnWidths(headerKeys, headerValues, data, numberColumns, currencyColumns, percentColumns);
   const generatedAt = thaiDatetime();
   const companyName = extractCompanyName(subtitle);
   const cleanSubtitle = localizeDateRangeText(stripCompanyFromSubtitle(subtitle));
+
+  const isNumberColumn = (key: string) =>
+    numberColumns.includes(key) || currencyColumns.includes(key) || percentColumns.includes(key);
+
+  // Helper functions to detect row types for P&L report
+  const isSectionHeader = (row: T): boolean => {
+    const firstKey = headerKeys[0]; // accountCode
+    const secondKey = headerKeys[1]; // accountName
+    const codeValue = row[firstKey];
+    const nameValue = row[secondKey];
+    
+    // Section headers have no code and name starts with ──
+    if (!codeValue || codeValue === '') {
+      const nameStr = String(nameValue || '');
+      return nameStr.includes('──');
+    }
+    return false;
+  };
+
+  const isSummaryRow = (row: T): boolean => {
+    const firstKey = headerKeys[0]; // accountCode
+    const secondKey = headerKeys[1]; // accountName
+    const codeValue = row[firstKey];
+    const nameValue = row[secondKey];
+    
+    // Summary rows have no code but name starts with รวม or กำไร
+    if (!codeValue || codeValue === '') {
+      const nameStr = String(nameValue || '');
+      return nameStr.startsWith('รวม') || nameStr.includes('กำไร');
+    }
+    return false;
+  };
+
+  const isAccountRow = (row: T): boolean => {
+    const firstKey = headerKeys[0]; // accountCode
+    const codeValue = row[firstKey];
+    
+    // Account rows have a code
+    return !!codeValue && codeValue !== '';
+  };
+
+  // Helper to detect blank rows
+  const isBlankRow = (row: T): boolean => {
+    return headerKeys.every(key => {
+      const val = row[key];
+      return val === null || val === undefined || val === '' || val === 0;
+    });
+  };
 
   const doc = (
     <Document
@@ -322,58 +522,124 @@ export async function exportStyledPdfReport<T extends Record<string, any>>(optio
         </View>
 
         <View style={styles.reportHeader} fixed>
-          {title ? <Text style={styles.title}>{title}</Text> : null}
-          {cleanSubtitle ? <Text style={styles.subtitle}>{cleanSubtitle}</Text> : null}
+          {title ? (
+            <View style={{ width: '100%', paddingHorizontal: 5 }}>
+              <Text style={styles.title}>{title}</Text>
+            </View>
+          ) : null}
+          {cleanSubtitle ? (
+            <View style={{ width: '100%', paddingHorizontal: 5 }}>
+              <Text style={styles.subtitle}>{cleanSubtitle}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.metaRow} fixed>
           <View style={styles.metaBlockLeft}>
-            <Text style={styles.metaTextBold}>ชื่อสถานประกอบการ : {companyName} </Text>
-            <Text style={styles.metaText}>วันที่พิมพ์ : {generatedAt}</Text>
+            <View style={{ width: '100%', paddingRight: 5 }}>
+              <Text style={styles.metaTextBold}>
+                ชื่อสถานประกอบการ : {companyName}
+              </Text>
+            </View>
+            <View style={{ width: '100%', paddingRight: 5 }}>
+              <Text style={styles.metaText}>วันที่พิมพ์ : {generatedAt}</Text>
+            </View>
           </View>
-        
         </View>
 
         <View style={styles.table}>
           <View style={[styles.row, styles.headerRow]} fixed>
-            {headerValues.map((header, index) => (
-             <View
-                key={`h-${index}`}
-                style={[styles.cell, { flexBasis: `${colWidths[index]}%`, flexGrow: 0 }]}
-              >
-                <Text style={styles.headerCellText}>{header} </Text>
-              </View>
-            ))}
+            {headerValues.map((header, index) => {
+              const key = headerKeys[index];
+              const align = isNumberColumn(key) ? 'right' : 'left';
+              return (
+                <View
+                  key={`h-${index}`}
+                  style={[styles.cell, { flexBasis: `${colWidths[index]}%`, flexGrow: 0 }]}
+                >
+                  <Text style={[styles.headerCellText, { textAlign: align }]}>{header}</Text>
+                </View>
+              );
+            })}
           </View>
 
-          {data.map((row, rowIndex) => (
-            <View
-              key={`r-${rowIndex}`}
-              style={styles.row}
-              wrap={false}
-            >
-              {headerKeys.map((key, colIndex) => (
-                <View
-                  key={`c-${rowIndex}-${colIndex}`}
-                  style={[styles.cell, { flexBasis: `${colWidths[colIndex]}%`, flexGrow: 0 }]}
-                >
-                  <Text style={styles.cellText}>
-                    {formatCellValue(row[key], key, numberColumns, currencyColumns, percentColumns)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ))}
+          {data.map((row, rowIndex) => {
+            // Skip completely blank rows
+            if (isBlankRow(row)) {
+              return null;
+            }
+
+            // Determine row type
+            const isSectionHdr = isSectionHeader(row);
+            const isSummary = isSummaryRow(row);
+            const isAccount = isAccountRow(row);
+
+            // Select appropriate styles
+            const rowStyle = (isSectionHdr || isSummary) 
+              ? [styles.row, styles.sectionRow]
+              : styles.row;
+
+            return (
+              <View
+                key={`r-${rowIndex}`}
+                style={rowStyle}
+                wrap={false}
+              >
+                {headerKeys.map((key, colIndex) => {
+                  const align = isNumberColumn(key) ? 'right' : 'left';
+                  const cellValue = formatCellValue(row[key], key, numberColumns, currencyColumns, percentColumns);
+                  
+                  // Determine cell style and text style
+                  let cellStyle = styles.cell;
+                  let textStyle = styles.cellText;
+
+                  // First column (account code/name) - apply special formatting
+                  if (colIndex === 0 || colIndex === 1) {
+                    if (isSectionHdr) {
+                      // Section headers: bold, no indent
+                      textStyle = styles.sectionHeaderText;
+                      cellStyle = styles.cell;
+                    } else if (isSummary) {
+                      // Summary rows: bold, no indent
+                      textStyle = styles.cellTextBold;
+                      cellStyle = styles.cell;
+                    } else if (isAccount && colIndex === 1) {
+                      // Account name: regular text, indented
+                      textStyle = styles.cellText;
+                      cellStyle = styles.cellIndented;
+                    }
+                  } else {
+                    // Other columns (numbers) - use bold for section/summary rows
+                    if (isSectionHdr || isSummary) {
+                      textStyle = styles.cellTextBold;
+                    }
+                  }
+                  
+                  return (
+                    <View
+                      key={`c-${rowIndex}-${colIndex}`}
+                      style={[cellStyle, { flexBasis: `${colWidths[colIndex]}%`, flexGrow: 0 }]}
+                    >
+                      <Text style={[textStyle, { textAlign: align }]}>
+                        {cellValue}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })}
 
           {summaryConfig?.columns ? (
             <View style={[styles.row, styles.summaryRow]} wrap={false}>
               {headerKeys.map((key, colIndex) => {
+                const align = isNumberColumn(key) ? 'right' : 'left';
                 const colStyle = [styles.cell, { flexBasis: `${colWidths[colIndex]}%`, flexGrow: 0 }];
 
                 if (colIndex === 0) {
                   return (
                     <View key={`s-${key}`} style={colStyle}>
-                      <Text style={styles.summaryCellText}>
+                      <Text style={[styles.summaryCellText, { textAlign: align }]}>
                         {summaryConfig.label || 'รวมทั้งหมด'}
                       </Text>
                     </View>
@@ -384,7 +650,7 @@ export async function exportStyledPdfReport<T extends Record<string, any>>(optio
                   const summary = calculateSummary(data, key, summaryConfig.columns[key]);
                   return (
                     <View key={`s-${key}`} style={colStyle}>
-                      <Text style={styles.summaryCellText}>
+                      <Text style={[styles.summaryCellText, { textAlign: align }]}>
                         {formatCellValue(summary, key, numberColumns, currencyColumns, percentColumns)}
                       </Text>
                     </View>
@@ -393,7 +659,7 @@ export async function exportStyledPdfReport<T extends Record<string, any>>(optio
 
                 return (
                   <View key={`s-${key}`} style={colStyle}>
-                    <Text style={styles.summaryCellText}>-</Text>
+                    <Text style={[styles.summaryCellText, { textAlign: align }]}>-</Text>
                   </View>
                 );
               })}

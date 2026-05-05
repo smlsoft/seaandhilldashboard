@@ -126,13 +126,13 @@ export default function InventoryReportPage() {
           break;
         }
         case 'low-stock': {
-          const params = new URLSearchParams({ as_of_date: asOfDate });
+          const params = new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end });
           appendBranches(params);
           endpoint = `/api/inventory/low-stock?${params}`;
           break;
         }
         case 'overstock': {
-          const params = new URLSearchParams({ as_of_date: asOfDate });
+          const params = new URLSearchParams({ start_date: dateRange.start, end_date: dateRange.end });
           appendBranches(params);
           endpoint = `/api/inventory/overstock?${params}`;
           break;
@@ -186,33 +186,33 @@ export default function InventoryReportPage() {
       render: (item: StockMovement) => formatDate(item.date),
     },
     {
-      key: 'qtyIn',
-      header: 'รับเข้า',
+      key: 'valueIn',
+      header: 'ซื้อเข้า (บาท)',
       sortable: true,
       align: 'right',
       render: (item: StockMovement) => (
-        <span className="text-green-600 font-medium">{formatNumber(item.qtyIn)}</span>
+        <span className="text-green-600 font-medium">฿{formatCurrency(item.valueIn || 0)}</span>
       ),
     },
     {
-      key: 'qtyOut',
-      header: 'จ่ายออก',
+      key: 'valueOut',
+      header: 'ขายออก (บาท)',
       sortable: true,
       align: 'right',
       render: (item: StockMovement) => (
-        <span className="text-red-600 font-medium">{formatNumber(item.qtyOut)}</span>
+        <span className="text-red-600 font-medium">฿{formatCurrency(item.valueOut || 0)}</span>
       ),
     },
     {
       key: 'net',
-      header: 'สุทธิ',
+      header: 'สุทธิ (บาท)',
       sortable: false,
       align: 'right',
       render: (item: StockMovement) => {
-        const net = item.qtyIn - item.qtyOut;
+        const net = (item.valueIn || 0) - (item.valueOut || 0);
         return (
           <span className={`font-semibold ${net >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-            {net >= 0 ? '+' : ''}{formatNumber(net)}
+            {net >= 0 ? '+' : ''}฿{formatCurrency(net)}
           </span>
         );
       },
@@ -226,9 +226,10 @@ export default function InventoryReportPage() {
       header: 'สถานะ',
       sortable: false,
       align: 'center',
-      render: () => (
-        <AlertTriangle className="h-4 w-4 text-yellow-600 mx-auto" />
-      ),
+      render: (item: LowStockItem) => {
+        const color = item.daysOnHand <= 2 ? 'text-red-600' : item.daysOnHand <= 5 ? 'text-orange-600' : 'text-yellow-600';
+        return <AlertTriangle className={`h-4 w-4 ${color} mx-auto`} />;
+      },
     },
     {
       key: 'itemName',
@@ -250,7 +251,7 @@ export default function InventoryReportPage() {
     },
     {
       key: 'branchName',
-      header: 'สาขา',
+      header: 'คลัง',
       sortable: true,
       align: 'left',
     },
@@ -260,15 +261,29 @@ export default function InventoryReportPage() {
       sortable: true,
       align: 'right',
       render: (item: LowStockItem) => (
-        <span className="text-yellow-600 font-medium">{formatNumber(item.qtyOnHand)}</span>
+        <span className="font-medium">{formatNumber(item.qtyOnHand)}</span>
       ),
     },
     {
-      key: 'reorderPoint',
-      header: 'จุด Reorder',
+      key: 'avgDailySales',
+      header: 'ยอดขาย/วัน',
       sortable: true,
       align: 'right',
-      render: (item: LowStockItem) => formatNumber(item.reorderPoint),
+      render: (item: LowStockItem) => formatNumber(item.avgDailySales),
+    },
+    {
+      key: 'daysOnHand',
+      header: 'เหลือขาย (วัน)',
+      sortable: true,
+      align: 'right',
+      render: (item: LowStockItem) => {
+        const color = item.daysOnHand <= 2 ? 'text-red-600' : item.daysOnHand <= 5 ? 'text-orange-600' : 'text-yellow-600';
+        return (
+          <span className={`font-medium ${color}`}>
+            {item.daysOnHand === 999999 ? '-' : formatNumber(item.daysOnHand)}
+          </span>
+        );
+      },
     },
     {
       key: 'stockValue',
@@ -289,10 +304,7 @@ export default function InventoryReportPage() {
       sortable: false,
       align: 'center',
       render: (item: OverstockItem) => {
-        const excessPercent = item.maxStockLevel > 0
-          ? ((item.qtyOnHand - item.maxStockLevel) / item.maxStockLevel) * 100
-          : 0;
-        const color = excessPercent >= 50 ? 'text-red-600' : excessPercent >= 25 ? 'text-yellow-600' : 'text-blue-600';
+        const color = item.daysOnHand > 365 ? 'text-red-600' : item.daysOnHand >= 180 ? 'text-yellow-600' : 'text-blue-600';
         return <AlertCircle className={`h-4 w-4 ${color} mx-auto`} />;
       },
     },
@@ -322,32 +334,33 @@ export default function InventoryReportPage() {
       render: (item: OverstockItem) => formatNumber(item.qtyOnHand),
     },
     {
-      key: 'maxStockLevel',
-      header: 'สูงสุด',
+      key: 'avgDailySales',
+      header: 'ยอดขาย/วัน',
       sortable: true,
       align: 'right',
-      render: (item: OverstockItem) => formatNumber(item.maxStockLevel),
+      render: (item: OverstockItem) => formatNumber(item.avgDailySales),
     },
     {
-      key: 'excessPercent',
-      header: 'เกิน %',
+      key: 'daysOnHand',
+      header: 'จัดเก็บ (วัน)',
       sortable: true,
       align: 'right',
       render: (item: OverstockItem) => {
-        const excessPercent = item.maxStockLevel > 0
-          ? ((item.qtyOnHand - item.maxStockLevel) / item.maxStockLevel) * 100
-          : 0;
-        const color = excessPercent >= 50 ? 'text-red-600' : excessPercent >= 25 ? 'text-yellow-600' : 'text-blue-600';
-        return <span className={`font-medium ${color}`}>{excessPercent.toFixed(1)}%</span>;
+        const color = item.daysOnHand > 365 ? 'text-red-600' : item.daysOnHand >= 180 ? 'text-yellow-600' : 'text-blue-600';
+        return (
+          <span className={`font-medium ${color}`}>
+            {item.daysOnHand === 999999 ? '♾️' : formatNumber(item.daysOnHand)}
+          </span>
+        );
       },
     },
     {
-      key: 'valueExcess',
-      header: 'มูลค่าส่วนเกิน',
+      key: 'stockValue',
+      header: 'มูลค่าจม',
       sortable: true,
       align: 'right',
       render: (item: OverstockItem) => (
-        <span className="font-medium text-red-600">฿{formatCurrency(item.valueExcess)}</span>
+        <span className="font-medium text-muted-foreground">฿{formatCurrency(item.stockValue)}</span>
       ),
     },
   ];
@@ -535,19 +548,19 @@ export default function InventoryReportPage() {
             summaryConfig={{
               labelColSpan: 1,
               values: {
-                qtyIn: (data) => {
-                  const total = data.reduce((sum, item) => sum + item.qtyIn, 0);
-                  return <span className="text-green-600 font-medium">{formatNumber(total)}</span>;
+                valueIn: (data) => {
+                  const total = data.reduce((sum, item) => sum + (item.valueIn || 0), 0);
+                  return <span className="text-green-600 font-medium">฿{formatCurrency(total)}</span>;
                 },
-                qtyOut: (data) => {
-                  const total = data.reduce((sum, item) => sum + item.qtyOut, 0);
-                  return <span className="text-red-600 font-medium">{formatNumber(total)}</span>;
+                valueOut: (data) => {
+                  const total = data.reduce((sum, item) => sum + (item.valueOut || 0), 0);
+                  return <span className="text-red-600 font-medium">฿{formatCurrency(total)}</span>;
                 },
                 net: (data) => {
-                  const total = data.reduce((sum, item) => sum + (item.qtyIn - item.qtyOut), 0);
+                  const total = data.reduce((sum, item) => sum + ((item.valueIn || 0) - (item.valueOut || 0)), 0);
                   return (
                     <span className={`font-semibold ${total >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {total >= 0 ? '+' : ''}{formatNumber(total)}
+                      {total >= 0 ? '+' : ''}฿{formatCurrency(total)}
                     </span>
                   );
                 },
@@ -586,15 +599,15 @@ export default function InventoryReportPage() {
             columns={overstockColumns}
             itemsPerPage={10}
             emptyMessage="ไม่มีสินค้าเกินคลัง"
-            defaultSortKey="valueExcess"
+            defaultSortKey="stockValue"
             defaultSortOrder="desc"
             keyExtractor={(item: OverstockItem) => item.itemCode}
             showSummary={true}
             summaryConfig={{
               labelColSpan: 1,
               values: {
-                valueExcess: (data) => {
-                  const total = data.reduce((sum, item) => sum + item.valueExcess, 0);
+                stockValue: (data) => {
+                  const total = data.reduce((sum, item) => sum + item.stockValue, 0);
                   return <span className="font-bold text-red-600">฿{formatCurrency(total)}</span>;
                 },
               }
@@ -671,17 +684,17 @@ export default function InventoryReportPage() {
     switch (selectedReport) {
       case 'stock-movement':
         return () => exportStyledReport({
-          data: stockMovement,
-          headers: { date: 'วันที่', qtyIn: 'รับเข้า', qtyOut: 'จ่ายออก' },
+          data: stockMovement.map(item => ({ date: item.date, valueIn: item.valueIn || 0, valueOut: item.valueOut || 0 })),
+          headers: { date: 'วันที่', valueIn: 'ซื้อเข้า (บาท)', valueOut: 'ขายออก (บาท)' },
           filename: 'การเคลื่อนไหวสต็อก',
           sheetName: 'Stock Movement',
-          title: 'รายงานการเคลื่อนไหวสต็อก',
+          title: 'รายงานการเคลื่อนไหวสต็อก (ซื้อเข้า vs ขายออก)',
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          numberColumns: ['qtyIn', 'qtyOut'],
+          currencyColumns: ['valueIn', 'valueOut'],
           summaryConfig: {
             columns: {
-              qtyIn: 'sum',
-              qtyOut: 'sum',
+              valueIn: 'sum',
+              valueOut: 'sum',
             }
           }
         });
@@ -689,12 +702,12 @@ export default function InventoryReportPage() {
       case 'low-stock':
         return () => exportStyledReport({
           data: lowStockItems,
-          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', branchName: 'สาขา', qtyOnHand: 'คงเหลือ', reorderPoint: 'จุดสั่งซื้อ', stockValue: 'มูลค่า' },
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', branchName: 'สาขา', qtyOnHand: 'คงเหลือ', avgDailySales: 'ยอดขาย/วัน', daysOnHand: 'เหลือขาย (วัน)', stockValue: 'มูลค่า' },
           filename: 'สินค้าใกล้หมด',
           sheetName: 'Low Stock',
           title: 'รายงานสินค้าใกล้หมด',
-          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
-          numberColumns: ['qtyOnHand', 'reorderPoint'],
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyOnHand', 'avgDailySales', 'daysOnHand'],
           currencyColumns: ['stockValue'],
           summaryConfig: {
             columns: {
@@ -707,17 +720,17 @@ export default function InventoryReportPage() {
       case 'overstock':
         return () => exportStyledReport({
           data: overstockItems,
-          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', qtyOnHand: 'คงเหลือ', maxStockLevel: 'ระดับสูงสุด', valueExcess: 'มูลค่าส่วนเกิน' },
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', qtyOnHand: 'คงเหลือ', avgDailySales: 'ยอดขาย/วัน', daysOnHand: 'จัดเก็บ (วัน)', stockValue: 'มูลค่าจม' },
           filename: 'สินค้าเกินคลัง',
           sheetName: 'Overstock',
           title: 'รายงานสินค้าเกินคลัง',
-          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
-          numberColumns: ['qtyOnHand', 'maxStockLevel'],
-          currencyColumns: ['valueExcess'],
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyOnHand', 'avgDailySales', 'daysOnHand'],
+          currencyColumns: ['stockValue'],
           summaryConfig: {
             columns: {
               qtyOnHand: 'sum',
-              valueExcess: 'sum',
+              stockValue: 'sum',
             }
           }
         });
@@ -781,16 +794,16 @@ export default function InventoryReportPage() {
     switch (selectedReport) {
       case 'stock-movement':
         return () => exportStyledPdfReport({
-          data: stockMovement,
-          headers: { date: 'วันที่', qtyIn: 'รับเข้า', qtyOut: 'จ่ายออก' },
+          data: stockMovement.map(item => ({ date: item.date, valueIn: item.valueIn || 0, valueOut: item.valueOut || 0 })),
+          headers: { date: 'วันที่', valueIn: 'ซื้อเข้า (บาท)', valueOut: 'ขายออก (บาท)' },
           filename: 'การเคลื่อนไหวสต็อก',
-          title: 'รายงานการเคลื่อนไหวสต็อก',
+          title: 'รายงานการเคลื่อนไหวสต็อก (ซื้อเข้า vs ขายออก)',
           subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
-          numberColumns: ['qtyIn', 'qtyOut'],
+          currencyColumns: ['valueIn', 'valueOut'],
           summaryConfig: {
             columns: {
-              qtyIn: 'sum',
-              qtyOut: 'sum',
+              valueIn: 'sum',
+              valueOut: 'sum',
             }
           }
         });
@@ -798,11 +811,11 @@ export default function InventoryReportPage() {
       case 'low-stock':
         return () => exportStyledPdfReport({
           data: lowStockItems,
-          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', branchName: 'สาขา', qtyOnHand: 'คงเหลือ', reorderPoint: 'จุดสั่งซื้อ', stockValue: 'มูลค่า' },
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', branchName: 'สาขา', qtyOnHand: 'คงเหลือ', avgDailySales: 'ยอดขาย/วัน', daysOnHand: 'เหลือขาย (วัน)', stockValue: 'มูลค่า' },
           filename: 'สินค้าใกล้หมด',
           title: 'รายงานสินค้าใกล้หมด',
-          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
-          numberColumns: ['qtyOnHand', 'reorderPoint'],
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyOnHand', 'avgDailySales', 'daysOnHand'],
           currencyColumns: ['stockValue'],
           summaryConfig: {
             columns: {
@@ -815,16 +828,16 @@ export default function InventoryReportPage() {
       case 'overstock':
         return () => exportStyledPdfReport({
           data: overstockItems,
-          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', qtyOnHand: 'คงเหลือ', maxStockLevel: 'ระดับสูงสุด', valueExcess: 'มูลค่าส่วนเกิน' },
+          headers: { itemCode: 'รหัสสินค้า', itemName: 'ชื่อสินค้า', brandName: 'แบรนด์', qtyOnHand: 'คงเหลือ', avgDailySales: 'ยอดขาย/วัน', daysOnHand: 'จัดเก็บ (วัน)', stockValue: 'มูลค่าจม' },
           filename: 'สินค้าเกินคลัง',
           title: 'รายงานสินค้าเกินคลัง',
-          subtitle: withBranchSubtitle(`ณ วันที่ ${asOfDate}`),
-          numberColumns: ['qtyOnHand', 'maxStockLevel'],
-          currencyColumns: ['valueExcess'],
+          subtitle: withBranchSubtitle(`ช่วงวันที่ ${dateRange.start} ถึง ${dateRange.end}`),
+          numberColumns: ['qtyOnHand', 'avgDailySales', 'daysOnHand'],
+          currencyColumns: ['stockValue'],
           summaryConfig: {
             columns: {
               qtyOnHand: 'sum',
-              valueExcess: 'sum',
+              stockValue: 'sum',
             }
           }
         });

@@ -5,6 +5,7 @@ import ConditionalLayout from "@/components/ConditionalLayout";
 import { PermissionProvider } from "@/lib/permissions";
 import { ComparisonProvider } from "@/lib/ComparisonContext";
 import { QueryProvider } from "@/providers/QueryProvider";
+import AuthProvider from "@/providers/AuthProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -23,18 +24,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Preload Sarabun Thai fonts used by PDF export — avoids first-click delay */}
+        <link rel="preload" href="/fonts/Sarabun-Regular.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/Sarabun-Bold.ttf" as="font" type="font/ttf" crossOrigin="anonymous" />
+      </head>
       <body
         className={`${inter.variable} antialiased bg-[hsl(var(--background))] text-[hsl(var(--foreground))]`}
       >
-        <QueryProvider>
-          <PermissionProvider>
-            <ComparisonProvider>
-              <ConditionalLayout>
-                {children}
-              </ConditionalLayout>
-            </ComparisonProvider>
-          </PermissionProvider>
-        </QueryProvider>
+        <AuthProvider>
+          <QueryProvider>
+            <PermissionProvider>
+              <ComparisonProvider>
+                <ConditionalLayout>
+                  {children}
+                </ConditionalLayout>
+              </ComparisonProvider>
+            </PermissionProvider>
+          </QueryProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -36,8 +36,8 @@ export function SalesByBranchChart({ data, height = '400px' }: SalesByBranchChar
 
           params.forEach((param: any) => {
             const value = param.seriesName === 'ยอดขาย'
-              ? `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 0 })}`
-              : `${param.value.toLocaleString('th-TH')} รายการ`;
+              ? `฿${Number(param.value).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+              : `${param.value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} รายการ`;
 
             result += `<div style="margin-bottom: 4px;">
               ${param.marker} ${param.seriesName}: <strong>${value}</strong>
@@ -115,11 +115,11 @@ export function SalesByBranchChart({ data, height = '400px' }: SalesByBranchChar
 
     chart.setOption(option);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+    resizeObserver.observe(chartRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.dispose();
     };
   }, [data]);

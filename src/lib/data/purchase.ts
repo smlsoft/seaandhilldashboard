@@ -11,6 +11,7 @@ import type {
   PurchaseByBrand,
   APOutstanding,
   KPIData,
+  SupplierPODetail,
 } from './types';
 import { calculateGrowth, getPreviousPeriod } from '@/lib/comparison';
 
@@ -43,6 +44,27 @@ function buildBranchFilter(branches?: string[]): { sql: string; params: Record<s
   };
 }
 
+function getNextDate(dateString: string): string {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Build date-time range parameters for BETWEEN queries (inclusive end)
+ * Returns start_date at 00:00:00 and end_date at 23:59:59
+ */
+function buildDateTimeRangeParamsInclusive(dateRange: DateRange): {
+  start_date: string;
+  end_date: string;
+} {
+  return {
+    start_date: `${dateRange.start} 00:00:00`,
+    end_date: `${dateRange.end} 23:59:59`,
+  };
+}
+
 // ============================================================================
 // Data Fetching Functions
 // ============================================================================
@@ -54,6 +76,8 @@ export async function getPurchaseKPIs(dateRange: DateRange, branchSync?: string[
   try {
     const previousPeriod = getPreviousPeriod(dateRange, 'PreviousPeriod');
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+    const prevDateParams = buildDateTimeRangeParamsInclusive(previousPeriod);
 
     // Total Purchases
     const purchaseQuery = `
@@ -92,8 +116,8 @@ export async function getPurchaseKPIs(dateRange: DateRange, branchSync?: string[
     // Total Orders
     const ordersQuery = `
       SELECT
-        count(DISTINCT doc_no) as current_value,
-        (SELECT count(DISTINCT doc_no)
+        count(DISTINCT doc_no, branch_sync) as current_value,
+        (SELECT count(DISTINCT doc_no, branch_sync)
          FROM purchase_transaction
          WHERE status_cancel != 'Cancel'
            AND doc_datetime BETWEEN {previous_start:String} AND {previous_end:String}
@@ -122,10 +146,10 @@ export async function getPurchaseKPIs(dateRange: DateRange, branchSync?: string[
     `;
 
     const params = {
-      start_date: dateRange.start,
-      end_date: dateRange.end,
-      previous_start: previousPeriod.start,
-      previous_end: previousPeriod.end,
+      start_date: dateParams.start_date,
+      end_date: dateParams.end_date,
+      previous_start: prevDateParams.start_date,
+      previous_end: prevDateParams.end_date,
       ...branchFilter.params
     };
 
@@ -167,7 +191,25 @@ export async function getPurchaseKPIs(dateRange: DateRange, branchSync?: string[
     };
   } catch (error) {
     console.error('Error fetching purchase KPIs:', error);
-    throw error;
+
+    const emptyKPI: KPIData = {
+      value: 0,
+      previousValue: 0,
+      growth: 0,
+      growthPercentage: 0,
+      trend: 'neutral',
+    };
+
+    // Return safe defaults so Purchase page can still render other sections.
+    return {
+      totalPurchases: emptyKPI,
+      totalItemsPurchased: emptyKPI,
+      totalPOCount: emptyKPI,
+      totalOrders: emptyKPI,
+      avgPOValue: emptyKPI,
+      avgOrderValue: emptyKPI,
+      apOutstanding: emptyKPI,
+    };
   }
 }
 
@@ -178,11 +220,13 @@ export async function getPurchaseTrendData(dateRange: DateRange, branchSync?: st
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
     const query = `
       SELECT
         formatDateTime(toStartOfMonth(doc_datetime), '%Y-%m') as month,
         sum(total_amount) as totalPurchases,
-        count(DISTINCT doc_no) as poCount
+        count(DISTINCT doc_no, branch_sync) as poCount
       FROM purchase_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
@@ -194,8 +238,7 @@ export async function getPurchaseTrendData(dateRange: DateRange, branchSync?: st
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -216,15 +259,17 @@ export async function getPurchaseTrendData(dateRange: DateRange, branchSync?: st
 /**
  * Get Top Suppliers
  */
-export async function getTopSuppliers(dateRange: DateRange, branchSync?: string[]): Promise<TopSupplier[]> {
+export async function getTopSuppliers(dateRange: DateRange, branchSync?: string[], limit: number = 20): Promise<TopSupplier[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
         supplier_code as supplierCode,
         supplier_name as supplierName,
-        count(DISTINCT doc_no) as poCount,
+        count(DISTINCT doc_no, branch_sync) as poCount,
         sum(total_amount) as totalPurchases,
         avg(total_amount) as avgPOValue,
         max(doc_datetime) as lastPurchaseDate
@@ -235,14 +280,13 @@ export async function getTopSuppliers(dateRange: DateRange, branchSync?: string[
         ${branchFilter.sql}
       GROUP BY supplier_code, supplier_name
       ORDER BY totalPurchases DESC
-      LIMIT 20
+      ${limit > 0 ? `LIMIT ${limit}` : ''}
     `;
 
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -270,6 +314,8 @@ export async function getPurchaseByCategory(dateRange: DateRange, branchSync?: s
   try {
     const branchFilter = buildBranchFilter(branchSync);
 
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
     const query = `
       SELECT
         COALESCE(NULLIF(ptd.item_category_code, ''), 'N/A') as categoryCode,
@@ -291,8 +337,7 @@ export async function getPurchaseByCategory(dateRange: DateRange, branchSync?: s
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -310,6 +355,141 @@ export async function getPurchaseByCategory(dateRange: DateRange, branchSync?: s
     }));
   } catch (error) {
     console.error('Error fetching purchase by category:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Purchase by Category Summary (แสดงตามผังบัญชีค่าใช้จ่าย EXPENSES)
+ * เปลี่ยนจากดึงจาก purchase_transaction_detail มาเป็นดึงจาก journal_transaction_detail
+ * เพื่อแสดงผังบัญชีจริงที่เป็นค่าใช้จ่าย แทนการแสดงหมวดหมู่สินค้า
+ */
+export async function getPurchaseByCategorySummary(
+  dateRange: DateRange,
+  branchSync?: string[],
+  accountType: 'EXPENSES' | 'ASSETS' = 'EXPENSES'
+): Promise<PurchaseByCategory[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
+    const query = `
+      WITH journal_summary AS (
+        SELECT 
+          doc_no,
+          branch_sync,
+          account_code,
+          account_name,
+          sum(debit - credit) as amount
+        FROM journal_transaction_detail
+        WHERE account_type = {account_type:String}
+          AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+          ${branchFilter.sql}
+        GROUP BY doc_no, branch_sync, account_code, account_name
+        HAVING amount != 0
+      ),
+      purchase_summary AS (
+        SELECT
+          ptd.doc_no,
+          ptd.branch_sync,
+          sum(ptd.qty) as total_qty
+        FROM purchase_transaction_detail ptd
+        JOIN purchase_transaction pt ON ptd.doc_no = pt.doc_no AND ptd.branch_sync = pt.branch_sync
+        WHERE pt.status_cancel != 'Cancel'
+          AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+          ${branchFilter.sql.replace(/branch_sync/g, 'ptd.branch_sync')}
+        GROUP BY ptd.doc_no, ptd.branch_sync
+      )
+      SELECT
+        j.account_code as categoryCode,
+        j.account_name as categoryName,
+        sum(j.amount) as totalPurchaseValue,
+        count(DISTINCT j.doc_no, j.branch_sync) as orderCount,
+        sum(p.total_qty) as totalQty
+      FROM journal_summary j
+      JOIN purchase_summary p ON j.doc_no = p.doc_no AND j.branch_sync = p.branch_sync
+      GROUP BY j.account_code, j.account_name
+      ORDER BY totalPurchaseValue DESC
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        ...dateParams,
+        account_type: accountType,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      categoryCode: row.categoryCode || 'N/A',
+      categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      itemCode: '',  // Not applicable in summary
+      itemName: '',  // Not applicable in summary
+      totalQty: Number(row.totalQty) || 0,
+      totalPurchaseValue: Number(row.totalPurchaseValue) || 0,
+      orderCount: Number(row.orderCount) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching purchase by category summary:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Purchase Analysis Data (detailed purchase transactions)
+ * Similar to Sales Analysis - shows all purchase line items
+ */
+export async function getPurchaseAnalysisData(dateRange: DateRange, branchSync?: string[]): Promise<import('./types').PurchaseAnalysisData[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+
+    const query = `
+      SELECT
+        COALESCE(NULLIF(ptd.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+        toDate(toTimeZone(pt.doc_datetime, 'Asia/Bangkok')) as docDate,
+        pt.doc_no as docNo,
+        ptd.item_code as itemCode,
+        ptd.item_name as itemName,
+        ptd.unit_code as unitCode,
+        ptd.qty as qty,
+        ptd.sum_amount / NULLIF(ptd.qty, 0) as price,
+        ptd.sum_amount as totalAmount
+      FROM purchase_transaction_detail ptd
+      JOIN purchase_transaction pt ON ptd.doc_no = pt.doc_no AND ptd.branch_sync = pt.branch_sync
+      WHERE pt.status_cancel != 'Cancel'
+        AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'pt.branch_sync')}
+      ORDER BY categoryName, docDate, docNo
+    `;
+
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        ...dateParams,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      categoryName: row.categoryName || 'ไม่ระบุหมวดหมู่',
+      docDate: row.docDate,
+      docNo: row.docNo,
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      unitCode: row.unitCode || '',
+      qty: Number(row.qty) || 0,
+      price: Number(row.price) || 0,
+      totalAmount: Number(row.totalAmount) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching purchase analysis:', error);
     throw error;
   }
 }
@@ -337,12 +517,12 @@ export async function getPurchaseByBrand(dateRange: DateRange, branchSync?: stri
       ORDER BY totalPurchaseValue DESC
       LIMIT 15
     `;
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -367,6 +547,7 @@ export async function getPurchaseByBrand(dateRange: DateRange, branchSync?: stri
 export async function getAPOutstanding(dateRange: DateRange, branchSync?: string[]): Promise<APOutstanding[]> {
   try {
     const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
 
     const query = `
       SELECT
@@ -374,7 +555,7 @@ export async function getAPOutstanding(dateRange: DateRange, branchSync?: string
         supplier_name as supplierName,
         sum(total_amount - sum_pay_money) as totalOutstanding,
         sum(CASE WHEN due_date < today() AND total_amount > sum_pay_money THEN total_amount - sum_pay_money ELSE 0 END) as overdueAmount,
-        count(DISTINCT doc_no) as docCount
+        count(DISTINCT doc_no, branch_sync) as docCount
       FROM purchase_transaction
       WHERE status_cancel != 'Cancel'
         AND doc_type = 'CREDIT'
@@ -389,8 +570,7 @@ export async function getAPOutstanding(dateRange: DateRange, branchSync?: string
     const result = await clickhouse.query({
       query,
       query_params: {
-        start_date: dateRange.start,
-        end_date: dateRange.end,
+        ...dateParams,
         ...branchFilter.params
       },
       format: 'JSONEachRow',
@@ -406,6 +586,383 @@ export async function getAPOutstanding(dateRange: DateRange, branchSync?: string
     }));
   } catch (error) {
     console.error('Error fetching AP outstanding:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Purchase data joined with Journal by Product Category
+ * Similar to sales P&L by product category but for purchases
+ */
+export async function getPurchaseByProductCategory(
+  dateRange: DateRange,
+  branchSync?: string[]
+): Promise<import('./types').PurchaseAccountData[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+    const query = `WITH purchases AS (
+SELECT
+ptd.doc_no,
+ptd.branch_sync,
+if(ptd.item_category_code = '' OR ptd.item_category_code IS NULL, 'OTHER', ptd.item_category_code) AS item_category_code,
+if(ptd.item_category_name = '' OR ptd.item_category_name IS NULL, 'N/A', ptd.item_category_name) AS item_category_name,
+SUM(ptd.sum_amount) AS sum_amount,
+SUM(ptd.qty) AS qty
+FROM purchase_transaction_detail ptd
+WHERE ptd.doc_no IN (
+SELECT doc_no FROM purchase_transaction WHERE status_cancel != 'Cancel'
+)
+AND ptd.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+${branchFilter.sql.replace(/branch_sync/g, 'ptd.branch_sync')}
+GROUP BY ptd.doc_no, ptd.branch_sync, item_category_code, item_category_name
+),
+journals AS (
+SELECT
+doc_no,
+branch_sync,
+account_type,
+account_code,
+account_name,
+SUM(credit - debit) AS credit_net,
+SUM(debit - credit) AS debit_net
+FROM journal_transaction_detail
+WHERE account_type IN ('EXPENSES', 'ASSETS', 'LIABILITIES')
+AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+${branchFilter.sql}
+GROUP BY doc_no, branch_sync, account_type, account_code, account_name
+)
+SELECT
+p.item_category_code AS categoryCode,
+p.item_category_name AS categoryName,
+j.account_type AS accountType,
+j.account_code AS accountCode,
+j.account_name AS accountName,
+SUM(if(j.account_type = 'EXPENSES', j.debit_net, 0)) AS expenses,
+SUM(if(j.account_type = 'ASSETS', j.debit_net, 0)) AS assets,
+SUM(if(j.account_type = 'LIABILITIES', j.credit_net, 0)) AS liabilities,
+SUM(p.sum_amount) AS totalPurchaseValue,
+SUM(p.qty) AS totalQty
+FROM purchases p
+INNER JOIN journals j
+ON p.doc_no = j.doc_no AND p.branch_sync = j.branch_sync
+GROUP BY p.item_category_code, p.item_category_name, j.account_type, j.account_code, j.account_name
+ORDER BY j.account_type, totalPurchaseValue DESC`;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        ...dateParams,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      categoryCode: row.categoryCode ?? 'OTHER',
+      categoryName: row.categoryName ?? 'ไม่ระบุหมวด',
+      accountType: row.accountType as 'EXPENSES' | 'ASSETS' | 'LIABILITIES',
+      accountCode: row.accountCode ?? '',
+      accountName: row.accountName ?? '',
+      expenses: Number(row.expenses) || 0,
+      assets: Number(row.assets) || 0,
+      liabilities: Number(row.liabilities) || 0,
+      totalPurchaseValue: Number(row.totalPurchaseValue) || 0,
+      totalQty: Number(row.totalQty) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching purchase by product category (with journal):', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Chart of Accounts list joined with Purchase transactions
+ */
+export async function getPurchaseChartOfAccounts(
+  dateRange: DateRange,
+  branchSync?: string[]
+): Promise<import('./types').PurchaseChartOfAccountItem[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+    const query = `
+      WITH purchases AS (
+        SELECT DISTINCT 
+          ptd.doc_no, 
+          ptd.branch_sync
+        FROM purchase_transaction_detail ptd
+        JOIN purchase_transaction pt 
+          ON ptd.doc_no = pt.doc_no 
+          AND ptd.branch_sync = pt.branch_sync
+        WHERE pt.status_cancel != 'Cancel'
+          AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+          ${branchFilter.sql.replace(/branch_sync/g, 'pt.branch_sync')}
+      )
+      SELECT
+        j.account_code AS accountCode,
+        j.account_name AS accountName,
+        j.account_type AS accountType,
+        SUM(j.debit - j.credit) AS netAmount,
+        COUNT(DISTINCT j.doc_no, j.branch_sync) AS docCount
+      FROM journal_transaction_detail j
+      INNER JOIN purchases p 
+        ON j.doc_no = p.doc_no AND j.branch_sync = p.branch_sync
+      WHERE j.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql}
+      GROUP BY j.account_code, j.account_name, j.account_type
+      HAVING netAmount != 0
+      ORDER BY j.account_type, j.account_code
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        ...dateParams,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      accountCode: row.accountCode ?? '',
+      accountName: row.accountName ?? '',
+      accountType: row.accountType ?? '',
+      netAmount: Number(row.netAmount) || 0,
+      docCount: Number(row.docCount) || 0,
+    }));
+  } catch (error) {
+    console.error('Error fetching purchase chart of accounts:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Purchase Items filtered by Account Code (from Journal)
+ * If accountCode is empty string or 'ALL', returns all expense items
+ */
+export async function getPurchaseItemsByAccount(
+  dateRange: DateRange,
+  accountCode: string,
+  branchSync?: string[]
+): Promise<import('./types').PurchaseItemsByAccount[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+
+    // If no specific account, get all EXPENSES accounts
+    const accountFilter = accountCode && accountCode !== 'ALL'
+      ? `AND j.account_code = {account_code:String}`
+      : `AND j.account_type = 'EXPENSES'`;
+
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
+    const query = `
+      SELECT
+        DATE(ptd.doc_datetime) AS docDate,
+        ptd.doc_no AS docNo,
+        ptd.item_code AS itemCode,
+        ptd.item_name AS itemName,
+        COALESCE(NULLIF(ptd.item_category_code, ''), 'N/A') AS categoryCode,
+        COALESCE(NULLIF(ptd.item_category_name, ''), 'ไม่ระบุหมวดหมู่') AS categoryName,
+        COALESCE(NULLIF(ptd.item_brand_name, ''), 'ไม่ระบุแบรนด์') AS brandName,
+        ptd.unit_code AS unitCode,
+        ptd.qty AS qty,
+        ptd.price AS price,
+        ptd.sum_amount AS totalAmount
+      FROM purchase_transaction_detail ptd
+      JOIN purchase_transaction pt 
+        ON ptd.doc_no = pt.doc_no 
+        AND ptd.branch_sync = pt.branch_sync
+      WHERE pt.status_cancel != 'Cancel'
+        AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        AND ptd.doc_no IN (
+          SELECT DISTINCT j.doc_no
+          FROM journal_transaction_detail j
+          WHERE j.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+            ${accountFilter}
+            ${branchFilter.sql}
+        )
+        ${branchFilter.sql.replace(/branch_sync/g, 'pt.branch_sync')}
+      ORDER BY ptd.doc_datetime DESC, ptd.doc_no DESC
+    `;
+
+    const queryParams: any = {
+      ...dateParams,
+      ...branchFilter.params
+    };
+    
+    if (accountCode && accountCode !== 'ALL') {
+      queryParams.account_code = accountCode;
+    }
+
+    const result = await clickhouse.query({
+      query,
+      query_params: queryParams,
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      docDate: row.docDate ?? '',
+      docNo: row.docNo ?? '',
+      itemCode: row.itemCode ?? '',
+      itemName: row.itemName ?? '',
+      categoryCode: row.categoryCode ?? 'N/A',
+      categoryName: row.categoryName ?? 'ไม่ระบุหมวดหมู่',
+      brandName: row.brandName ?? 'ไม่ระบุแบรนด์',
+      unitCode: row.unitCode ?? '',
+      qty: Number(row.qty ?? 0),
+      price: Number(row.price ?? 0),
+      totalAmount: Number(row.totalAmount ?? 0),
+    }));
+  } catch (error) {
+    console.error('Error fetching purchase items by account:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Purchase Expense Breakdown by account code
+ * Shows EXPENSES accounts that have purchase documents
+ */
+export async function getPurchaseExpenseBreakdown(
+  dateRange: DateRange,
+  branchSync?: string[]
+): Promise<import('./types').CategoryBreakdown[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
+    const query = `
+      SELECT
+        account_code AS accountGroup,
+        account_name AS accountName,
+        sum(debit - credit) AS amount,
+        (amount / (
+          SELECT sum(debit - credit)
+          FROM journal_transaction_detail
+          WHERE account_type = 'EXPENSES'
+            AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+            AND doc_no IN (
+              SELECT DISTINCT doc_no
+              FROM purchase_transaction
+              WHERE status_cancel != 'Cancel'
+                AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+            )
+            ${branchFilter.sql}
+        )) * 100 AS percentage
+      FROM journal_transaction_detail
+      WHERE account_type = 'EXPENSES'
+        AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        AND doc_no IN (
+          SELECT DISTINCT doc_no
+          FROM purchase_transaction
+          WHERE status_cancel != 'Cancel'
+            AND doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        )
+        ${branchFilter.sql}
+      GROUP BY account_code, account_name
+      HAVING amount != 0
+      ORDER BY amount DESC
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        ...dateParams,
+        ...branchFilter.params
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      accountGroup: row.accountGroup ?? '',
+      accountName: row.accountName ?? '',
+      amount: Number(row.amount ?? 0),
+      percentage: Number(row.percentage ?? 0),
+    }));
+  } catch (error) {
+    console.error('Error fetching purchase expense breakdown:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get Detailed PO breakdown for a specific supplier
+ * Includes Account Mapping and Item Categories
+ */
+export async function getSupplierPODetails(
+  dateRange: DateRange,
+  supplierCode: string,
+  branchSync?: string[]
+): Promise<SupplierPODetail[]> {
+  try {
+    const branchFilter = buildBranchFilter(branchSync);
+    const dateParams = buildDateTimeRangeParamsInclusive(dateRange);
+
+    const query = `
+      SELECT
+        DATE(pt.doc_datetime) as docDate,
+        pt.doc_no as docNo,
+        pt.supplier_code as supplierCode,
+        pt.supplier_name as supplierName,
+        j.account_code as accountCode,
+        j.account_name as accountName,
+        COALESCE(NULLIF(ptd.item_category_name, ''), 'ไม่ระบุหมวดหมู่') as categoryName,
+        COALESCE(NULLIF(ptd.item_category_code, ''), 'N/A') as categoryCode,
+        ptd.item_code as itemCode,
+        ptd.item_name as itemName,
+        ptd.unit_code as unitCode,
+        ptd.qty as qty,
+        ptd.price as price,
+        ptd.sum_amount as totalAmount
+      FROM purchase_transaction pt
+      LEFT JOIN purchase_transaction_detail ptd 
+        ON pt.doc_no = ptd.doc_no 
+        AND pt.branch_sync = ptd.branch_sync
+      LEFT JOIN journal_transaction_detail j 
+        ON pt.doc_no = j.doc_no 
+        AND pt.branch_sync = j.branch_sync 
+        AND j.account_type IN ('EXPENSES', 'ASSETS')
+      WHERE pt.status_cancel != 'Cancel'
+        AND pt.supplier_code = {supplier_code:String}
+        AND pt.doc_datetime BETWEEN {start_date:String} AND {end_date:String}
+        ${branchFilter.sql.replace(/branch_sync/g, 'pt.branch_sync')}
+      ORDER BY pt.doc_datetime DESC, pt.doc_no DESC
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      query_params: {
+        ...dateParams,
+        ...branchFilter.params,
+        supplier_code: supplierCode
+      },
+      format: 'JSONEachRow',
+    });
+
+    const data = await result.json();
+    return data.map((row: any) => ({
+      docDate: row.docDate ?? '',
+      docNo: row.docNo ?? '',
+      supplierCode: row.supplierCode ?? '',
+      supplierName: row.supplierName ?? '',
+      accountCode: row.accountCode ?? 'N/A',
+      accountName: row.accountName ?? 'ไม่พบผังบัญชี',
+      categoryCode: row.categoryCode ?? 'N/A',
+      categoryName: row.categoryName ?? 'ไม่ระบุหมวดหมู่',
+      itemCode: row.itemCode ?? '',
+      itemName: row.itemName ?? '',
+      unitCode: row.unitCode ?? '',
+      qty: Number(row.qty ?? 0),
+      price: Number(row.price ?? 0),
+      totalAmount: Number(row.totalAmount ?? 0),
+    }));
+  } catch (error) {
+    console.error('Error fetching supplier PO details:', error);
     throw error;
   }
 }
