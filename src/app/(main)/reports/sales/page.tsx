@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
@@ -97,7 +97,7 @@ const reportOptions: ReportOption<ReportType>[] = [
   },
 ];
 
-export default function SalesReportPage() {
+function SalesReportContent() {
   const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('sales-trend');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -1388,5 +1388,13 @@ export default function SalesReportPage() {
       </ErrorBoundary>
       </motion.div>
     </motion.div>
+  );
+}
+
+export default function SalesReportPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-muted-foreground">กำลังโหลด...</div>}>
+      <SalesReportContent />
+    </Suspense>
   );
 }

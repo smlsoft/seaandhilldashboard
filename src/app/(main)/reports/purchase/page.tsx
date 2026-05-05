@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useDateRangeStore } from '@/store/useDateRangeStore';
 import { motion } from 'framer-motion';
@@ -100,7 +100,7 @@ const reportOptions: ReportOption<ReportType>[] = [
   },
 ];
 
-export default function PurchaseReportPage() {
+function PurchaseReportContent() {
   const searchParams = useSearchParams();
   const { dateRange, setDateRange } = useDateRangeStore();
   const [selectedReport, setSelectedReport] = useState<ReportType>('purchase-analysis');
@@ -1632,5 +1632,13 @@ export default function PurchaseReportPage() {
       </ErrorBoundary>
       </motion.div>
     </motion.div>
+  );
+}
+
+export default function PurchaseReportPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-muted-foreground">กำลังโหลด...</div>}>
+      <PurchaseReportContent />
+    </Suspense>
   );
 }
