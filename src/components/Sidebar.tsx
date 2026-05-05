@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,7 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/lib/SidebarContext';
 import { useComparison } from '@/lib/ComparisonContext';
-import { signOut, useSession } from '@/lib/auth-client';
+// auth-client removed temporarily — will be added back when auth system is ready
 
 const menuItems = [
     { name: 'ภาพรวม', icon: LayoutDashboard, href: '/' },
@@ -76,22 +76,14 @@ const itemVariants = {
 };
 
 export function Sidebar() {
-    const { data: session } = useSession();
-    const user = session?.user;
+    const displayName = 'Admin User';
+    const displayEmail = 'admin@company.com';
+    const displayInitials = displayName.substring(0, 2).toUpperCase();
     const pathname = usePathname();
     const router = useRouter();
     const { isCollapsed, toggleSidebar, isMobileSidebarOpen, closeMobileSidebar, setIsCollapsed } = useSidebar();
     const { isComparisonMode } = useComparison();
     const [isReportOpen, setIsReportOpen] = useState(false);
-    const [isHydrated, setIsHydrated] = useState(false);
-
-    useEffect(() => {
-        setIsHydrated(true);
-    }, []);
-
-    const displayName = isHydrated ? (user?.name || 'Admin User') : 'Admin User';
-    const displayEmail = isHydrated ? (user?.email || 'admin@company.com') : 'admin@company.com';
-    const displayInitials = displayName.substring(0, 2).toUpperCase();
 
     // Check if any report submenu is active
     const isReportActive = reportMenu.subItems.some(item => pathname.startsWith(item.href));
@@ -112,6 +104,10 @@ export function Sidebar() {
             // If expanded, just toggle report menu
             setIsReportOpen(!isReportOpen);
         }
+    };
+
+    const handleSignOut = () => {
+        window.location.href = '/login';
     };
 
     // On mobile drawer, always show full content regardless of collapsed state
@@ -317,7 +313,7 @@ export function Sidebar() {
                         <motion.div variants={itemVariants}>
                             <button
                                 title={displayCollapsed ? "ออกจากระบบ" : undefined}
-                                onClick={() => signOut({ fetchOptions: { onSuccess: () => { window.location.href = '/login'; } } })}
+                                onClick={handleSignOut}
                                 className={cn(
                                     "w-full flex items-center gap-3 py-3 text-sm font-medium rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all duration-200 group",
                                     displayCollapsed ? "px-3 justify-center" : "px-4"
